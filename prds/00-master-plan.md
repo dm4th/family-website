@@ -13,7 +13,13 @@
 | 5 | Property pages + wiki editing | ✅ shipped | [03-properties](03-properties.md) |
 | 6 | Admin panel + invitations | ✅ shipped | [04-admin-invitations](04-admin-invitations.md) |
 | 7 | Coming-soon stubs + dashboard polish | ✅ shipped | — |
-| 8 | Deploy + smoke test | ⏭ next | — |
+| 8 | Deploy + smoke test | 🚧 ready — pending Vercel/DNS | See README §Deploy |
+
+**First-slice deploy notes (2026-05-23)**
+- Domain: `mathiesonfamily.app`
+- Local prep done: production build clean, README has full Vercel + Supabase + Google checklist, first commit on `main`
+- Pending: push to GitHub, create Vercel project, attach domain, add prod Auth redirect URLs in Supabase, run smoke test on phone
+- All instructions are in [../README.md](../README.md) §Deploy to production
 
 ## Context
 
