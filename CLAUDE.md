@@ -5,6 +5,17 @@
 ## Source of truth
 - **Master plan**: [prds/00-master-plan.md](prds/00-master-plan.md). Per-feature plans live in `prds/01-…` through `prds/10-…`. Update the plan before drifting from it.
 
+## Starting a new feature session
+
+If you're picking up a single feature (the first-slice foundation is done; future work is small parallel slices):
+
+1. **Read [prds/00-master-plan.md](prds/00-master-plan.md)** — start at the "Starting a new session" + "Active queue" sections. Pick a PRD that's status 🟢 or 🚧.
+2. **Read that PRD top-to-bottom.** Each unshipped one has Onboarding / Pre-flight decisions / Likely file layout / Verification recipe to bootstrap you.
+3. **Don't reinvent shared infrastructure.** The master plan's "Foundation that's already built" section is the inventory — reuse `PhotoUpload`, `recordRevision()`, `canManageProperty()`, `withSignedUrls()`, `Markdown`, etc.
+4. **Branch + ship + update.** When you're done, update the PRD's Implementation section (key files, decisions, follow-ups) and flip status to ✅ in both the PRD header and the master-plan chunk table.
+
+Smaller is better. The first-slice build was deliberately monolithic; from here every feature should be its own session/branch so it can be reviewed, parallelized, and reverted in isolation.
+
 ## Stack
 - Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + Tailwind v4
 - shadcn/ui (radix-nova preset, neutral base color) — components live in `src/components/ui/`

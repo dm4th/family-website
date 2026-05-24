@@ -59,5 +59,7 @@ Every page except `/login` and `/auth/callback` requires a valid session. Sign-i
 - **Password sign-in**: confirmed out of scope.
 
 **Open follow-ups**
-- Add explicit allowlist enforcement before chunk 6 ships, OR enable "Restrict to allowed emails" in Supabase Auth dashboard.
+- Allowlist enforcement is *not* in place — anyone who knows the URL can sign in and get `role='member'` by default. For a private family site this is low-risk (no PII exposed without a profile to see), but worth tightening before opening the URL more widely. Two options:
+  - Add a check in `handle_new_user()` that raises an exception if no matching pending invitation exists (and is OK with the seed admins having pre-seeded invitations)
+  - OR enable "Restrict to allowed emails" in Supabase Auth → Providers → Email
 - Apple / Microsoft OAuth deferred indefinitely — revisit only if a family member asks.
