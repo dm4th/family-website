@@ -13,13 +13,25 @@
 | 5 | Property pages + wiki editing | ✅ shipped | [03-properties](03-properties.md) |
 | 6 | Admin panel + invitations | ✅ shipped | [04-admin-invitations](04-admin-invitations.md) |
 | 7 | Coming-soon stubs + dashboard polish | ✅ shipped | — |
-| 8 | Deploy + smoke test | 🚧 ready — pending Vercel/DNS | See README §Deploy |
+| 8 | Deploy + smoke test | ✅ shipped (2026-05-24) | See README §Deploy |
 
-**First-slice deploy notes (2026-05-23)**
-- Domain: `mathiesonfamily.app`
-- Local prep done: production build clean, README has full Vercel + Supabase + Google checklist, first commit on `main`
-- Pending: push to GitHub, create Vercel project, attach domain, add prod Auth redirect URLs in Supabase, run smoke test on phone
-- All instructions are in [../README.md](../README.md) §Deploy to production
+🎉 **First slice complete.** All 8 chunks done. Live at https://mathiesonfamily.app.
+
+**Deploy notes**
+- GitHub: `dm4th/family-website` (private). Pushed to `origin/main`; Vercel auto-deploys on every push.
+- Vercel project linked to the GitHub repo. Custom domain `mathiesonfamily.app` attached + DNS resolved.
+- Supabase Auth: Site URL set to `https://mathiesonfamily.app`; redirect URLs include both prod and `localhost:3000`.
+- Smoke test (2026-05-24): all 7 checks from the README §6 passed except the initial photo upload, which surfaced a Vercel-platform issue.
+
+**Production fix during chunk 8** (commit `962642c`)
+- Symptom: `FUNCTION_PAYLOAD_TOO_LARGE` on photo upload in prod (worked locally).
+- Cause: Vercel Server Actions cap request bodies at 4.5MB on Hobby plan. The original `uploadPhoto` Server Action pushed the binary through the function.
+- Fix: client now uploads binary direct to Supabase Storage via the browser Supabase client; Server Action only persists the small metadata row. Max upload bumped 25MB → 50MB. See [prds/05-file-uploads.md](05-file-uploads.md) for full details + the Google Photos Picker plan it informs.
+
+**Open follow-ups before opening the portal to the wider family**
+- Google Photos Picker (storage quota strategy) — see [05-file-uploads.md](05-file-uploads.md)
+- Real first-pass content on the property pages (description, how-to, contacts) — currently placeholder
+- Invite real family members from `/admin` once the property content is in better shape
 
 ## Context
 
