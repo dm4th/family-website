@@ -3,7 +3,14 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { uploadPhoto, type UploadResult } from "@/app/(app)/photos/actions";
+import { createClient } from "@/lib/supabase/client";
+import {
+  PHOTOS_BUCKET,
+  MAX_PHOTO_BYTES,
+  generatePhotoPath,
+  isAllowedMime,
+} from "@/lib/photo-utils";
+import { recordUploadedPhoto } from "@/app/(app)/photos/actions";
 
 type Attachment =
   | { kind: "profile"; profileId: string }
@@ -14,6 +21,8 @@ type Status =
   | { phase: "uploading"; current: number; total: number }
   | { phase: "error"; message: string }
   | { phase: "done"; count: number };
+
+const MAX_MB = Math.round(MAX_PHOTO_BYTES / 1024 / 1024);
 
 export function PhotoUpload({
   attachment,
@@ -35,9 +44,7 @@ export function PhotoUpload({
   }
 
   async function upload(files: FileList | File[]) {
-    const list = Array.from(files).filter((f) =>
-      f.type.startsWith("image/"),
-    );
+    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
     if (list.length === 0) {
       setStatus({ phase: "error", message: "Only image files are supported." });
       return;
@@ -45,25 +52,50 @@ export function PhotoUpload({
 
     setStatus({ phase: "uploading", current: 0, total: list.length });
 
+    const supabase = createClient();
     let succeeded = 0;
     let lastError: string | null = null;
 
     for (let i = 0; i < list.length; i++) {
       setStatus({ phase: "uploading", current: i + 1, total: list.length });
       const file = list[i]!;
-      const fd = new FormData();
-      fd.set("file", file);
-      fd.set("attachment", attachment.kind);
-      fd.set(
-        "attachmentId",
-        attachment.kind === "profile"
-          ? attachment.profileId
-          : attachment.propertyId,
-      );
 
-      const result: UploadResult = await uploadPhoto(fd);
-      if (result.ok) succeeded += 1;
-      else lastError = result.message;
+      if (file.size > MAX_PHOTO_BYTES) {
+        lastError = `${file.name}: file is larger than ${MAX_MB}MB.`;
+        continue;
+      }
+      if (!isAllowedMime(file.type)) {
+        lastError = `${file.name}: unsupported file type (${file.type}).`;
+        continue;
+      }
+
+      const storagePath = generatePhotoPath(file.name);
+
+      // Direct browser → Supabase Storage upload. This bypasses the Vercel
+      // Function 4.5MB body limit that breaks Server-Action file uploads
+      // in production.
+      const { error: uploadError } = await supabase.storage
+        .from(PHOTOS_BUCKET)
+        .upload(storagePath, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+      if (uploadError) {
+        lastError = `${file.name}: ${uploadError.message}`;
+        continue;
+      }
+
+      // Persist the small metadata row via Server Action.
+      const result = await recordUploadedPhoto({
+        storagePath,
+        attachment,
+      });
+      if (!result.ok) {
+        lastError = `${file.name}: ${result.message}`;
+        continue;
+      }
+
+      succeeded += 1;
     }
 
     if (succeeded === 0) {
@@ -128,10 +160,11 @@ export function PhotoUpload({
           disabled={isBusy}
           onClick={chooseFile}
         >
-          {isBusy
-            ? `Uploading ${status.current}/${status.total}…`
-            : label}
+          {isBusy ? `Uploading ${status.current}/${status.total}…` : label}
         </Button>
+        <p className="text-[10px] text-muted-foreground/70">
+          JPG, PNG, WebP, GIF, HEIC · up to {MAX_MB}MB each
+        </p>
         {status.phase === "error" && (
           <p className="text-xs text-destructive">{status.message}</p>
         )}

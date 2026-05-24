@@ -2,14 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import {
-  PHOTOS_BUCKET,
-  generatePhotoPath,
-  isAllowedMime,
-  MAX_PHOTO_BYTES,
-} from "@/lib/photos";
+import { PHOTOS_BUCKET } from "@/lib/photo-utils";
 
-export type UploadResult =
+export type RecordUploadResult =
   | { ok: true; photoId: string }
   | { ok: false; message: string };
 
@@ -18,18 +13,18 @@ type Attachment =
   | { kind: "property"; propertyId: string };
 
 /**
- * Upload a single photo, attach it to the given target (profile or property),
- * and revalidate the relevant page.
- *
- * Expected FormData fields:
- *   - file:           the image
- *   - attachment:     "profile" | "property"
- *   - attachmentId:   the target UUID
- *   - caption:        optional
- *   - tagSubjectIds:  comma-separated profile UUIDs that appear in the photo
- *                     (in addition to the attachment target when it's a profile)
+ * Called after the client has uploaded the binary directly to Supabase
+ * Storage. We only persist the small metadata row here — the file itself
+ * never passes through the Vercel Function, which is why we don't hit the
+ * 4.5MB Server-Action body limit.
  */
-export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
+export async function recordUploadedPhoto(opts: {
+  storagePath: string;
+  attachment: Attachment;
+  caption?: string | null;
+  /** Additional profile UUIDs to tag in photo_subjects. */
+  tagSubjectIds?: string[];
+}): Promise<RecordUploadResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -39,47 +34,21 @@ export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
     return { ok: false, message: "Not signed in" };
   }
 
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, message: "No file provided" };
-  }
-  if (file.size > MAX_PHOTO_BYTES) {
-    return {
-      ok: false,
-      message: `File too large (max ${Math.round(MAX_PHOTO_BYTES / 1024 / 1024)}MB)`,
-    };
-  }
-  if (!isAllowedMime(file.type)) {
-    return { ok: false, message: `Unsupported file type: ${file.type}` };
+  // Light sanity check on the storage path. The client generates it via
+  // generatePhotoPath() — reject anything that doesn't match the format
+  // to prevent attaching a row to arbitrary objects.
+  if (!/^[0-9a-f]{2}\/[0-9a-f-]{36}(?:\.[a-z0-9]+)?$/i.test(opts.storagePath)) {
+    return { ok: false, message: "Invalid storage path" };
   }
 
-  const attachment = parseAttachment(formData);
-  if (!attachment) {
-    return { ok: false, message: "Missing or invalid attachment target" };
-  }
-
-  const caption = readText(formData, "caption");
-  const extraSubjectIds = readSubjectIds(formData);
-
-  // 1. Upload to storage.
-  const storagePath = generatePhotoPath(file.name);
-  const { error: uploadError } = await supabase.storage
-    .from(PHOTOS_BUCKET)
-    .upload(storagePath, file, {
-      contentType: file.type,
-      upsert: false,
-    });
-  if (uploadError) {
-    return { ok: false, message: `Upload failed: ${uploadError.message}` };
-  }
-
-  // 2. Insert the DB row.
   const photoInsert = {
-    storage_path: storagePath,
-    caption,
+    storage_path: opts.storagePath,
+    caption: opts.caption?.trim() || null,
     uploaded_by: user.id,
-    property_id: attachment.kind === "property" ? attachment.propertyId : null,
+    property_id:
+      opts.attachment.kind === "property" ? opts.attachment.propertyId : null,
   };
+
   const { data: photoRow, error: insertError } = await supabase
     .from("photos")
     .insert(photoInsert)
@@ -87,17 +56,20 @@ export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
     .single();
 
   if (insertError || !photoRow) {
-    // Best-effort cleanup so we don't orphan the storage object.
-    await supabase.storage.from(PHOTOS_BUCKET).remove([storagePath]);
+    // Best-effort cleanup so we don't orphan the storage object the
+    // client just uploaded.
+    await supabase.storage.from(PHOTOS_BUCKET).remove([opts.storagePath]);
     return {
       ok: false,
       message: `Could not save photo: ${insertError?.message ?? "unknown"}`,
     };
   }
 
-  // 3. Tag subjects.
-  const subjectIds = new Set<string>(extraSubjectIds);
-  if (attachment.kind === "profile") subjectIds.add(attachment.profileId);
+  // Tag subjects.
+  const subjectIds = new Set<string>(opts.tagSubjectIds ?? []);
+  if (opts.attachment.kind === "profile") {
+    subjectIds.add(opts.attachment.profileId);
+  }
   if (subjectIds.size > 0) {
     const subjectRows = Array.from(subjectIds).map((profileId) => ({
       photo_id: photoRow.id,
@@ -107,12 +79,11 @@ export async function uploadPhoto(formData: FormData): Promise<UploadResult> {
     // Tagging is best-effort; the photo itself still uploaded successfully.
   }
 
-  // 4. Revalidate the surfaces that show this photo.
-  if (attachment.kind === "profile") {
-    revalidatePath(`/family/${attachment.profileId}`);
+  if (opts.attachment.kind === "profile") {
+    revalidatePath(`/family/${opts.attachment.profileId}`);
   } else {
-    revalidatePath(`/properties`);
-    // chunk 5 will add a per-slug detail page; tolerate it not existing yet.
+    revalidatePath("/properties");
+    // The per-slug detail page revalidates via the client router.refresh().
   }
   revalidatePath("/profile/edit");
 
@@ -150,29 +121,4 @@ export async function deletePhoto(photoId: string) {
   await supabase.storage.from(PHOTOS_BUCKET).remove([photo.storage_path]);
   revalidatePath("/family");
   if (photo.property_id) revalidatePath("/properties");
-}
-
-function parseAttachment(formData: FormData): Attachment | null {
-  const kind = formData.get("attachment");
-  const id = formData.get("attachmentId");
-  if (typeof id !== "string" || !id) return null;
-  if (kind === "profile") return { kind: "profile", profileId: id };
-  if (kind === "property") return { kind: "property", propertyId: id };
-  return null;
-}
-
-function readSubjectIds(formData: FormData): string[] {
-  const raw = formData.get("tagSubjectIds");
-  if (typeof raw !== "string" || !raw.trim()) return [];
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => /^[0-9a-f-]{36}$/i.test(s));
-}
-
-function readText(formData: FormData, key: string): string | null {
-  const v = formData.get(key);
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim();
-  return trimmed.length ? trimmed : null;
 }

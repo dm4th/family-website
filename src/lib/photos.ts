@@ -1,49 +1,23 @@
-import { randomUUID } from "node:crypto";
+// Server-only photo helpers. For browser-safe utilities (path generation,
+// MIME validation, size limit) import from `@/lib/photo-utils` instead.
+
 import { createClient } from "@/lib/supabase/server";
+import { PHOTOS_BUCKET } from "@/lib/photo-utils";
 
-export const PHOTOS_BUCKET = "photos";
+// Re-export the browser-safe bits so existing server callers can keep
+// importing from "@/lib/photos".
+export {
+  PHOTOS_BUCKET,
+  ALLOWED_MIME_TYPES,
+  MAX_PHOTO_BYTES,
+  generatePhotoPath,
+  isAllowedMime,
+} from "@/lib/photo-utils";
 
-export const ALLOWED_MIME_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-  "image/heic",
-  "image/heif",
-]);
-
-export const MAX_PHOTO_BYTES = 25 * 1024 * 1024; // 25MB
-
-// Signed URLs are good for one hour. Long enough that a page reload won't
-// re-fetch every image, short enough that a leaked URL stops working quickly.
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 export type PhotoLike = { id: string; storagePath: string };
 export type SignedPhoto<T extends PhotoLike> = T & { signedUrl: string };
-
-/**
- * Generate a random storage path for a new photo. Two-level partitioning by
- * the leading two hex chars keeps the bucket browser usable when we have
- * thousands of files.
- */
-export function generatePhotoPath(originalName: string): string {
-  const ext = inferExtension(originalName);
-  const id = randomUUID();
-  return `${id.slice(0, 2)}/${id}${ext}`;
-}
-
-function inferExtension(originalName: string): string {
-  const dot = originalName.lastIndexOf(".");
-  if (dot < 0 || dot === originalName.length - 1) return "";
-  const ext = originalName.slice(dot).toLowerCase();
-  // Allowlist common extensions; anything else gets dropped.
-  if (/^\.(jpg|jpeg|png|webp|gif|heic|heif)$/.test(ext)) return ext;
-  return "";
-}
-
-export function isAllowedMime(mime: string): boolean {
-  return ALLOWED_MIME_TYPES.has(mime.toLowerCase());
-}
 
 /**
  * Batch-sign a list of photo paths so we can render them in <img> tags.
