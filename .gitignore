@@ -32,6 +32,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.local.example
+
+# Supabase CLI per-machine state (auth tokens, version cache, linked-project pointer).
+# The committed source of truth for the project ref is supabase/config.toml.
+supabase/.temp/
+supabase/.branches/
 
 # vercel
 .vercel

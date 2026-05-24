@@ -1,0 +1,8 @@
+# Supabase CLI configuration. Committed to source so collaborators inherit
+# the project ref without having to look it up. Per-machine state (auth
+# tokens, version cache) lives in supabase/.temp/ and is gitignored.
+#
+# To onboard: `supabase login` (once, personal) then `supabase link` from
+# this repo root. The CLI will use the project_id below.
+
+project_id = "mtwkxklxdkeisatwvgno"
