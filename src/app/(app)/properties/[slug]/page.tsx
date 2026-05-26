@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { withSignedUrls } from "@/lib/photos";
 import { Markdown } from "@/components/markdown";
-import { PhotoUpload } from "@/components/photo-upload";
+import { AddPhotosModal } from "@/components/add-photos-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -256,7 +256,7 @@ export default async function PropertyDetailPage({
           </p>
         </header>
 
-        <PhotoUpload
+        <AddPhotosModal
           attachment={{ kind: "property", propertyId: property.id }}
         />
 

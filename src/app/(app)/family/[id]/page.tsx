@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
 import { withSignedUrls } from "@/lib/photos";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { PhotoUpload } from "@/components/photo-upload";
+import { AddPhotosModal } from "@/components/add-photos-modal";
 import {
   Eyebrow,
   SalonPanel,
@@ -158,7 +158,7 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
           </p>
         </header>
 
-        <PhotoUpload
+        <AddPhotosModal
           attachment={{ kind: "profile", profileId: profile.id }}
         />
 
