@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { setAvatarFromPhoto } from "../../profile/actions";
 
 export type GalleryPhoto = {
@@ -13,6 +14,11 @@ export type GalleryPhoto = {
   uploadedBy: string | null;
 };
 
+/**
+ * Family photo gallery — a "story-grid" layout. The first/most-recent photo
+ * anchors the row; the rest flow as a supporting strip below it. Avoids the
+ * SaaS-thumbnail-dump aesthetic.
+ */
 export function PhotoGallery({
   photos,
   canSetAvatar,
@@ -28,7 +34,7 @@ export function PhotoGallery({
 
   if (photos.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm italic text-foreground-subtle">
         No photos yet — be the first to add one above.
       </p>
     );
@@ -44,53 +50,104 @@ export function PhotoGallery({
     }
   }
 
+  const [featured, ...rest] = photos;
+
   return (
-    <ul className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
-      {photos.map((photo) => {
-        const isAvatar = currentAvatarPath === photo.storagePath;
-        return (
-          <li
-            key={photo.id}
-            className="group relative overflow-hidden rounded-lg border border-border bg-card"
-          >
-            <div className="aspect-square relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={photo.signedUrl}
-                alt={photo.caption ?? "Family photo"}
-                className="h-full w-full object-cover"
-                loading="lazy"
+    <div className="flex flex-col gap-6">
+      {/* Featured photo — anchors the gallery. */}
+      <Tile
+        photo={featured!}
+        isAvatar={currentAvatarPath === featured!.storagePath}
+        canSetAvatar={canSetAvatar}
+        busyId={busyId}
+        onPromote={promote}
+        featured
+      />
+
+      {rest.length > 0 && (
+        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {rest.map((photo) => (
+            <li key={photo.id}>
+              <Tile
+                photo={photo}
+                isAvatar={currentAvatarPath === photo.storagePath}
+                canSetAvatar={canSetAvatar}
+                busyId={busyId}
+                onPromote={promote}
               />
-              {isAvatar && (
-                <span className="absolute left-2 top-2 rounded-full bg-foreground/90 px-2 py-0.5 text-[10px] uppercase tracking-wide text-background">
-                  Avatar
-                </span>
-              )}
-            </div>
-            {(photo.caption || canSetAvatar) && (
-              <div className="px-2 py-2 space-y-1.5">
-                {photo.caption && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {photo.caption}
-                  </p>
-                )}
-                {canSetAvatar && !isAvatar && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="w-full text-xs"
-                    disabled={busyId === photo.id}
-                    onClick={() => promote(photo.id)}
-                  >
-                    {busyId === photo.id ? "Setting…" : "Use as my avatar"}
-                  </Button>
-                )}
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Tile({
+  photo,
+  isAvatar,
+  canSetAvatar,
+  busyId,
+  onPromote,
+  featured = false,
+}: {
+  photo: GalleryPhoto;
+  isAvatar: boolean;
+  canSetAvatar: boolean;
+  busyId: string | null;
+  onPromote: (id: string) => void;
+  featured?: boolean;
+}) {
+  return (
+    <figure className="group flex flex-col gap-2">
+      <div
+        className={
+          "relative overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border " +
+          (featured
+            ? "aspect-[16/10] sm:aspect-[5/3]"
+            : "aspect-square")
+        }
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo.signedUrl}
+          alt={photo.caption ?? "Family photo"}
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+          loading="lazy"
+        />
+        {isAvatar && (
+          <Badge variant="status" className="absolute left-3 top-3">
+            Avatar
+          </Badge>
+        )}
+      </div>
+      {(photo.caption || (canSetAvatar && !isAvatar)) && (
+        <figcaption className="flex flex-col gap-2">
+          {photo.caption && (
+            <p
+              className={
+                featured
+                  ? "text-sm leading-relaxed text-foreground-muted"
+                  : "line-clamp-2 text-xs text-foreground-subtle"
+              }
+            >
+              {photo.caption}
+            </p>
+          )}
+          {canSetAvatar && !isAvatar && (
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              className="self-start text-xs text-foreground-muted"
+              disabled={busyId === photo.id}
+              onClick={() => onPromote(photo.id)}
+            >
+              {busyId === photo.id ? "Setting…" : "Use as my avatar"}
+            </Button>
+          )}
+        </figcaption>
+      )}
+    </figure>
   );
 }

@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import {
+  BriefingPanel,
+  Eyebrow,
+  PageIntro,
+  type PageMode,
+} from "@/components/shell";
+
 type Params = Promise<{ feature: string }>;
 
 type FeatureInfo = {
@@ -9,6 +16,7 @@ type FeatureInfo = {
   description: string;
   rationale: string;
   prd: string;
+  mode: PageMode;
 };
 
 const FEATURES: Record<string, FeatureInfo> = {
@@ -21,6 +29,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     rationale:
       "We're shipping the read-only side of the portal first so the family has a place to live before we add coordination on top.",
     prd: "prds/06-property-booking.md",
+    mode: "operations",
   },
   documents: {
     title: "Trust documents & AI",
@@ -30,6 +39,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     rationale:
       "Trust docs are sensitive, so we haven't made the security-posture decisions yet (encryption-at-rest, LLM data agreement, vector DB choice). That conversation happens before this feature ships.",
     prd: "prds/07-trust-doc-rag.md",
+    mode: "advisory",
   },
   finances: {
     title: "Finances",
@@ -39,6 +49,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     rationale:
       "Same security gating as trust documents. We also need a real conversation about which numbers belong in-app vs. in your existing family-office tools.",
     prd: "prds/08-financial-dashboard.md",
+    mode: "advisory",
   },
   messaging: {
     title: "Family messaging",
@@ -48,6 +59,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     rationale:
       "Only worth building once people are genuinely using the portal day-to-day — otherwise it's an empty room. Revisit after the first slice has been in family hands for a while.",
     prd: "prds/09-family-messaging.md",
+    mode: "family",
   },
   timeline: {
     title: "Family timeline",
@@ -57,6 +69,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     rationale:
       "This is the long-arc \"legacy\" feature. It gets more valuable as the photo collection grows, so we're letting that fill in first.",
     prd: "prds/10-family-timeline.md",
+    mode: "family",
   },
 };
 
@@ -70,43 +83,44 @@ export default async function ComingSoonPage({
   if (!info) notFound();
 
   return (
-    <div className="max-w-2xl space-y-8">
-      <div className="space-y-2">
-        <span className="text-xs uppercase tracking-wide rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-          Coming soon
-        </span>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-          {info.title}
-        </h1>
-        <p className="text-muted-foreground">{info.tagline}</p>
-      </div>
+    <div className="flex flex-col gap-10">
+      <PageIntro
+        mode={info.mode}
+        eyebrow="In flight"
+        title={info.title}
+        context={info.tagline}
+      />
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          What it&apos;ll do
-        </h2>
-        <p className="text-sm leading-relaxed">{info.description}</p>
-      </section>
+      <BriefingPanel className="max-w-3xl">
+        <div className="flex flex-col gap-10">
+          <section className="flex flex-col gap-3">
+            <Eyebrow>What it&apos;ll do</Eyebrow>
+            <p className="text-base leading-relaxed text-foreground">
+              {info.description}
+            </p>
+          </section>
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Why it&apos;s not built yet
-        </h2>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {info.rationale}
-        </p>
-      </section>
+          <section className="flex flex-col gap-3">
+            <Eyebrow>Why it&apos;s not built yet</Eyebrow>
+            <p className="text-base leading-relaxed text-foreground-muted">
+              {info.rationale}
+            </p>
+          </section>
 
-      <div className="text-xs text-muted-foreground border-t border-border pt-4">
-        Plans live in{" "}
-        <code className="rounded bg-muted px-1.5 py-0.5">{info.prd}</code>.
-        Edit them anytime to push for priority changes.
-      </div>
+          <div className="border-t border-border pt-5 text-xs text-foreground-subtle">
+            Plans live in{" "}
+            <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-foreground-muted">
+              {info.prd}
+            </code>
+            . Edit them anytime to push for priority changes.
+          </div>
+        </div>
+      </BriefingPanel>
 
       <div>
         <Link
           href="/"
-          className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
         >
           ← Back to dashboard
         </Link>

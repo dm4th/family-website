@@ -2,8 +2,10 @@
 
 import { useActionState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Eyebrow } from "@/components/shell";
 import {
   addPropertyAdmin,
   removePropertyAdmin,
@@ -38,13 +40,13 @@ export function PropertyAdminsEditor({
   canManage: boolean;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5">
       {admins.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic">
+        <p className="text-sm italic text-foreground-subtle">
           No property admins yet.
         </p>
       ) : (
-        <ul className="divide-y divide-border rounded-md border border-border">
+        <ul className="flex flex-col divide-y divide-border border-y border-border">
           {admins.map((a) => (
             <AdminRow
               key={a.profileId}
@@ -83,12 +85,12 @@ function AdminRow({
   const [isPending, startTransition] = useTransition();
 
   return (
-    <li className="flex items-center justify-between gap-3 px-3 py-2.5">
+    <li className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0">
-        <div className="font-medium truncate">
+        <div className="truncate text-sm text-foreground">
           {admin.fullName ?? "Unnamed"}
         </div>
-        <div className="text-xs text-muted-foreground truncate">
+        <div className="truncate text-xs text-foreground-subtle">
           {admin.email}
         </div>
       </div>
@@ -141,7 +143,7 @@ function AddAdminForm({
 
   if (candidates.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground italic">
+      <p className="text-xs italic text-foreground-subtle">
         Everyone is already a property admin.
       </p>
     );
@@ -151,18 +153,19 @@ function AddAdminForm({
     <form
       action={formAction}
       key={state.status === "added" ? "reset" : "stable"}
-      className="rounded-lg border border-dashed border-border p-3 space-y-3"
+      className="flex flex-col gap-4 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-4"
     >
-      <div className="space-y-1">
-        <Label htmlFor="add-admin" className="text-xs">
-          Add a property admin
+      <Eyebrow>Add a property admin</Eyebrow>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="add-admin" className="sr-only">
+          Choose a family member
         </Label>
         <select
           id="add-admin"
           name="profile_id"
           required
           defaultValue=""
-          className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
+          className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <option value="" disabled>
             Pick a family member…

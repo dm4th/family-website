@@ -2,7 +2,9 @@
 
 import { useActionState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   changeMemberRole,
   setMemberActivation,
@@ -30,15 +32,15 @@ export function MembersSection({
 }) {
   if (members.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground italic">
+      <p className="text-sm italic text-foreground-subtle">
         No members yet.
       </p>
     );
   }
   return (
-    <ul className="divide-y divide-border rounded-md border border-border">
+    <ul className="flex flex-col divide-y divide-border border-y border-border">
       {members.map((m) => (
-        <li key={m.id} className="px-3 py-3">
+        <li key={m.id} className="py-4">
           <MemberRowEditor row={m} isSelf={m.id === currentUserId} />
         </li>
       ))}
@@ -61,18 +63,16 @@ function MemberRowEditor({
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-medium">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-sm text-foreground">
             {row.full_name ?? "Unnamed"}
           </span>
-          <span className="text-xs text-muted-foreground">{row.email}</span>
+          <span className="text-xs text-foreground-subtle">{row.email}</span>
           {row.deactivated_at && (
-            <span className="text-[10px] uppercase tracking-wide rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-              Deactivated
-            </span>
+            <Badge variant="outline">Deactivated</Badge>
           )}
         </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
+        <div className="mt-1 text-xs text-foreground-subtle">
           {[row.family_branch, row.generation ? `Gen ${row.generation}` : null]
             .filter(Boolean)
             .join(" · ") || "—"}
@@ -84,13 +84,18 @@ function MemberRowEditor({
           name="role"
           defaultValue={row.role}
           disabled={isPending || isSelf}
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
+          className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <option value="admin">admin</option>
           <option value="member">member</option>
           <option value="guest">guest</option>
         </select>
-        <Button type="submit" size="sm" variant="outline" disabled={isPending || isSelf}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={isPending || isSelf}
+        >
           {isPending ? "…" : "Save"}
         </Button>
       </form>

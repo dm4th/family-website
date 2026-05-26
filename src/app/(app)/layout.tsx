@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
-import { UserMenu } from "@/components/user-menu";
+import { SiteHeader } from "@/components/app-shell/site-header";
+import { SiteFooter } from "@/components/app-shell/site-footer";
 
 export default async function AppLayout({
   children,
@@ -27,37 +28,18 @@ export default async function AppLayout({
   const isAdmin = adminCheck === true;
 
   return (
-    <div className="min-h-dvh flex flex-col">
-      <header className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-30">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <Link
-              href="/"
-              className="font-semibold tracking-tight text-base hover:opacity-80"
-            >
-              Family Portal
-            </Link>
-            <nav className="hidden sm:flex items-center gap-4 text-sm text-muted-foreground">
-              <Link href="/family" className="hover:text-foreground">
-                Family
-              </Link>
-              <Link href="/properties" className="hover:text-foreground">
-                Properties
-              </Link>
-            </nav>
-          </div>
-          <UserMenu
-            userId={user.id}
-            email={user.email}
-            avatarUrl={avatarUrl}
-            displayName={displayName}
-            isAdmin={isAdmin}
-          />
-        </div>
-      </header>
-      <main className="flex-1 mx-auto w-full max-w-6xl px-4 sm:px-6 py-8">
+    <div className="flex min-h-dvh flex-col bg-background">
+      <SiteHeader
+        userId={user.id}
+        email={user.email}
+        avatarUrl={avatarUrl}
+        displayName={displayName}
+        isAdmin={isAdmin}
+      />
+      <main className="mx-auto w-full max-w-7xl flex-1 px-5 py-10 sm:px-8 sm:py-14">
         {children}
       </main>
+      <SiteFooter />
     </div>
   );
 }

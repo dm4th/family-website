@@ -2,6 +2,7 @@
 
 import { useActionState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,25 +34,23 @@ export function ContactsEditor({
   contacts: ContactRow[];
 }) {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {contacts.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic">
+        <p className="text-sm italic text-foreground-subtle">
           No contacts yet. Add one below.
         </p>
       ) : (
-        <ul className="space-y-4">
+        <ul className="flex flex-col divide-y divide-border border-y border-border">
           {contacts.map((c) => (
-            <li key={c.id} className="rounded-lg border border-border p-3">
+            <li key={c.id} className="py-4">
               <ContactRowForm contact={c} propertySlug={propertySlug} />
             </li>
           ))}
         </ul>
       )}
 
-      <div className="rounded-lg border border-dashed border-border p-3">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Add a contact
-        </p>
+      <div className="rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-4">
+        <p className="eyebrow mb-4 text-accent-bronze">Add a contact</p>
         <AddContactForm
           propertyId={propertyId}
           propertySlug={propertySlug}
@@ -75,7 +74,7 @@ function AddContactForm({
     <form
       action={formAction}
       key={state.status === "saved" ? "reset" : "stable"}
-      className="space-y-3"
+      className="flex flex-col gap-4"
     >
       <ContactFieldsGrid disabled={isPending} />
       <div className="flex items-center justify-end gap-3">
@@ -119,7 +118,7 @@ function ContactRowForm({
   }
 
   return (
-    <form action={formAction} className="space-y-3">
+    <form action={formAction} className="flex flex-col gap-3">
       <ContactFieldsGrid
         defaultValues={contact}
         disabled={isPending || isDeleting}
@@ -141,7 +140,7 @@ function ContactRowForm({
             <p className="text-sm text-destructive">{state.message}</p>
           )}
           {state.status === "saved" && (
-            <p className="text-sm text-emerald-600">Saved.</p>
+            <p className="text-sm text-accent-operations">Saved.</p>
           )}
           <Button type="submit" size="sm" disabled={isPending || isDeleting}>
             {isPending ? "Saving…" : "Save"}
@@ -200,7 +199,11 @@ function ContactFieldsGrid({
           defaultValue={defaultValues?.email ?? ""}
         />
       </FieldInline>
-      <FieldInline label="Notes" htmlFor={k("notes")} className="sm:col-span-2">
+      <FieldInline
+        label="Notes"
+        htmlFor={k("notes")}
+        className="sm:col-span-2"
+      >
         <Input
           id={k("notes")}
           name="notes"
@@ -224,8 +227,11 @@ function FieldInline({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`space-y-1 ${className ?? ""}`}>
-      <Label htmlFor={htmlFor} className="text-xs text-muted-foreground">
+    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
+      <Label
+        htmlFor={htmlFor}
+        className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+      >
         {label}
       </Label>
       {children}

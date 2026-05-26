@@ -130,8 +130,12 @@ export function PhotoUpload({
   return (
     <div
       className={[
-        "rounded-lg border border-dashed border-border bg-muted/30 transition-colors",
-        isDragging ? "border-foreground/50 bg-muted/60" : "",
+        // Bronze-rule dropzone, not a SaaS card. Quiet by default; lifts a
+        // touch on drag-over.
+        "group/photo-upload relative rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 transition-colors",
+        isDragging
+          ? "border-accent-bronze/70 bg-accent-bronze/5"
+          : "hover:border-accent-bronze/60 hover:bg-surface",
         className ?? "",
       ].join(" ")}
       onDragOver={(e) => {
@@ -149,9 +153,10 @@ export function PhotoUpload({
         className="sr-only"
         onChange={onFiles}
       />
-      <div className="flex flex-col items-center gap-2 px-4 py-6 text-center">
-        <p className="text-sm text-muted-foreground">
-          Drop photos here, or
+      <div className="flex flex-col items-center gap-3 px-5 py-8 text-center">
+        <p className="eyebrow text-accent-bronze">Add to archive</p>
+        <p className="max-w-sm text-sm text-foreground-muted">
+          Drop photos here, or choose from your device.
         </p>
         <Button
           type="button"
@@ -162,15 +167,15 @@ export function PhotoUpload({
         >
           {isBusy ? `Uploading ${status.current}/${status.total}…` : label}
         </Button>
-        <p className="text-[10px] text-muted-foreground/70">
+        <p className="text-[0.6875rem] text-foreground-subtle">
           JPG, PNG, WebP, GIF, HEIC · up to {MAX_MB}MB each
         </p>
         {status.phase === "error" && (
           <p className="text-xs text-destructive">{status.message}</p>
         )}
         {status.phase === "done" && (
-          <p className="text-xs text-muted-foreground">
-            Uploaded {status.count} photo{status.count === 1 ? "" : "s"}.
+          <p className="text-xs text-foreground-muted">
+            Added {status.count} photo{status.count === 1 ? "" : "s"}.
           </p>
         )}
       </div>

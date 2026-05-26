@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import {
   Avatar,
   AvatarFallback,
@@ -41,20 +42,30 @@ export function UserMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-9 rounded-full ring-1 ring-border hover:ring-border-strong"
+        >
           <Avatar className="size-8">
             {avatarUrl ? <AvatarImage src={avatarUrl} alt={label} /> : null}
-            <AvatarFallback>{initials(label)}</AvatarFallback>
+            <AvatarFallback className="bg-surface-sunken font-display text-[0.7rem] font-semibold tracking-wide text-foreground-muted">
+              {initials(label)}
+            </AvatarFallback>
           </Avatar>
           <span className="sr-only">Open user menu</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">{displayName ?? "Signed in"}</span>
+          <div className="flex flex-col gap-0.5 py-1">
+            <span className="text-sm text-foreground">
+              {displayName ?? "Signed in"}
+            </span>
             {email ? (
-              <span className="text-xs text-muted-foreground">{email}</span>
+              <span className="truncate text-xs text-foreground-subtle">
+                {email}
+              </span>
             ) : null}
           </div>
         </DropdownMenuLabel>
@@ -66,9 +77,15 @@ export function UserMenu({
           <Link href="/profile/edit">Edit profile</Link>
         </DropdownMenuItem>
         {isAdmin && (
-          <DropdownMenuItem asChild>
-            <Link href="/admin">Admin</Link>
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-foreground-subtle">
+              Governance
+            </DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <Link href="/admin">Admin</Link>
+            </DropdownMenuItem>
+          </>
         )}
         <DropdownMenuSeparator />
         <form action={signOut}>

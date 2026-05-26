@@ -1,7 +1,9 @@
 import Link from "next/link";
+
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import { PageIntro, SectionRule } from "@/components/shell";
 
 export const dynamic = "force-dynamic";
 
@@ -16,11 +18,11 @@ type DirectoryProfile = {
 };
 
 const GENERATION_LABEL: Record<number, string> = {
-  1: "Generation 1",
-  2: "Generation 2",
-  3: "Generation 3",
-  4: "Generation 4",
-  5: "Generation 5",
+  1: "First generation",
+  2: "Second generation",
+  3: "Third generation",
+  4: "Fourth generation",
+  5: "Fifth generation",
 };
 
 export default async function FamilyDirectoryPage() {
@@ -36,9 +38,9 @@ export default async function FamilyDirectoryPage() {
 
   if (error) {
     return (
-      <div className="text-sm text-destructive">
+      <p className="text-sm text-destructive">
         Could not load directory: {error.message}
-      </div>
+      </p>
     );
   }
 
@@ -50,47 +52,53 @@ export default async function FamilyDirectoryPage() {
   const grouped = groupByGeneration(list);
 
   return (
-    <div className="space-y-10">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-          Family Directory
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Everyone signed in to the portal.
-        </p>
-      </div>
+    <div className="flex flex-col gap-12">
+      <PageIntro
+        mode="family"
+        eyebrow="Family"
+        title="The Directory"
+        context={
+          list.length > 0
+            ? `${list.length} ${list.length === 1 ? "person" : "people"} signed into the portal, sorted by generation.`
+            : "An archive of everyone who calls this family home."
+        }
+      />
 
       {list.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="space-y-10">
-          {grouped.map(({ generation, members }) => (
-            <section key={generation ?? "unknown"} className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                {generation
-                  ? GENERATION_LABEL[generation] ?? `Generation ${generation}`
-                  : "Generation not set"}
-                <span className="ml-2 text-muted-foreground/70">
-                  ({members.length})
+        <div className="flex flex-col gap-14">
+          {grouped.map(({ generation, members }, idx) => (
+            <section key={generation ?? "unknown"} className="flex flex-col gap-6">
+              {idx > 0 && <SectionRule ornament className="-mt-2" />}
+              <header className="flex items-baseline justify-between gap-4">
+                <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
+                  {generation
+                    ? GENERATION_LABEL[generation] ?? `Generation ${generation}`
+                    : "Generation not set"}
+                </h2>
+                <span className="eyebrow text-foreground-subtle">
+                  {members.length} {members.length === 1 ? "Member" : "Members"}
                 </span>
-              </h2>
-              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              </header>
+              <ul className="grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
                 {members.map((p) => (
                   <li key={p.id}>
                     <Link
                       href={`/family/${p.id}`}
-                      className="group flex items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:border-foreground/30"
+                      className="group flex items-center gap-4 rounded-md py-2 transition-colors hover:bg-surface/60"
                     >
                       <ProfileAvatar
                         name={p.full_name}
                         src={avatarUrls.get(p.id) ?? null}
-                        size="md"
+                        size="lg"
+                        variant="ring"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">
+                        <div className="font-display text-lg leading-tight text-foreground transition-colors group-hover:text-accent-family">
                           {p.full_name ?? "Unnamed"}
                         </div>
-                        <div className="text-xs text-muted-foreground truncate">
+                        <div className="mt-1 truncate text-xs text-foreground-subtle">
                           {[p.family_branch, p.relationship_notes]
                             .filter(Boolean)
                             .join(" · ") || "—"}
@@ -127,12 +135,15 @@ function groupByGeneration(profiles: DirectoryProfile[]) {
 
 function EmptyState() {
   return (
-    <div className="rounded-lg border border-dashed border-border bg-muted/30 p-10 text-center text-sm text-muted-foreground">
-      No family members have signed in yet. Invite people from the{" "}
-      <Link href="/admin" className="underline">
-        admin page
-      </Link>{" "}
-      (coming in chunk 6).
+    <div className="rounded-md border border-dashed border-border bg-surface/60 px-10 py-14 text-center">
+      <p className="eyebrow text-accent-bronze">Awaiting members</p>
+      <p className="mt-3 text-sm text-foreground-muted">
+        No family members have signed in yet. Invite people from the{" "}
+        <Link href="/admin" className="text-foreground underline-offset-4 hover:underline">
+          admin page
+        </Link>
+        .
+      </p>
     </div>
   );
 }

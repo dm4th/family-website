@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
 import { canManageProperty } from "@/lib/property-auth";
+import { LedgerPanel, PageIntro } from "@/components/shell";
 import { PropertyEditForm } from "./property-edit-form";
 import { ContactsEditor } from "./contacts-editor";
 import { PropertyAdminsEditor } from "./property-admins-editor";
@@ -51,51 +53,50 @@ export default async function PropertyEditPage({
       : Promise.resolve({ data: [] }),
   ]);
 
-  const admins =
-    (currentAdmins ?? []).flatMap((row) => {
-      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-      if (!profile) return [];
-      return [
-        {
-          profileId: profile.id,
-          fullName: profile.full_name,
-          email: profile.email,
-        },
-      ];
-    });
+  const admins = (currentAdmins ?? []).flatMap((row) => {
+    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+    if (!profile) return [];
+    return [
+      {
+        profileId: profile.id,
+        fullName: profile.full_name,
+        email: profile.email,
+      },
+    ];
+  });
 
   const adminIds = new Set(admins.map((a) => a.profileId));
   const candidates = (allMembers ?? [])
     .filter((m) => !adminIds.has(m.id))
-    .map((m) => ({
-      id: m.id,
-      fullName: m.full_name,
-      email: m.email,
-    }));
+    .map((m) => ({ id: m.id, fullName: m.full_name, email: m.email }));
 
   return (
-    <div className="space-y-12">
-      <div className="space-y-1">
-        <div className="text-sm">
-          <Link
-            href={`/properties/${property.slug}`}
-            className="text-muted-foreground hover:text-foreground"
-          >
-            ← Back to {property.name}
-          </Link>
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-          Edit {property.name}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Any family member can edit. Every change is recorded.
-        </p>
+    <div className="flex flex-col gap-10">
+      <div className="flex flex-col gap-1">
+        <Link
+          href={`/properties/${property.slug}`}
+          className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+        >
+          ← Back to {property.name}
+        </Link>
       </div>
 
-      <section className="max-w-2xl space-y-4">
-        <h2 className="text-base font-semibold uppercase tracking-wide text-muted-foreground">
-          Details
-        </h2>
+      <PageIntro
+        mode="operations"
+        eyebrow="Edit"
+        title={property.name}
+        context="Any family member can edit. Every change is recorded in the revision log."
+      />
+
+      <LedgerPanel className="max-w-3xl">
+        <header className="mb-6 flex flex-col gap-1">
+          <h2 className="font-display text-xl leading-tight text-foreground">
+            Details
+          </h2>
+          <p className="text-xs text-foreground-subtle">
+            Description, house rules, and operating notes.
+          </p>
+        </header>
         <PropertyEditForm
           property={{
             id: property.id,
@@ -110,17 +111,22 @@ export default async function PropertyEditPage({
           }}
           canChangeStatus={canManage}
         />
-      </section>
+      </LedgerPanel>
 
       {(canManage || admins.length > 0) && (
-        <section className="max-w-2xl space-y-4">
-          <h2 className="text-base font-semibold uppercase tracking-wide text-muted-foreground">
-            Property admins
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Property admins can change this property&apos;s status alongside
-            site admins. {isSiteAdmin ? "" : "Only site admins or this property's existing admins can manage this list."}
-          </p>
+        <LedgerPanel className="max-w-3xl">
+          <header className="mb-6 flex flex-col gap-1">
+            <h2 className="font-display text-xl leading-tight text-foreground">
+              Property admins
+            </h2>
+            <p className="text-xs text-foreground-subtle">
+              Property admins can change this property&apos;s status alongside
+              site admins.{" "}
+              {isSiteAdmin
+                ? ""
+                : "Only site admins or this property's existing admins can manage this list."}
+            </p>
+          </header>
           <PropertyAdminsEditor
             propertyId={property.id}
             propertySlug={property.slug}
@@ -128,28 +134,31 @@ export default async function PropertyEditPage({
             candidates={candidates}
             canManage={canManage}
           />
-        </section>
+        </LedgerPanel>
       )}
 
-      <section className="max-w-2xl space-y-4">
-        <h2 className="text-base font-semibold uppercase tracking-wide text-muted-foreground">
-          Contacts
-        </h2>
+      <LedgerPanel className="max-w-3xl">
+        <header className="mb-6 flex flex-col gap-1">
+          <h2 className="font-display text-xl leading-tight text-foreground">
+            Contacts
+          </h2>
+          <p className="text-xs text-foreground-subtle">
+            Caretakers, vendors, emergency numbers.
+          </p>
+        </header>
         <ContactsEditor
           propertyId={property.id}
           propertySlug={property.slug}
-          contacts={
-            (contacts ?? []).map((c) => ({
-              id: c.id,
-              label: c.label,
-              name: c.name,
-              phone: c.phone,
-              email: c.email,
-              notes: c.notes,
-            }))
-          }
+          contacts={(contacts ?? []).map((c) => ({
+            id: c.id,
+            label: c.label,
+            name: c.name,
+            phone: c.phone,
+            email: c.email,
+            notes: c.notes,
+          }))}
         />
-      </section>
+      </LedgerPanel>
     </div>
   );
 }

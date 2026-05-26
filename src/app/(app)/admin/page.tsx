@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
+import { BriefingPanel, PageIntro } from "@/components/shell";
 import { MembersSection } from "./members-section";
 import { InvitationsSection } from "./invitations-section";
 import { PropertiesSection } from "./properties-section";
@@ -40,23 +42,21 @@ export default async function AdminPage() {
     .order("name", { ascending: true });
 
   return (
-    <div className="space-y-12">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
-          Admin
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Family roster, invitations, and properties.
-        </p>
-      </div>
+    <div className="flex flex-col gap-12">
+      <PageIntro
+        mode="advisory"
+        eyebrow="Governance"
+        title="Admin"
+        context="Family roster, invitations, and properties registry."
+      />
 
-      <Section
-        title="Members"
-        description="Change roles, deactivate accounts. You can't edit your own role here."
-      >
-        <MembersSection
-          members={
-            (members ?? []).map((m) => ({
+      <BriefingPanel>
+        <Section
+          title="Members"
+          description="Change roles, deactivate accounts. You can't edit your own role here."
+        >
+          <MembersSection
+            members={(members ?? []).map((m) => ({
               id: m.id,
               full_name: m.full_name,
               email: m.email,
@@ -64,19 +64,19 @@ export default async function AdminPage() {
               family_branch: m.family_branch,
               generation: m.generation,
               deactivated_at: m.deactivated_at,
-            }))
-          }
-          currentUserId={user.id}
-        />
-      </Section>
+            }))}
+            currentUserId={user.id}
+          />
+        </Section>
+      </BriefingPanel>
 
-      <Section
-        title="Invitations"
-        description="Create an invitation, then either share the portal URL or click 'Email magic link' to send them a sign-in email. The role is applied automatically on first sign-in."
-      >
-        <InvitationsSection
-          invitations={
-            (invitations ?? []).map((i) => ({
+      <BriefingPanel>
+        <Section
+          title="Invitations"
+          description="Create an invitation, then either share the portal URL or click 'Email magic link' to send them a sign-in email. The role is applied automatically on first sign-in."
+        >
+          <InvitationsSection
+            invitations={(invitations ?? []).map((i) => ({
               id: i.id,
               email: i.email,
               role: i.role as "admin" | "member" | "guest",
@@ -87,27 +87,27 @@ export default async function AdminPage() {
                 | "revoked",
               expires_at: i.expires_at,
               created_at: i.created_at,
-            }))
-          }
-        />
-      </Section>
+            }))}
+          />
+        </Section>
+      </BriefingPanel>
 
-      <Section
-        title="Properties"
-        description="Add new properties and change their status. Any family member can edit the content; admins control existence."
-      >
-        <PropertiesSection
-          properties={
-            (properties ?? []).map((p) => ({
+      <BriefingPanel>
+        <Section
+          title="Properties"
+          description="Add new properties and change their status. Any family member can edit the content; admins control existence."
+        >
+          <PropertiesSection
+            properties={(properties ?? []).map((p) => ({
               id: p.id,
               slug: p.slug,
               name: p.name,
               location: p.location,
               status: p.status as "active" | "maintenance" | "inactive",
-            }))
-          }
-        />
-      </Section>
+            }))}
+          />
+        </Section>
+      </BriefingPanel>
     </div>
   );
 }
@@ -122,11 +122,16 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
+    <section className="flex flex-col gap-5">
+      <header className="flex flex-col gap-1">
+        <p className="eyebrow text-accent-bronze">Section</p>
+        <h2 className="font-display text-2xl leading-tight text-foreground">
+          {title}
+        </h2>
+        <p className="max-w-prose text-sm text-foreground-muted">
+          {description}
+        </p>
+      </header>
       {children}
     </section>
   );

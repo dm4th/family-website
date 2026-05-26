@@ -1,10 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
 import { withSignedUrls } from "@/lib/photos";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { PhotoUpload } from "@/components/photo-upload";
+import {
+  Eyebrow,
+  SalonPanel,
+  SectionRule,
+} from "@/components/shell";
 import { PhotoGallery } from "./photo-gallery";
 
 export const dynamic = "force-dynamic";
@@ -75,63 +81,82 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
 
   const isOwnProfile = user?.id === profile.id;
 
-  const subtitle = [
+  const generationLabel = profile.generation
+    ? ordinal(profile.generation) + " generation"
+    : null;
+  const contextLine = [
     profile.family_branch,
     profile.relationship_notes,
-    profile.generation ? `Gen ${profile.generation}` : null,
+    generationLabel,
   ]
     .filter(Boolean)
     .join(" · ");
 
   return (
-    <div className="space-y-10">
-      <div className="flex items-start gap-6">
-        <ProfileAvatar
-          name={profile.full_name}
-          src={avatarSrc}
-          size="xl"
-        />
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+    <div className="flex flex-col gap-14">
+      {/* Salon hero — portrait + name + bio. Image-forward, generous. */}
+      <SalonPanel anchor className="bg-transparent border-0 px-0 py-0 sm:px-0 sm:py-0 shadow-none">
+        <div className="flex flex-col items-start gap-8 sm:flex-row sm:items-end">
+          <div className="shrink-0">
+            <ProfileAvatar
+              name={profile.full_name}
+              src={avatarSrc}
+              size="hero"
+              variant="portrait"
+            />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-3 pb-2">
+            <Eyebrow>Profile</Eyebrow>
+            <h1 className="font-display text-[2.25rem] leading-[1.05] text-foreground sm:text-[2.75rem]">
               {profile.full_name ?? "Unnamed"}
             </h1>
-            {isOwnProfile && (
-              <Link
-                href="/profile/edit"
-                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-              >
-                Edit
-              </Link>
+            {contextLine && (
+              <p className="text-sm text-foreground-muted">{contextLine}</p>
+            )}
+            {(isOwnProfile || profile.phone) && (
+              <div className="mt-1 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                {profile.phone && (
+                  <a
+                    href={`tel:${profile.phone}`}
+                    className="text-foreground underline-offset-4 hover:underline"
+                  >
+                    {profile.phone}
+                  </a>
+                )}
+                {isOwnProfile && (
+                  <Link
+                    href="/profile/edit"
+                    className="text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
+                  >
+                    Edit profile
+                  </Link>
+                )}
+              </div>
             )}
           </div>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          )}
-          {profile.bio && (
-            <p className="text-sm whitespace-pre-wrap pt-2">{profile.bio}</p>
-          )}
-          {profile.phone && (
-            <p className="text-sm text-muted-foreground pt-2">
-              Phone:{" "}
-              <a
-                href={`tel:${profile.phone}`}
-                className="text-foreground underline-offset-4 hover:underline"
-              >
-                {profile.phone}
-              </a>
-            </p>
-          )}
         </div>
-      </div>
+      </SalonPanel>
 
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">Photos</h2>
-          <p className="text-xs text-muted-foreground">
+      {profile.bio && (
+        <section className="max-w-prose">
+          <Eyebrow className="mb-3">About</Eyebrow>
+          <p className="font-display text-xl leading-relaxed text-foreground whitespace-pre-wrap sm:text-[1.375rem]">
+            {profile.bio}
+          </p>
+        </section>
+      )}
+
+      <SectionRule label="Archive" />
+
+      <section className="flex flex-col gap-6">
+        <header className="flex items-baseline justify-between gap-4">
+          <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
+            Photos
+          </h2>
+          <p className="text-xs text-foreground-subtle">
             Anyone in the family can add to this collection.
           </p>
-        </div>
+        </header>
 
         <PhotoUpload
           attachment={{ kind: "profile", profileId: profile.id }}
@@ -149,4 +174,10 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
       </section>
     </div>
   );
+}
+
+function ordinal(n: number): string {
+  const suffix = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (suffix[(v - 20) % 10] ?? suffix[v] ?? suffix[0]);
 }

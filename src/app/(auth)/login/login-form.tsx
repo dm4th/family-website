@@ -20,12 +20,15 @@ export function LoginForm({ initialError }: { initialError?: string }) {
 
   if (state.status === "sent") {
     return (
-      <div className="space-y-3 text-center">
-        <h2 className="text-lg font-semibold">Check your email</h2>
-        <p className="text-sm text-muted-foreground">
+      <div className="space-y-3">
+        <p className="eyebrow text-accent-bronze">Sent</p>
+        <h2 className="font-display text-xl leading-tight text-foreground">
+          Check your inbox.
+        </h2>
+        <p className="text-sm leading-relaxed text-foreground-muted">
           We sent a sign-in link to{" "}
-          <span className="font-medium text-foreground">{state.email}</span>.
-          Open it on any device to sign in.
+          <span className="text-foreground">{state.email}</span>. Open it on any
+          device to come inside.
         </p>
       </div>
     );
@@ -34,23 +37,27 @@ export function LoginForm({ initialError }: { initialError?: string }) {
   return (
     <div className="space-y-6">
       <form action={signInWithGoogle}>
-        <Button type="submit" variant="outline" className="w-full">
-          Sign in with Google
+        <Button type="submit" variant="outline" size="lg" className="w-full">
+          Continue with Google
         </Button>
       </form>
 
       <div className="relative">
-        <div className="absolute inset-0 flex items-center">
+        <div className="absolute inset-0 flex items-center" aria-hidden>
           <span className="w-full border-t border-border" />
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-2 text-muted-foreground">or</span>
+        <div className="relative flex justify-center text-xs">
+          <span className="eyebrow bg-surface-raised px-3 text-foreground-subtle">
+            or by email
+          </span>
         </div>
       </div>
 
       <form action={formAction} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-foreground-muted">
+            Email address
+          </Label>
           <Input
             id="email"
             name="email"
@@ -58,10 +65,16 @@ export function LoginForm({ initialError }: { initialError?: string }) {
             required
             autoComplete="email"
             placeholder="you@example.com"
+            className="h-10"
           />
         </div>
-        <Button type="submit" className="w-full" disabled={isPending}>
-          {isPending ? "Sending…" : "Send magic link"}
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          disabled={isPending}
+        >
+          {isPending ? "Sending…" : "Send sign-in link"}
         </Button>
         {(state.status === "error" || initialError) && (
           <p className="text-sm text-destructive">

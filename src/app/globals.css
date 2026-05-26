@@ -6,127 +6,279 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   Mathieson Family Design System — tokens
+   ---------------------------------------------------------------------------
+   "Private family office meets premium members club."
+
+   Palette is built from warm neutrals (ivory / parchment / ink) with four
+   restrained mode accents that are *never mixed* on the same page:
+
+     - accent-family       burgundy / oxblood    — family content, formal
+     - accent-operations   forest / olive        — stewardship, property
+     - accent-advisory     deep teal             — governance, briefings
+     - accent-bronze       warm metallic         — shared premium detail
+
+   The shadcn aliases (--primary, --muted, --card, etc.) are rewired into
+   this surface system so every shadcn component reads as ink-on-ivory.
+   Dark mode is full-parity: warm charcoal with cream text and lifted
+   accents.
+   --------------------------------------------------------------------------- */
+
 @theme inline {
+  /* surface */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+
+  /* mode accents */
+  --color-accent-family: var(--accent-family);
+  --color-accent-family-foreground: var(--accent-family-foreground);
+  --color-accent-family-soft: var(--accent-family-soft);
+  --color-accent-operations: var(--accent-operations);
+  --color-accent-operations-foreground: var(--accent-operations-foreground);
+  --color-accent-operations-soft: var(--accent-operations-soft);
+  --color-accent-advisory: var(--accent-advisory);
+  --color-accent-advisory-foreground: var(--accent-advisory-foreground);
+  --color-accent-advisory-soft: var(--accent-advisory-soft);
+  --color-accent-bronze: var(--accent-bronze);
+  --color-accent-bronze-foreground: var(--accent-bronze-foreground);
+
+  /* fonts */
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-display: var(--font-fraunces);
+  --font-heading: var(--font-fraunces);
+
+  /* shadcn-compatible aliases */
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* radii — tight (advisory), base (operations), soft (family) */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+
+  /* shadows — whisper (hairline lift), panel (card), portrait (hero) */
+  --shadow-whisper: 0 1px 0 oklch(0 0 0 / 0.04), 0 1px 2px oklch(0 0 0 / 0.02);
+  --shadow-panel: 0 1px 0 oklch(0 0 0 / 0.04), 0 8px 24px -12px oklch(0 0 0 / 0.08);
+  --shadow-portrait: 0 1px 0 oklch(0 0 0 / 0.04), 0 24px 48px -24px oklch(0 0 0 / 0.18);
+
+  /* tracking helpers for editorial UI */
+  --tracking-eyebrow: 0.18em;
+  --tracking-display: -0.012em;
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* ----- light mode: ivory / parchment / ink ----- */
+
+  --background: oklch(0.985 0.006 82);          /* warm ivory */
+  --surface: oklch(0.968 0.010 78);             /* parchment */
+  --surface-raised: oklch(0.992 0.005 82);      /* lifted off ivory */
+  --surface-sunken: oklch(0.945 0.012 75);      /* well surface */
+
+  --foreground: oklch(0.215 0.018 60);          /* deep warm ink */
+  --foreground-muted: oklch(0.48 0.015 65);     /* warm mid */
+  --foreground-subtle: oklch(0.62 0.012 70);    /* whisper */
+
+  --border: oklch(0.895 0.012 75);              /* hairline */
+  --border-strong: oklch(0.80 0.015 70);        /* visible rule */
+
+  --ring: oklch(0.55 0.04 70);
+
+  /* mode accents */
+  --accent-family: oklch(0.42 0.105 25);        /* burgundy */
+  --accent-family-foreground: oklch(0.985 0.005 25);
+  --accent-family-soft: oklch(0.94 0.028 25);
+
+  --accent-operations: oklch(0.40 0.055 145);   /* forest */
+  --accent-operations-foreground: oklch(0.985 0.005 145);
+  --accent-operations-soft: oklch(0.93 0.022 145);
+
+  --accent-advisory: oklch(0.38 0.060 215);     /* deep teal */
+  --accent-advisory-foreground: oklch(0.985 0.005 215);
+  --accent-advisory-soft: oklch(0.93 0.020 215);
+
+  --accent-bronze: oklch(0.56 0.065 70);        /* warm bronze */
+  --accent-bronze-foreground: oklch(0.985 0.005 70);
+
+  /* shadcn aliases */
+  --card: var(--surface-raised);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--foreground);
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--surface);
+  --muted-foreground: var(--foreground-muted);
+  --accent: var(--surface-sunken);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.52 0.165 25);
+  --destructive-foreground: oklch(0.985 0.005 25);
+  --input: var(--border);
+
+  --radius: 0.5rem;
+
+  /* sidebar (kept for shadcn-sidebar compat) */
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--foreground);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--surface-sunken);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* charts — muted ink palette + bronze accent (no candy color) */
+  --chart-1: oklch(0.38 0.060 215);             /* advisory teal */
+  --chart-2: oklch(0.40 0.055 145);             /* operations forest */
+  --chart-3: oklch(0.56 0.065 70);              /* bronze */
+  --chart-4: oklch(0.42 0.105 25);              /* family burgundy */
+  --chart-5: oklch(0.48 0.015 65);              /* muted ink */
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* ----- dark mode: warm charcoal / cream ink ----- */
+
+  --background: oklch(0.165 0.010 60);
+  --surface: oklch(0.205 0.012 60);
+  --surface-raised: oklch(0.235 0.013 60);
+  --surface-sunken: oklch(0.145 0.010 60);
+
+  --foreground: oklch(0.935 0.012 78);
+  --foreground-muted: oklch(0.70 0.012 75);
+  --foreground-subtle: oklch(0.55 0.012 72);
+
+  --border: oklch(0.30 0.012 65);
+  --border-strong: oklch(0.42 0.012 65);
+
+  --ring: oklch(0.60 0.04 70);
+
+  --accent-family: oklch(0.62 0.115 25);
+  --accent-family-foreground: oklch(0.12 0.020 25);
+  --accent-family-soft: oklch(0.30 0.045 25);
+
+  --accent-operations: oklch(0.62 0.070 145);
+  --accent-operations-foreground: oklch(0.12 0.020 145);
+  --accent-operations-soft: oklch(0.28 0.030 145);
+
+  --accent-advisory: oklch(0.62 0.075 215);
+  --accent-advisory-foreground: oklch(0.12 0.020 215);
+  --accent-advisory-soft: oklch(0.28 0.035 215);
+
+  --accent-bronze: oklch(0.70 0.075 70);
+  --accent-bronze-foreground: oklch(0.18 0.020 70);
+
+  --card: var(--surface-raised);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--foreground);
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--surface);
+  --muted-foreground: var(--foreground-muted);
+  --accent: var(--surface-raised);
+  --accent-foreground: var(--foreground);
+  --destructive: oklch(0.62 0.165 25);
+  --destructive-foreground: oklch(0.12 0.020 25);
+  --input: var(--border);
+
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--foreground);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: var(--surface-raised);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  --chart-1: oklch(0.62 0.075 215);
+  --chart-2: oklch(0.62 0.070 145);
+  --chart-3: oklch(0.70 0.075 70);
+  --chart-4: oklch(0.62 0.115 25);
+  --chart-5: oklch(0.70 0.012 75);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring/40;
+  }
+  html {
+    @apply font-sans antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
   }
-  html {
-    @apply font-sans;
+  /* Display headings use Fraunces with subtle optical tweaks. */
+  h1, h2, h3 {
+    font-family: var(--font-display), ui-serif, Georgia, serif;
+    letter-spacing: var(--tracking-display);
+    font-feature-settings: "ss01", "ss02";
+  }
+  /* Selection in family-office palette. */
+  ::selection {
+    background-color: var(--accent-bronze);
+    color: var(--accent-bronze-foreground);
+  }
+}
+
+@layer components {
+  /* Eyebrow utility — small uppercase bronze label used above section titles. */
+  .eyebrow {
+    @apply text-[0.6875rem] font-medium uppercase text-foreground-subtle;
+    font-family: var(--font-sans);
+    letter-spacing: var(--tracking-eyebrow);
+  }
+
+  /* Hairline rule, optionally with a centered ornament. */
+  .section-rule {
+    @apply h-px w-full bg-border;
   }
 }

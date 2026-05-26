@@ -8,37 +8,37 @@ export type PropertyPhoto = {
   uploadedBy: string | null;
 };
 
+/**
+ * Property gallery — the *supporting* photo strip on a property detail page.
+ * The hero photo is rendered separately at the top of the page; this grid
+ * holds the rest, sized for scanning rather than reverence.
+ */
 export function PropertyGallery({ photos }: { photos: PropertyPhoto[] }) {
   if (photos.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No photos yet — drop one in above.
+      <p className="text-sm italic text-foreground-subtle">
+        No additional photos yet.
       </p>
     );
   }
 
   return (
-    <ul className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
       {photos.map((photo) => (
-        <li
-          key={photo.id}
-          className="overflow-hidden rounded-lg border border-border bg-card"
-        >
-          <div className="aspect-square relative">
+        <li key={photo.id} className="flex flex-col gap-2">
+          <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={photo.signedUrl}
               alt={photo.caption ?? "Property photo"}
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover transition-transform duration-500 hover:scale-[1.02]"
               loading="lazy"
             />
           </div>
           {photo.caption && (
-            <div className="px-2 py-2">
-              <p className="text-xs text-muted-foreground line-clamp-2">
-                {photo.caption}
-              </p>
-            </div>
+            <p className="line-clamp-2 text-xs text-foreground-subtle">
+              {photo.caption}
+            </p>
           )}
         </li>
       ))}

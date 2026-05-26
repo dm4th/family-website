@@ -2,9 +2,12 @@
 
 import { useActionState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Eyebrow } from "@/components/shell";
 import {
   createInvitation,
   revokeInvitation,
@@ -34,18 +37,19 @@ export function InvitationsSection({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <form
         action={formAction}
         key={state.status === "created" ? "reset" : "stable"}
-        className="rounded-lg border border-dashed border-border p-4 space-y-3"
+        className="flex flex-col gap-4 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-5"
       >
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Invite a family member
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto]">
-          <div className="space-y-1">
-            <Label htmlFor="invite-email" className="text-xs">
+        <Eyebrow>Invite a family member</Eyebrow>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="invite-email"
+              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            >
               Email
             </Label>
             <Input
@@ -57,29 +61,32 @@ export function InvitationsSection({
               placeholder="cousin@example.com"
             />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="invite-role" className="text-xs">
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="invite-role"
+              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            >
               Role
             </Label>
             <select
               id="invite-role"
               name="role"
               defaultValue="member"
-              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <option value="member">member</option>
               <option value="admin">admin</option>
               <option value="guest">guest</option>
             </select>
           </div>
-          <div className="flex items-end">
+          <div>
             <Button type="submit" disabled={isPending}>
               {isPending ? "Creating…" : "Create invitation"}
             </Button>
           </div>
         </div>
         {state.status === "created" && (
-          <p className="text-sm text-emerald-600">
+          <p className="text-sm text-accent-operations">
             Invitation created for {state.email}. When they sign in (Google or
             magic link) with that email, they&apos;ll automatically get the
             assigned role.
@@ -90,18 +97,16 @@ export function InvitationsSection({
         )}
       </form>
 
-      <div>
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-          All invitations
-        </h3>
+      <div className="flex flex-col gap-3">
+        <Eyebrow>All invitations</Eyebrow>
         {invitations.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">
+          <p className="text-sm italic text-foreground-subtle">
             No invitations yet.
           </p>
         ) : (
-          <ul className="divide-y divide-border rounded-md border border-border">
+          <ul className="flex flex-col divide-y divide-border border-y border-border">
             {invitations.map((inv) => (
-              <li key={inv.id} className="px-3 py-2.5">
+              <li key={inv.id} className="py-3">
                 <InvitationRowItem invitation={inv} />
               </li>
             ))}
@@ -124,16 +129,16 @@ function InvitationRowItem({ invitation }: { invitation: InvitationRow }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <span className="font-medium">{invitation.email}</span>
-          <span className="text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-sm text-foreground">{invitation.email}</span>
+          <span className="text-xs text-foreground-subtle">
             role: {invitation.role}
           </span>
         </div>
-        <div className="text-xs text-muted-foreground mt-0.5">
-          status: <StatusPill status={invitation.status} />
+        <div className="mt-1 flex items-center gap-2 text-xs text-foreground-subtle">
+          <StatusBadge status={invitation.status} />
           {expires && invitation.status === "pending" && (
-            <> · expires {expires.toLocaleDateString()}</>
+            <span>· expires {expires.toLocaleDateString()}</span>
           )}
         </div>
       </div>
@@ -186,12 +191,12 @@ function InvitationRowItem({ invitation }: { invitation: InvitationRow }) {
   );
 }
 
-function StatusPill({ status }: { status: InvitationRow["status"] }) {
-  const color =
-    status === "accepted"
-      ? "text-emerald-600"
-      : status === "pending"
-        ? "text-foreground"
-        : "text-muted-foreground";
-  return <span className={color}>{status}</span>;
+function StatusBadge({ status }: { status: InvitationRow["status"] }) {
+  if (status === "accepted") {
+    return <Badge variant="operations">accepted</Badge>;
+  }
+  if (status === "pending") {
+    return <Badge variant="advisory">pending</Badge>;
+  }
+  return <Badge variant="outline">{status}</Badge>;
 }

@@ -42,6 +42,10 @@ supabase/.branches/
 # vercel
 .vercel
 
+# Claude Code per-user state (permissions, IDE preferences). Shared skills
+# live under .claude/skills/ and ARE committed.
+.claude/settings.local.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

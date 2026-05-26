@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   updateOwnProfile,
   type ProfileFormState,
@@ -29,7 +31,7 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
   );
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="flex flex-col gap-6">
       <Field label="Full name" htmlFor="full_name">
         <Input
           id="full_name"
@@ -91,19 +93,18 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
       </Field>
 
       <Field label="Bio" htmlFor="bio" hint="A few sentences. Optional.">
-        <textarea
+        <Textarea
           id="bio"
           name="bio"
           rows={4}
           defaultValue={profile.bio ?? ""}
-          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:border-ring"
         />
       </Field>
 
-      <div className="flex items-center justify-between gap-3 pt-2">
+      <div className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-5">
         <Link
           href={`/family/${profile.id}`}
-          className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
         >
           Manage your photos →
         </Link>
@@ -113,7 +114,7 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
       </div>
 
       {state.status === "saved" && (
-        <p className="text-sm text-emerald-600">Saved.</p>
+        <p className="text-sm text-accent-operations">Saved.</p>
       )}
       {state.status === "error" && (
         <p className="text-sm text-destructive">{state.message}</p>
@@ -134,11 +135,13 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={htmlFor} className="text-foreground-muted">
+        {label}
+      </Label>
       {children}
       {hint ? (
-        <p className="text-xs text-muted-foreground">{hint}</p>
+        <p className="text-xs text-foreground-subtle">{hint}</p>
       ) : null}
     </div>
   );

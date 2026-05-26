@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   updateProperty,
   type PropertyFormState,
@@ -34,7 +36,7 @@ export function PropertyEditForm({
   const [state, formAction, isPending] = useActionState(action, initial);
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form action={formAction} className="flex flex-col gap-6">
       <Field label="Name" htmlFor="name">
         <Input
           id="name"
@@ -125,7 +127,7 @@ export function PropertyEditForm({
             id="status"
             name="status"
             defaultValue={property.status}
-            className="h-9 w-full max-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring"
+            className="h-9 w-full max-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
           >
             <option value="active">Active</option>
             <option value="maintenance">Maintenance</option>
@@ -134,30 +136,20 @@ export function PropertyEditForm({
         </Field>
       )}
 
-      <div className="flex items-center justify-end gap-3 pt-2">
+      <div className="mt-2 flex items-center justify-end gap-3 border-t border-border pt-5">
+        {state.status === "saved" && (
+          <p className="text-sm text-accent-operations">
+            Saved. Logged to revisions.
+          </p>
+        )}
+        {state.status === "error" && (
+          <p className="text-sm text-destructive">{state.message}</p>
+        )}
         <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save changes"}
         </Button>
       </div>
-
-      {state.status === "saved" && (
-        <p className="text-sm text-emerald-600">
-          Saved. Every change is logged.
-        </p>
-      )}
-      {state.status === "error" && (
-        <p className="text-sm text-destructive">{state.message}</p>
-      )}
     </form>
-  );
-}
-
-function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      {...props}
-      className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:border-ring"
-    />
   );
 }
 
@@ -173,10 +165,14 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={htmlFor} className="text-foreground-muted">
+        {label}
+      </Label>
       {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      {hint && (
+        <p className="text-xs text-foreground-subtle">{hint}</p>
+      )}
     </div>
   );
 }

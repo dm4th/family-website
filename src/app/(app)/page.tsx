@@ -1,18 +1,25 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
-type FeatureCard = {
+import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
+import { Eyebrow, SectionRule } from "@/components/shell";
+
+type Mode = "family" | "operations" | "advisory";
+
+type Gateway = {
+  mode: Mode;
+  eyebrow: string;
   title: string;
-  description: string;
+  blurb: string;
   href: string;
-  status: "ready" | "soon";
   badge?: string | null;
+};
+
+type ComingSoon = {
+  title: string;
+  blurb: string;
+  href: string;
+  mode: Mode;
 };
 
 export const dynamic = "force-dynamic";
@@ -23,7 +30,7 @@ export default async function Dashboard() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Two cheap counts so the cards show signal instead of static copy.
+  // Two cheap counts so the gateways show signal instead of static copy.
   const [{ count: memberCount }, { count: propertyCount }] = await Promise.all([
     supabase
       .from("profiles")
@@ -40,93 +47,171 @@ export default async function Dashboard() {
     user?.email?.split("@")[0] ??
     "there";
 
-  const cards: FeatureCard[] = [
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  // The three live gateways — one per page mode. New surfaces (booking,
+  // documents, finances, timeline, messaging) join their matching mode's
+  // group as they ship.
+  const gateways: Gateway[] = [
     {
-      title: "Family Directory",
-      description: "Browse everyone's profiles and contribute photos.",
+      mode: "family",
+      eyebrow: "Family",
+      title: "The Directory",
+      blurb:
+        "Profiles, generations, and the photo archive of everyone in the family.",
       href: "/family",
-      status: "ready",
       badge:
         memberCount === null
           ? null
-          : `${memberCount} ${memberCount === 1 ? "person" : "people"}`,
+          : `${memberCount} ${memberCount === 1 ? "member" : "members"}`,
     },
     {
+      mode: "operations",
+      eyebrow: "Operations",
       title: "Properties",
-      description: "House rules, photos, contacts — wiki-editable by anyone.",
+      blurb:
+        "Family-shared places — house rules, contacts, photos. Wiki-editable by anyone.",
       href: "/properties",
-      status: "ready",
       badge:
         propertyCount === null
           ? null
           : `${propertyCount} ${propertyCount === 1 ? "place" : "places"}`,
     },
+  ];
+
+  const comingSoon: ComingSoon[] = [
     {
-      title: "Property Booking",
-      description: "Reserve dates and avoid double-bookings.",
+      title: "Property booking",
+      blurb: "Reserve dates without scheduling collisions.",
       href: "/coming-soon/booking",
-      status: "soon",
+      mode: "operations",
     },
     {
       title: "Documents & AI",
-      description: "Ask questions about trust documents.",
+      blurb: "Plain-language answers from trust documents.",
       href: "/coming-soon/documents",
-      status: "soon",
+      mode: "advisory",
     },
     {
       title: "Finances",
-      description: "Trust performance and distributions.",
+      blurb: "Trust performance and distributions, transparently.",
       href: "/coming-soon/finances",
-      status: "soon",
+      mode: "advisory",
     },
     {
-      title: "Family Timeline",
-      description: "Stories, milestones, history — preserved.",
+      title: "Family timeline",
+      blurb: "Stories, milestones, history — preserved.",
       href: "/coming-soon/timeline",
-      status: "soon",
+      mode: "family",
     },
     {
       title: "Messaging",
-      description: "In-context comments and a what's-new feed.",
+      blurb: "In-context comments and a what's-new feed.",
       href: "/coming-soon/messaging",
-      status: "soon",
+      mode: "family",
     },
   ];
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">
+    <div className="flex flex-col gap-16">
+      {/* Opening statement — date, greeting, mood. Not a KPI wall. */}
+      <header className="flex flex-col gap-3">
+        <p className="eyebrow text-foreground-subtle">{today}</p>
+        <h1 className="font-display text-[2.5rem] leading-[1.02] text-foreground sm:text-[3.25rem]">
           Welcome back, {firstName}.
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Pick something to dig into.
+        <p className="max-w-xl text-base leading-relaxed text-foreground-muted">
+          A quiet place for the family — to share what we love, look after what
+          we own, and steward what we&apos;ve inherited.
         </p>
-      </div>
+      </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((card) => (
-          <Link key={card.href} href={card.href} className="group">
-            <Card className="h-full transition-colors group-hover:border-foreground/30">
-              <CardHeader>
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-base">{card.title}</CardTitle>
-                  {card.status === "soon" ? (
-                    <span className="text-[10px] uppercase tracking-wide rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-                      Coming soon
-                    </span>
-                  ) : card.badge ? (
-                    <span className="text-[10px] uppercase tracking-wide rounded-full border border-border px-2 py-0.5 text-muted-foreground">
-                      {card.badge}
-                    </span>
-                  ) : null}
-                </div>
-                <CardDescription>{card.description}</CardDescription>
-              </CardHeader>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      {/* The three gateways. Each is presented as a large editorial link
+          rather than a tiny SaaS card. */}
+      <section className="flex flex-col gap-8">
+        <SectionRule label="Where to" />
+        <div className="grid gap-x-12 gap-y-10 lg:grid-cols-2">
+          {gateways.map((g) => (
+            <GatewayBlock key={g.href} gateway={g} />
+          ))}
+        </div>
+      </section>
+
+      {/* Coming soon — smaller, set apart, never the dominant moment. */}
+      <section className="flex flex-col gap-6">
+        <SectionRule label="In flight" />
+        <p className="max-w-2xl text-sm text-foreground-muted">
+          The roadmap. Each lives in a PRD in the repo; click through to read
+          what we&apos;re thinking and why.
+        </p>
+        <ul className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+          {comingSoon.map((c) => (
+            <li key={c.href}>
+              <Link
+                href={c.href}
+                className="group flex flex-col gap-1 border-l border-border pl-4 transition-colors hover:border-accent-bronze"
+              >
+                <p
+                  className={cn(
+                    "eyebrow",
+                    modeAccentText[c.mode]
+                  )}
+                >
+                  Soon · {c.mode}
+                </p>
+                <h3 className="font-display text-lg leading-tight text-foreground transition-colors group-hover:text-accent-bronze">
+                  {c.title}
+                </h3>
+                <p className="text-xs text-foreground-subtle">{c.blurb}</p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
+  );
+}
+
+const modeAccentText: Record<Mode, string> = {
+  family: "text-accent-family",
+  operations: "text-accent-operations",
+  advisory: "text-accent-advisory",
+};
+
+const modeRailColor: Record<Mode, string> = {
+  family: "bg-accent-family",
+  operations: "bg-accent-operations",
+  advisory: "bg-accent-advisory",
+};
+
+function GatewayBlock({ gateway }: { gateway: Gateway }) {
+  return (
+    <Link
+      href={gateway.href}
+      className="group flex flex-col gap-3 border-l-2 border-border pl-6 transition-colors hover:border-foreground"
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className={cn("h-px w-6", modeRailColor[gateway.mode])}
+        />
+        <Eyebrow>{gateway.eyebrow}</Eyebrow>
+        {gateway.badge && (
+          <span className="ml-auto text-xs text-foreground-subtle">
+            {gateway.badge}
+          </span>
+        )}
+      </div>
+      <h2 className="font-display text-[2rem] leading-[1.05] text-foreground transition-colors group-hover:text-accent-bronze sm:text-[2.25rem]">
+        {gateway.title}
+      </h2>
+      <p className="max-w-md text-sm leading-relaxed text-foreground-muted">
+        {gateway.blurb}
+      </p>
+    </Link>
   );
 }

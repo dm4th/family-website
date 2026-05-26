@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useActionState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Eyebrow } from "@/components/shell";
 import {
   createProperty,
   setPropertyStatus,
@@ -33,18 +35,19 @@ export function PropertiesSection({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <form
         action={formAction}
         key={state.status === "created" ? "reset" : "stable"}
-        className="rounded-lg border border-dashed border-border p-4 space-y-3"
+        className="flex flex-col gap-4 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-5"
       >
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Add a property
-        </p>
+        <Eyebrow>Add a property</Eyebrow>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="space-y-1 sm:col-span-1">
-            <Label htmlFor="prop-name" className="text-xs">
+          <FieldCol>
+            <Label
+              htmlFor="prop-name"
+              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            >
               Name
             </Label>
             <Input
@@ -53,10 +56,13 @@ export function PropertiesSection({
               required
               placeholder="Mumford's Cabin"
             />
-          </div>
-          <div className="space-y-1 sm:col-span-1">
-            <Label htmlFor="prop-slug" className="text-xs">
-              Slug (URL)
+          </FieldCol>
+          <FieldCol>
+            <Label
+              htmlFor="prop-slug"
+              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            >
+              Slug
             </Label>
             <Input
               id="prop-slug"
@@ -65,9 +71,12 @@ export function PropertiesSection({
               pattern="[a-z0-9\-]+"
               title="lowercase letters, numbers, and hyphens only"
             />
-          </div>
-          <div className="space-y-1 sm:col-span-1">
-            <Label htmlFor="prop-location" className="text-xs">
+          </FieldCol>
+          <FieldCol>
+            <Label
+              htmlFor="prop-location"
+              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            >
               Location
             </Label>
             <Input
@@ -75,42 +84,40 @@ export function PropertiesSection({
               name="location"
               placeholder="Big Sky, Montana"
             />
-          </div>
+          </FieldCol>
         </div>
-        <div className="flex justify-end">
+        <div className="flex items-center justify-end gap-3">
+          {state.status === "created" && (
+            <p className="text-sm text-accent-operations">
+              Created.{" "}
+              <Link
+                href={`/properties/${state.slug}/edit`}
+                className="underline-offset-4 hover:underline"
+              >
+                Edit it
+              </Link>
+              .
+            </p>
+          )}
+          {state.status === "error" && (
+            <p className="text-sm text-destructive">{state.message}</p>
+          )}
           <Button type="submit" disabled={isPending}>
             {isPending ? "Creating…" : "Create property"}
           </Button>
         </div>
-        {state.status === "created" && (
-          <p className="text-sm text-emerald-600">
-            Created.{" "}
-            <Link
-              href={`/properties/${state.slug}/edit`}
-              className="underline"
-            >
-              Edit it
-            </Link>
-            .
-          </p>
-        )}
-        {state.status === "error" && (
-          <p className="text-sm text-destructive">{state.message}</p>
-        )}
       </form>
 
-      <div>
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-          All properties
-        </h3>
+      <div className="flex flex-col gap-3">
+        <Eyebrow>All properties</Eyebrow>
         {properties.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">
+          <p className="text-sm italic text-foreground-subtle">
             No properties yet.
           </p>
         ) : (
-          <ul className="divide-y divide-border rounded-md border border-border">
+          <ul className="flex flex-col divide-y divide-border border-y border-border">
             {properties.map((p) => (
-              <li key={p.id} className="px-3 py-2.5">
+              <li key={p.id} className="py-3">
                 <PropertyRowItem property={p} />
               </li>
             ))}
@@ -139,19 +146,19 @@ function PropertyRowItem({ property }: { property: AdminPropertyRow }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <Link
             href={`/properties/${property.slug}`}
-            className="font-medium hover:underline underline-offset-4"
+            className="text-sm text-foreground underline-offset-4 hover:underline"
           >
             {property.name}
           </Link>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-foreground-subtle">
             /{property.slug}
           </span>
         </div>
         {property.location && (
-          <div className="text-xs text-muted-foreground mt-0.5">
+          <div className="mt-1 text-xs text-foreground-subtle">
             {property.location}
           </div>
         )}
@@ -162,7 +169,7 @@ function PropertyRowItem({ property }: { property: AdminPropertyRow }) {
         onChange={(e) =>
           changeStatus(e.target.value as AdminPropertyRow["status"])
         }
-        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring"
+        className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
       >
         <option value="active">active</option>
         <option value="maintenance">maintenance</option>
@@ -170,10 +177,14 @@ function PropertyRowItem({ property }: { property: AdminPropertyRow }) {
       </select>
       <Link
         href={`/properties/${property.slug}/edit`}
-        className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+        className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
       >
         Edit
       </Link>
     </div>
   );
+}
+
+function FieldCol({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-col gap-1.5">{children}</div>;
 }
