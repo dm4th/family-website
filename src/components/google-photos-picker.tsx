@@ -32,9 +32,65 @@ type Status =
   | { phase: "awaiting"; pickerUri: string; elapsedMs: number }
   | { phase: "transferring"; current: number; total: number }
   | { phase: "error"; message: string }
-  | { phase: "done"; count: number };
+  | { phase: "done"; succeeded: number; failed: number; lastError: string | null };
 
 const MAX_DIMENSION = 2048;
+
+/**
+ * Transfer one picked mediaItem into Supabase Storage + photos row.
+ * Returns null on success, or a human-readable error string on failure.
+ * Never throws — caller treats null/string as the result.
+ */
+async function transferOne(opts: {
+  supabase: ReturnType<typeof createClient>;
+  token: string;
+  item: import("@/lib/google/photos-picker").PickedMediaItem;
+  attachment: Attachment;
+}): Promise<string | null> {
+  const { supabase, token, item, attachment } = opts;
+  let blob: Blob;
+  try {
+    blob = await downloadAtSize({
+      token,
+      baseUrl: item.mediaFile.baseUrl,
+      maxWidth: MAX_DIMENSION,
+      maxHeight: MAX_DIMENSION,
+    });
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+
+  if (blob.size > MAX_PHOTO_BYTES) {
+    return `A photo exceeded ${Math.round(MAX_PHOTO_BYTES / 1024 / 1024)}MB even after downsize — skipped.`;
+  }
+
+  const mime =
+    item.mediaFile.mimeType?.toLowerCase() || blob.type || "image/jpeg";
+  if (!isAllowedMime(mime)) {
+    return `Unsupported file type: ${mime}`;
+  }
+
+  const filename = item.mediaFile.filename ?? "photo.jpg";
+  const storagePath = generateGooglePhotoPath(filename);
+
+  const { error: uploadError } = await supabase.storage
+    .from(PHOTOS_BUCKET)
+    .upload(storagePath, blob, { contentType: mime, upsert: false });
+  if (uploadError) return uploadError.message;
+
+  const result = await recordUploadedPhoto({
+    storagePath,
+    attachment,
+    source: "google_photos",
+    googleMediaId: item.id,
+  });
+  if (!result.ok) {
+    // Storage upload succeeded but DB row failed — clean up the orphan.
+    await supabase.storage.from(PHOTOS_BUCKET).remove([storagePath]);
+    return result.message;
+  }
+  return null;
+}
 
 export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
   const [status, setStatus] = useState<Status>({ phase: "idle" });
@@ -107,6 +163,7 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
       setStatus({ phase: "transferring", current: 0, total: items.length });
       const supabase = createClient();
       let succeeded = 0;
+      let failed = 0;
       let lastError: string | null = null;
 
       for (let i = 0; i < items.length; i++) {
@@ -114,66 +171,30 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
         const item = items[i]!;
         setStatus({ phase: "transferring", current: i + 1, total: items.length });
 
-        // Picker baseUrls are session-scoped; download bytes now (downsized
-        // to ~2048px to stay quota-friendly), then upload to Supabase.
-        let blob: Blob;
-        try {
-          blob = await downloadAtSize({
-            token,
-            baseUrl: item.mediaFile.baseUrl,
-            maxWidth: MAX_DIMENSION,
-            maxHeight: MAX_DIMENSION,
-          });
-        } catch (err) {
-          lastError = err instanceof Error ? err.message : String(err);
-          continue;
-        }
-
-        if (blob.size > MAX_PHOTO_BYTES) {
-          lastError = `A photo exceeded ${Math.round(MAX_PHOTO_BYTES / 1024 / 1024)}MB even after downsize — skipped.`;
-          continue;
-        }
-
-        const mime =
-          item.mediaFile.mimeType?.toLowerCase() ||
-          blob.type ||
-          "image/jpeg";
-        if (!isAllowedMime(mime)) {
-          lastError = `Unsupported file type: ${mime}`;
-          continue;
-        }
-
-        const filename = item.mediaFile.filename ?? "photo.jpg";
-        const storagePath = generateGooglePhotoPath(filename);
-
-        const { error: uploadError } = await supabase.storage
-          .from(PHOTOS_BUCKET)
-          .upload(storagePath, blob, { contentType: mime, upsert: false });
-        if (uploadError) {
-          lastError = uploadError.message;
-          continue;
-        }
-
-        const result = await recordUploadedPhoto({
-          storagePath,
+        const failure = await transferOne({
+          supabase,
+          token,
+          item,
           attachment,
-          source: "google_photos",
-          googleMediaId: item.id,
         });
-        if (!result.ok) {
-          lastError = result.message;
-          continue;
+        if (failure) {
+          failed += 1;
+          lastError = failure;
+        } else {
+          succeeded += 1;
         }
-        succeeded += 1;
       }
 
       await deleteSession(token, session.id);
 
       if (succeeded === 0) {
-        setStatus({ phase: "error", message: lastError ?? "All transfers failed." });
+        setStatus({
+          phase: "error",
+          message: lastError ?? "All transfers failed.",
+        });
         return;
       }
-      setStatus({ phase: "done", count: succeeded });
+      setStatus({ phase: "done", succeeded, failed, lastError });
       startTransition(() => router.refresh());
     } catch (err) {
       if (ac.signal.aborted) return;
@@ -246,10 +267,23 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
       )}
 
       {status.phase === "done" && (
-        <p className="text-xs text-foreground-muted">
-          Added {status.count} photo{status.count === 1 ? "" : "s"} from Google
-          Photos.
-        </p>
+        <>
+          <p className="text-xs text-foreground-muted">
+            Added {status.succeeded} photo
+            {status.succeeded === 1 ? "" : "s"} from Google Photos.
+          </p>
+          {status.failed > 0 && (
+            <p className="text-xs text-destructive">
+              {status.failed} couldn&rsquo;t be saved
+              {status.lastError ? ` — last error: ${status.lastError}` : "."}
+            </p>
+          )}
+          {status.failed > 0 && (
+            <Button type="button" variant="outline" size="sm" onClick={run}>
+              Try the failed ones again
+            </Button>
+          )}
+        </>
       )}
 
       {status.phase === "error" && (

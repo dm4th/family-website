@@ -55,7 +55,8 @@ Two related concerns:
 **UX**: replaced the inline `<PhotoUpload>` on property and profile pages with a sheet-modal (`<AddPhotosModal>`) containing two tabs — *From device* (the existing `PhotoUpload` unchanged) and *Google Photos* (the new `GooglePhotosPicker`). Last-used tab persists in `localStorage` (`addPhotos.lastTab`).
 
 **Key files**
-- [supabase/migrations/20260525000001_photos_source.sql](../supabase/migrations/20260525000001_photos_source.sql) — adds `photos.source` (check-constrained), `photos.google_media_id`, and `photos_source_idx`. RLS unchanged — same insert/select/update/delete policies cover the new columns.
+- [supabase/migrations/20260525120000_photos_source.sql](../supabase/migrations/20260525120000_photos_source.sql) — adds `photos.source` (check-constrained), `photos.google_media_id`, and `photos_source_idx`. RLS unchanged — same insert/select/update/delete policies cover the new columns.
+- [supabase/migrations/20260525130000_photos_google_media_dedup.sql](../supabase/migrations/20260525130000_photos_google_media_dedup.sql) — partial-unique index on `(uploaded_by, google_media_id)`. Defense-in-depth against race-condition double-inserts; the file's preamble documents why it does **not** dedup the user-picks-twice case (Picker mediaItem ids are session-scoped on Google's side).
 - [src/lib/db/schema.ts](../src/lib/db/schema.ts) — Drizzle mirror updated with `PhotoSource` type + new columns.
 - [src/lib/photo-utils.ts](../src/lib/photo-utils.ts) — adds `generateGooglePhotoPath()` (under a `google/` prefix) and a shared `isValidPhotoStoragePath()` guard.
 - [src/lib/google/identity.ts](../src/lib/google/identity.ts) — idempotent Google Identity Services script loader + `requestAccessToken({ scope })` returning a short-lived OAuth token. Browser-only.

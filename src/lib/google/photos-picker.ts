@@ -128,12 +128,31 @@ export async function listMediaItems(
 }
 
 /**
+ * Hosts we will attach the user's OAuth bearer token to. Picker baseUrls
+ * are served from Google's user-content CDN; gating on this suffix prevents
+ * a (theoretical) injected URL from siphoning the token to another origin.
+ */
+const ALLOWED_DOWNLOAD_HOST_SUFFIX = ".googleusercontent.com";
+
+function isAllowedDownloadHost(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "https:") return false;
+    return u.hostname.endsWith(ALLOWED_DOWNLOAD_HOST_SUFFIX);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Download a Picker mediaItem at a constrained size. Google's image URLs
  * accept `=w<width>-h<height>` for resize and `=d` for "download" (strips
  * EXIF, but the file extension/MIME come from the baseUrl). We use resize
  * so we never download the full original — that defeats the quota goal.
  *
  * The token is required: Picker baseUrls are not publicly accessible.
+ * The host is checked first to avoid emitting the bearer token to anything
+ * outside Google's user-content CDN.
  */
 export async function downloadAtSize(opts: {
   token: string;
@@ -141,12 +160,25 @@ export async function downloadAtSize(opts: {
   maxWidth: number;
   maxHeight: number;
 }): Promise<Blob> {
+  if (!isAllowedDownloadHost(opts.baseUrl)) {
+    throw new Error(
+      `Refusing to download from non-Google host: ${safeHostFor(opts.baseUrl)}`,
+    );
+  }
   const url = `${opts.baseUrl}=w${opts.maxWidth}-h${opts.maxHeight}`;
   const res = await fetch(url, { headers: authHeaders(opts.token) });
   if (!res.ok) {
     throw new Error(`Download from Google: ${res.status} ${res.statusText}`);
   }
   return res.blob();
+}
+
+function safeHostFor(rawUrl: string): string {
+  try {
+    return new URL(rawUrl).hostname;
+  } catch {
+    return "<unparseable>";
+  }
 }
 
 /**
