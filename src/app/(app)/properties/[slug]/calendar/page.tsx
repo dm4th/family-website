@@ -34,12 +34,17 @@ type BookingRow = {
   profiles: { full_name: string | null; email: string } | null;
 };
 
-function formatRange(startIso: string, endIso: string): string {
+// end_date is EXCLUSIVE (checkout). For display we render the inclusive
+// "first night → last night" range — clearer for the family ("Jun 14 → 20"
+// reads as 7 nights), and avoids the trap of users assuming they hold the
+// checkout day.
+function formatRange(startIso: string, endIsoExclusive: string): string {
   const start = new Date(startIso + "T00:00:00");
-  const end = new Date(endIso + "T00:00:00");
+  const lastNight = new Date(endIsoExclusive + "T00:00:00");
+  lastNight.setDate(lastNight.getDate() - 1);
   const sameMonth =
-    start.getFullYear() === end.getFullYear() &&
-    start.getMonth() === end.getMonth();
+    start.getFullYear() === lastNight.getFullYear() &&
+    start.getMonth() === lastNight.getMonth();
   const fmt: Intl.DateTimeFormatOptions = {
     month: "short",
     day: "numeric",
@@ -50,12 +55,12 @@ function formatRange(startIso: string, endIso: string): string {
       month: "short",
       day: "numeric",
     }).format(start);
-    return `${startFmt} – ${end.getDate()}, ${end.getFullYear()}`;
+    return `${startFmt} → ${lastNight.getDate()}, ${lastNight.getFullYear()}`;
   }
-  return `${new Intl.DateTimeFormat("en-US", fmt).format(start)} – ${new Intl.DateTimeFormat(
+  return `${new Intl.DateTimeFormat("en-US", fmt).format(start)} → ${new Intl.DateTimeFormat(
     "en-US",
     fmt,
-  ).format(end)}`;
+  ).format(lastNight)}`;
 }
 
 export default async function PropertyCalendarPage({

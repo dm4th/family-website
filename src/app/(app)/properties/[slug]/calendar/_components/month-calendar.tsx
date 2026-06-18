@@ -13,8 +13,8 @@ import {
 
 export type CalendarBand = {
   bookingId: string;
-  startIso: string; // YYYY-MM-DD
-  endIso: string; // YYYY-MM-DD
+  startIso: string; // YYYY-MM-DD, inclusive (first stay night)
+  endIso: string; // YYYY-MM-DD, EXCLUSIVE (checkout — not painted)
   status: "approved" | "pending";
   tone?: string; // optional CSS color, used by unified /calendar
   label?: string;
@@ -54,12 +54,34 @@ function fromIso(iso: string): Date {
 }
 
 function eachDayInclusive(start: Date, end: Date): Date[] {
+  // Inclusive [start, end] — used for the visible month grid and the
+  // user's drag-selection paint (paint every cell from drag-start to
+  // drag-end). NOT used for booking bands; see eachStayNight.
   const days: Date[] = [];
   const cur = new Date(start);
   cur.setHours(0, 0, 0, 0);
   const last = new Date(end);
   last.setHours(0, 0, 0, 0);
   while (cur.getTime() <= last.getTime()) {
+    days.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
+function eachStayNight(startIso: string, endIsoExclusive: string): Date[] {
+  // Half-open [start, end). The day stored as end_date is checkout, not a
+  // stay night, so the booking band stops before it. This matches what
+  // findOverlappingBookings expects on the conflict-math side.
+  const s = fromIso(startIso);
+  const e = fromIso(endIsoExclusive);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return [];
+  const days: Date[] = [];
+  const cur = new Date(s);
+  cur.setHours(0, 0, 0, 0);
+  const stop = new Date(e);
+  stop.setHours(0, 0, 0, 0);
+  while (cur.getTime() < stop.getTime()) {
     days.push(new Date(cur));
     cur.setDate(cur.getDate() + 1);
   }
@@ -86,14 +108,12 @@ export function MonthCalendar({
     [gridStart, gridEnd],
   );
 
-  // Map each date to the bands that cover it.
+  // Map each date to the bands that cover it. endIso is exclusive (checkout)
+  // so the band stops short of that day.
   const bandsByDay = useMemo(() => {
     const map = new Map<string, CalendarBand[]>();
     for (const b of bands) {
-      const s = fromIso(b.startIso);
-      const e = fromIso(b.endIso);
-      if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) continue;
-      for (const d of eachDayInclusive(s, e)) {
+      for (const d of eachStayNight(b.startIso, b.endIso)) {
         const key = toIso(d);
         const arr = map.get(key) ?? [];
         arr.push(b);

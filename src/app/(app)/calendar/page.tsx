@@ -141,7 +141,7 @@ export default async function UnifiedCalendarPage() {
                         {propertyName.get(b.property_id)}
                       </Link>{" "}
                       <span className="text-foreground-subtle">
-                        · {b.start_date} → {b.end_date}
+                        · arrive {b.start_date}, depart {b.end_date}
                       </span>
                     </p>
                     <p className="mt-1 text-xs text-foreground-subtle">

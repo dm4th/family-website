@@ -23,8 +23,15 @@ type Props = {
   bands: CalendarBand[];
   maxGuests: number | null;
   peakRanges: PeakRange[];
+  /** Stored bookings with exclusive endIso (DB end_date, the checkout day). */
   pendingBands: { startIso: string; endIso: string }[];
 };
+
+// The form's internal `range` state holds the user's nights INCLUSIVE
+// (start = first stay night, end = last stay night). That matches how the
+// calendar drag feels: you paint every cell you'll be there. At submit
+// time we convert end to the EXCLUSIVE checkout day to match the storage
+// model (end_date = checkout).
 
 function parseMonthDay(s: string): { month: number; day: number } | null {
   const m = /^(\d{2})-(\d{2})$/.exec(s);
@@ -32,7 +39,7 @@ function parseMonthDay(s: string): { month: number; day: number } | null {
   return { month: parseInt(m[1], 10), day: parseInt(m[2], 10) };
 }
 
-function dayInRange(date: Date, range: PeakRange): boolean {
+function dayInPeakRange(date: Date, range: PeakRange): boolean {
   const s = parseMonthDay(range.start);
   const e = parseMonthDay(range.end);
   if (!s || !e) return false;
@@ -43,7 +50,7 @@ function dayInRange(date: Date, range: PeakRange): boolean {
   return v >= a || v <= b;
 }
 
-function eachDay(start: Date, end: Date): Date[] {
+function eachInclusive(start: Date, end: Date): Date[] {
   const out: Date[] = [];
   const cur = new Date(start);
   cur.setHours(0, 0, 0, 0);
@@ -66,6 +73,37 @@ function fromIso(iso: string): Date {
   );
 }
 
+function toIso(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const d = fromIso(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  d.setDate(d.getDate() + days);
+  return toIso(d);
+}
+
+function nightCount(startIso: string, lastNightIso: string): number {
+  const s = fromIso(startIso);
+  const e = fromIso(lastNightIso);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return 0;
+  const ms = e.getTime() - s.getTime();
+  return Math.max(0, Math.round(ms / 86_400_000) + 1);
+}
+
+function formatHumanDate(iso: string): string {
+  const d = fromIso(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(d);
+}
+
 export function BookingRequestForm({
   propertyId,
   bands,
@@ -75,9 +113,14 @@ export function BookingRequestForm({
 }: Props) {
   const action = createBookingRequest.bind(null, propertyId);
   const [state, formAction, isPending] = useActionState(action, initial);
+  // `range` is INCLUSIVE — end is the last stay night, not checkout.
   const [range, setRange] = useState<{ start: string; end: string } | null>(
     null,
   );
+
+  // Exclusive checkout = last stay night + 1 day. This is what we submit.
+  const exclusiveEnd = range ? addDaysIso(range.end, 1) : "";
+  const nights = range ? nightCount(range.start, range.end) : 0;
 
   const needsApproval = useMemo(() => {
     if (!range || peakRanges.length === 0) return false;
@@ -86,9 +129,9 @@ export function BookingRequestForm({
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       return false;
     }
-    for (const d of eachDay(start, end)) {
+    for (const d of eachInclusive(start, end)) {
       for (const r of peakRanges) {
-        if (dayInRange(d, r)) return true;
+        if (dayInPeakRange(d, r)) return true;
       }
     }
     return false;
@@ -96,9 +139,13 @@ export function BookingRequestForm({
 
   const pendingConflicts = useMemo(() => {
     if (!range) return 0;
+    // pendingBands carry EXCLUSIVE endIso. Convert ours to exclusive too,
+    // then standard half-open overlap test: a < d AND b > c. String compare
+    // works on YYYY-MM-DD.
+    const myExclusiveEnd = addDaysIso(range.end, 1);
     let n = 0;
     for (const p of pendingBands) {
-      if (p.startIso <= range.end && p.endIso >= range.start) n++;
+      if (range.start < p.endIso && myExclusiveEnd > p.startIso) n++;
     }
     return n;
   }, [range, pendingBands]);
@@ -114,7 +161,7 @@ export function BookingRequestForm({
       <form action={formAction} className="flex flex-col gap-4">
         <Eyebrow>Request these dates</Eyebrow>
         <input type="hidden" name="start_date" value={range?.start ?? ""} />
-        <input type="hidden" name="end_date" value={range?.end ?? ""} />
+        <input type="hidden" name="end_date" value={exclusiveEnd} />
 
         <div className="grid grid-cols-2 gap-3">
           <Field>
@@ -142,7 +189,7 @@ export function BookingRequestForm({
               htmlFor="bk-end"
               className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
             >
-              Depart
+              Last night
             </Label>
             <Input
               id="bk-end"
@@ -158,6 +205,14 @@ export function BookingRequestForm({
             />
           </Field>
         </div>
+
+        {range && nights > 0 && (
+          <p className="text-xs text-foreground-subtle">
+            {nights} night{nights === 1 ? "" : "s"} · arrive{" "}
+            {formatHumanDate(range.start)}, depart{" "}
+            {formatHumanDate(exclusiveEnd)}
+          </p>
+        )}
 
         <Field>
           <Label

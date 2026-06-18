@@ -46,10 +46,13 @@ function dayInRange(
 }
 
 /**
- * True if any day in [start, end] (inclusive) is inside any peak range.
- * Uses day-by-day scan because ranges are recurring annual MM-DD windows —
- * a multi-year booking could touch the same window twice. Bookings are at
+ * True if any stay night [start, end) overlaps any peak range. Iterates
+ * day-by-day because the ranges are recurring annual MM-DD windows — a
+ * multi-year booking could touch the same window twice. Bookings are at
  * most a few weeks in practice, so this is fine.
+ *
+ * End is EXCLUSIVE (checkout). The day stored as `end_date` is the
+ * departure day and is not a stay night.
  */
 export function isInPeakPeriod(
   ranges: PeakPeriodRange[],
@@ -63,7 +66,7 @@ export function isInPeakPeriod(
   const end = new Date(endDate);
   end.setHours(0, 0, 0, 0);
 
-  while (cur.getTime() <= end.getTime()) {
+  while (cur.getTime() < end.getTime()) {
     for (const r of ranges) {
       if (dayInRange(cur, r)) return true;
     }
@@ -97,11 +100,13 @@ export type OverlapBooking = Pick<
 >;
 
 /**
- * Find bookings on a property whose date range overlaps [startDate, endDate]
- * and whose status is in the given set. Uses the
+ * Find bookings on a property whose [start, end) range overlaps the given
+ * [startDate, endDate) window and whose status is in the given set. Uses the
  * (property_id, status, start_date, end_date) composite index.
  *
- * Date overlap test: two ranges [a,b] and [c,d] overlap iff a <= d AND b >= c.
+ * Both endpoints are EXCLUSIVE-end (half-open). Two half-open ranges
+ * [a, b) and [c, d) overlap iff a < d AND b > c. Strict inequality is
+ * what lets same-day turnover work (B starts the day A ends).
  */
 export async function findOverlappingBookings(
   opts: FindOverlapOpts,
@@ -114,8 +119,8 @@ export async function findOverlappingBookings(
     )
     .eq("property_id", opts.propertyId)
     .in("status", opts.statuses)
-    .lte("start_date", opts.endDate)
-    .gte("end_date", opts.startDate);
+    .lt("start_date", opts.endDate)
+    .gt("end_date", opts.startDate);
   if (opts.excludeBookingId) {
     q = q.neq("id", opts.excludeBookingId);
   }

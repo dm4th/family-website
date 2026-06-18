@@ -8,17 +8,17 @@ export const dynamic = "force-dynamic";
 type RouteParams = Promise<{ scope: string }>;
 
 /**
- * Convert "YYYY-MM-DD" to an ics DateArray in local time. End dates in iCal
- * are exclusive — for an all-day booking that ends Friday, the VEVENT DTEND
- * is Saturday. We add a day to express that semantics.
+ * Convert "YYYY-MM-DD" to an ics DateArray in local time. Our stored
+ * end_date is already the EXCLUSIVE checkout day, which matches RFC 5545's
+ * DTEND-is-exclusive convention for all-day events — no offset needed.
  */
-function toDateArray(iso: string, addDays = 0): [number, number, number] {
+function toDateArray(iso: string): [number, number, number] {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!m) throw new Error(`Bad ISO date ${iso}`);
   const d = new Date(
     parseInt(m[1], 10),
     parseInt(m[2], 10) - 1,
-    parseInt(m[3], 10) + addDays,
+    parseInt(m[3], 10),
   );
   return [d.getFullYear(), d.getMonth() + 1, d.getDate()];
 }
@@ -90,7 +90,7 @@ export async function GET(
     return {
       title: scope === "me" ? propName : guest,
       start: toDateArray(b.start_date),
-      end: toDateArray(b.end_date, 1),
+      end: toDateArray(b.end_date),
       uid: `booking-${b.id}@mathiesonfamily.app`,
       description:
         (b.notes ? b.notes + "\n\n" : "") +

@@ -55,10 +55,10 @@ export async function createBookingRequest(
   if (!start || !end) {
     return { status: "error", message: "Invalid date format." };
   }
-  if (end.getTime() < start.getTime()) {
+  if (end.getTime() <= start.getTime()) {
     return {
       status: "error",
-      message: "End date can't be before start date.",
+      message: "Depart date must be after the arrive date (at least one night).",
     };
   }
 
