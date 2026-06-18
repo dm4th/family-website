@@ -46,7 +46,7 @@ export async function updateProperty(
   const { data: current, error: currentErr } = await supabase
     .from("properties")
     .select(
-      "slug, name, location, address, description, how_to, guidelines, amenities, status",
+      "slug, name, location, address, description, how_to, guidelines, amenities, status, max_guests, peak_period_ranges",
     )
     .eq("id", propertyId)
     .single();
@@ -61,6 +61,49 @@ export async function updateProperty(
   const name = readText(formData, "name");
   if (!name) {
     return { status: "error", message: "Name is required." };
+  }
+
+  // Booking-config inputs (admin-only).
+  let nextMaxGuests: number | null = current.max_guests ?? null;
+  let nextPeakRanges: { start: string; end: string }[] =
+    (current.peak_period_ranges ?? []) as { start: string; end: string }[];
+  if (canChangeStatus) {
+    const raw = readText(formData, "max_guests");
+    if (raw === null) {
+      nextMaxGuests = null;
+    } else {
+      const n = Number.parseInt(raw, 10);
+      if (!Number.isFinite(n) || n < 1) {
+        return { status: "error", message: "Max guests must be a positive number." };
+      }
+      nextMaxGuests = n;
+    }
+    const peakRaw = readText(formData, "peak_period_ranges");
+    if (peakRaw !== null) {
+      try {
+        const parsed = JSON.parse(peakRaw);
+        if (!Array.isArray(parsed)) throw new Error("not array");
+        const valid: { start: string; end: string }[] = [];
+        for (const r of parsed) {
+          if (
+            !r ||
+            typeof r.start !== "string" ||
+            typeof r.end !== "string" ||
+            !/^\d{2}-\d{2}$/.test(r.start) ||
+            !/^\d{2}-\d{2}$/.test(r.end)
+          ) {
+            return {
+              status: "error",
+              message: "Peak periods must be MM-DD → MM-DD pairs.",
+            };
+          }
+          valid.push({ start: r.start, end: r.end });
+        }
+        nextPeakRanges = valid;
+      } catch {
+        return { status: "error", message: "Invalid peak periods." };
+      }
+    }
   }
 
   const next = {
@@ -92,6 +135,8 @@ export async function updateProperty(
       guidelines: next.guidelines,
       amenities: next.amenities,
       status: next.status,
+      max_guests: nextMaxGuests,
+      peak_period_ranges: nextPeakRanges,
       updated_by: user.id,
     })
     .eq("id", propertyId);
@@ -112,8 +157,14 @@ export async function updateProperty(
       guidelines: current.guidelines,
       amenities: current.amenities ?? [],
       status: current.status,
+      max_guests: current.max_guests ?? null,
+      peak_period_ranges: JSON.stringify(current.peak_period_ranges ?? []),
     },
-    after: next,
+    after: {
+      ...next,
+      max_guests: nextMaxGuests,
+      peak_period_ranges: JSON.stringify(nextPeakRanges),
+    },
   });
 
   revalidatePath(`/properties/${current.slug}`);

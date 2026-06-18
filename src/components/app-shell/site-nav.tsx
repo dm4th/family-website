@@ -46,6 +46,7 @@ export const NAV_GROUPS: NavGroup[] = [
     mode: "operations",
     links: [
       { label: "Properties", href: "/properties", description: "Homes & stewardship" },
+      { label: "Calendar", href: "/calendar", description: "Bookings across properties" },
     ],
   },
 ];

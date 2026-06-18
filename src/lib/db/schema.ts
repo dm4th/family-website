@@ -66,6 +66,8 @@ export type NewProfile = typeof profiles.$inferInsert;
 // ----------------------------------------------------------------------------
 export type PropertyStatus = "active" | "maintenance" | "inactive";
 
+export type PeakPeriodRange = { start: string; end: string }; // both "MM-DD"
+
 export const properties = pgTable("properties", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   slug: text("slug").notNull().unique(),
@@ -78,6 +80,11 @@ export const properties = pgTable("properties", {
   guidelines: text("guidelines"),
   howTo: text("how_to"),
   status: text("status").$type<PropertyStatus>().notNull().default("active"),
+  maxGuests: integer("max_guests"),
+  peakPeriodRanges: jsonb("peak_period_ranges")
+    .$type<PeakPeriodRange[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
   updatedBy: uuid("updated_by").references(() => authUsers.id, {
     onDelete: "set null",
   }),
@@ -187,7 +194,11 @@ export type PhotoSubject = typeof photoSubjects.$inferSelect;
 // ----------------------------------------------------------------------------
 // revisions (immutable audit log)
 // ----------------------------------------------------------------------------
-export type RevisionEntity = "property" | "profile" | "property_contact";
+export type RevisionEntity =
+  | "property"
+  | "profile"
+  | "property_contact"
+  | "booking";
 
 export const revisions = pgTable(
   "revisions",
@@ -274,3 +285,49 @@ export const propertyAdmins = pgTable(
 
 export type PropertyAdmin = typeof propertyAdmins.$inferSelect;
 export type NewPropertyAdmin = typeof propertyAdmins.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// bookings — per-property reservation requests
+// ----------------------------------------------------------------------------
+export type BookingStatus = "pending" | "approved" | "declined" | "cancelled";
+
+export const bookings = pgTable(
+  "bookings",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    requestedBy: uuid("requested_by")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date").notNull(),
+    guestCount: integer("guest_count").notNull().default(1),
+    notes: text("notes"),
+    status: text("status").$type<BookingStatus>().notNull().default("pending"),
+    approvedBy: uuid("approved_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    cancellationNotes: text("cancellation_notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("bookings_property_status_dates_idx").on(
+      table.propertyId,
+      table.status,
+      table.startDate,
+      table.endDate,
+    ),
+    index("bookings_requested_by_idx").on(table.requestedBy, table.createdAt),
+  ],
+);
+
+export type Booking = typeof bookings.$inferSelect;
+export type NewBooking = typeof bookings.$inferInsert;

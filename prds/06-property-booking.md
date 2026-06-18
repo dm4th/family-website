@@ -130,9 +130,34 @@ End-to-end, on either local dev or prod:
 
 ## Implementation
 
-_To be filled in by the contributor who ships this. Follow the format used in [03-properties.md](03-properties.md) Implementation section._
+- **Status**: ✅ shipped on `feat/property-booking` (2026-05-25). Migration `20260525000001_bookings.sql` adds the `bookings` table + `properties.max_guests` / `properties.peak_period_ranges`. Apply with `npx supabase db push` before testing.
 
-- **Status**: not started
-- **Key files**: (list once shipped)
-- **Decisions made during build**: (any deviations from the recommendations above)
-- **Open follow-ups**: (what's deferred)
+- **Key files**:
+  - Migration: [supabase/migrations/20260525000001_bookings.sql](../supabase/migrations/20260525000001_bookings.sql)
+  - Schema mirror: [src/lib/db/schema.ts](../src/lib/db/schema.ts) (bookings table, `BookingStatus`, `PeakPeriodRange`)
+  - Server helpers: [src/lib/bookings.ts](../src/lib/bookings.ts) — `isInPeakPeriod`, `findOverlappingBookings`, `determineInitialStatus`, ISO date helpers
+  - Server Actions: [src/app/(app)/properties/[slug]/calendar/actions.ts](../src/app/(app)/properties/[slug]/calendar/actions.ts) — `createBookingRequest`, `cancelBooking`, `approveBooking`, `declineBooking`
+  - Per-property calendar: [src/app/(app)/properties/[slug]/calendar/page.tsx](../src/app/(app)/properties/[slug]/calendar/page.tsx) + `_components/` (MonthCalendar, BookingRequestForm, AdminBookingRow, OwnBookingCancel)
+  - Unified calendar: [src/app/(app)/calendar/page.tsx](../src/app/(app)/calendar/page.tsx) (color-coded by property)
+  - ICS feeds: [src/app/api/ics/[scope]/route.ts](../src/app/api/ics/[scope]/route.ts) — scope = property slug or `me`
+  - Admin queue: [src/app/(app)/admin/page.tsx](../src/app/(app)/admin/page.tsx) (new "Pending bookings" briefing panel)
+  - Edit-form additions: [src/app/(app)/properties/[slug]/edit/property-edit-form.tsx](../src/app/(app)/properties/[slug]/edit/property-edit-form.tsx) (`max_guests` + peak-period repeater UI) and the matching parse/diff in [actions.ts](../src/app/(app)/properties/[slug]/actions.ts)
+  - Nav: [src/components/app-shell/site-nav.tsx](../src/components/app-shell/site-nav.tsx) (Operations group gains a "Calendar" link)
+  - PRDs deferred from this slice: see Open follow-ups below
+
+- **Decisions made during build**:
+  - **Peak periods** live on the `properties` table as a `peak_period_ranges` JSONB column (recurring MM-DD pairs). Edited from the property edit page; admin-gated alongside status. Year-wrap is handled (Dec 22 → Jan 02 is one range, not two).
+  - **Auto-approval** kicks in when no approved-overlap, no pending-overlap, and dates are outside every peak range. Otherwise the booking lands `pending`. Approved-overlap is a hard reject at action time (also re-checked at approval time as a race-safety net).
+  - **Notifications** deferred — pending requests surface as a "Pending bookings" briefing panel on `/admin` (visible to site admins) and as an inline panel on each property's calendar page (visible to that property's admins). Resend never installed.
+  - **Audit trail** extended: `RevisionEntity` now includes `"booking"`. Booking inserts, status transitions, and cancellations all record revisions. The diff helper handles arrays + scalars; JSONB peak ranges are stringified before passing to the diff to avoid noisy "object inequality" diffs.
+  - **Custom calendar UI**: month grid in `month-calendar.tsx` (~250 lines with selection state and color-coded bands). No FullCalendar dependency. Re-used as-is by the unified `/calendar`.
+  - **ICS auth model**: the route inherits the proxy's auth gate — feeds only refresh when the subscriber is signed in. No public-token URLs in this slice. Calendar subscriptions will work for cookie-bearing browsers (e.g. viewing the .ics file directly) but most native calendar apps will fail to refresh because they don't carry cookies. Tracked as a follow-up.
+  - **Property creation + per-property admin grants**: confirmed both already exist (admin "Add a property" form and `PropertyAdminsEditor`). The booking system inherits both without new wiring — fresh properties default to `peak_period_ranges = []` and `max_guests = null` so they're immediately bookable.
+
+- **Open follow-ups**:
+  - **Public-token ICS subscription URLs** — needed for the feed to actually work in native calendar apps (which strip cookies on refresh).
+  - **Real email notifications** (Resend) — the in-app pending panel is fine for tight family use; add transactional emails when there are more than a handful of pending bookings or if family members aren't checking the portal frequently.
+  - **Recurring bookings** ("the family always goes the week before Labor Day") — explicitly out of scope for this slice.
+  - **Booking-cancellation visibility for the original requester** — currently they have to revisit the calendar to see the cancellation notes. Surfacing this in-app would benefit from the notifications work above.
+  - **Property access scoping** — gated on the master-plan open decision. If we ever scope properties to family branches, the calendar visibility logic + ICS feed scope checks need to be revisited.
+  - **Two-way Google Calendar sync** — Phase 2.5; the one-way ICS feed is enough for first cut.
