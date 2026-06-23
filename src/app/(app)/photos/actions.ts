@@ -134,21 +134,45 @@ export async function deletePhoto(
     return { ok: false, message: "Photo not found" };
   }
 
-  // RLS enforces who can delete — fail-fast if the caller isn't the
-  // uploader, a site admin, or a property admin (covered by the photos
-  // RLS policy + is_admin()/is_property_admin()).
-  const { error: deleteErr } = await supabase
+  // Remove the storage object FIRST, while the photos row still exists. The
+  // property-admin storage delete policy resolves the object back to its
+  // photos row by path, so the row must be present for that check to pass.
+  // (owner == uploaded_by for every photo we create, so the storage and
+  // table delete policies authorize the same callers.)
+  const { error: storageErr } = await supabase.storage
+    .from(PHOTOS_BUCKET)
+    .remove([photo.storage_path]);
+
+  // Delete the metadata row and confirm a row was actually removed. A silent
+  // empty delete means RLS filtered it out — i.e. the caller isn't the
+  // uploader, a site admin, or a property admin for this photo — so report a
+  // failure instead of a false success.
+  const { data: deleted, error: deleteErr } = await supabase
     .from("photos")
     .delete()
-    .eq("id", photoId);
+    .eq("id", photoId)
+    .select("id");
   if (deleteErr) {
     return { ok: false, message: deleteErr.message };
   }
+  if (!deleted || deleted.length === 0) {
+    return {
+      ok: false,
+      message: "You don't have permission to remove this photo.",
+    };
+  }
 
-  // Best-effort storage cleanup. If this fails (e.g. object already
-  // missing) the DB row is gone, which is the user-visible state — log
-  // and move on. RLS on storage.objects mirrors photos table policy.
-  await supabase.storage.from(PHOTOS_BUCKET).remove([photo.storage_path]);
+  // The row is gone (the user-visible state). If the object cleanup above
+  // failed, log it so the admin storage tally can reconcile the orphan — but
+  // don't fail the user-facing action over it.
+  if (storageErr) {
+    console.error("deletePhoto: storage cleanup failed", {
+      photoId,
+      storagePath: photo.storage_path,
+      error: storageErr.message,
+    });
+  }
+
   revalidatePath("/family");
   if (photo.property_id) revalidatePath("/properties");
   return { ok: true };
