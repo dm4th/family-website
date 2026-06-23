@@ -130,10 +130,14 @@ End-to-end, on either local dev or prod:
 
 ## Implementation
 
-- **Status**: ✅ shipped on `feat/property-booking` (2026-05-25). Migration `20260525000001_bookings.sql` adds the `bookings` table + `properties.max_guests` / `properties.peak_period_ranges`. Apply with `npx supabase db push` before testing.
+- **Status**: 🟡 landing in progress. The reviewed work was cherry-picked clean off the tangled `feat/google-photos-picker` onto **`feat/booking-landing`** (off current `main`) as `de81af2` + `0117977`. Build + lint green (only the pre-existing `theme-toggle.tsx` lint error remains, on `main`). A new idempotent fix-migration `20260525150000_booking_fixes.sql` was authored to reconcile prod (see below). Remaining: PR → preview → merge → `supabase db push` → smoke test.
+
+- **Migrations**:
+  - `20260525000001_bookings.sql` — adds the `bookings` table + `properties.max_guests` / `properties.peak_period_ranges`. **Already applied to prod in its original (buggy) form** during the first booking session; `supabase db push` will skip it.
+  - `20260525150000_booking_fixes.sql` — **idempotent reconciliation** that carries the security fixes (btree_gist, strict `end_date > start_date` CHECK, `bookings_no_overlap` GiST exclusion constraint, `enforce_booking_transitions` self-approve guard) as a NEW version so they actually reach prod. Safe on buggy, fixed, or partially-fixed DBs — every statement is catalog-guarded. RLS policies are identical between buggy/fixed and are intentionally untouched.
 
 - **Key files**:
-  - Migration: [supabase/migrations/20260525000001_bookings.sql](../supabase/migrations/20260525000001_bookings.sql)
+  - Migrations: [supabase/migrations/20260525000001_bookings.sql](../supabase/migrations/20260525000001_bookings.sql) + idempotent fix [supabase/migrations/20260525150000_booking_fixes.sql](../supabase/migrations/20260525150000_booking_fixes.sql)
   - Schema mirror: [src/lib/db/schema.ts](../src/lib/db/schema.ts) (bookings table, `BookingStatus`, `PeakPeriodRange`)
   - Server helpers: [src/lib/bookings.ts](../src/lib/bookings.ts) — `isInPeakPeriod`, `findOverlappingBookings`, `determineInitialStatus`, ISO date helpers
   - Server Actions: [src/app/(app)/properties/[slug]/calendar/actions.ts](../src/app/(app)/properties/[slug]/calendar/actions.ts) — `createBookingRequest`, `cancelBooking`, `approveBooking`, `declineBooking`
