@@ -80,6 +80,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
   );
 
   const isOwnProfile = user?.id === profile.id;
+  const { data: adminCheck } = await supabase.rpc("is_admin");
+  const isAdmin = adminCheck === true;
 
   const generationLabel = profile.generation
     ? ordinal(profile.generation) + " generation"
@@ -170,6 +172,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
               ? profile.avatar_url
               : null
           }
+          currentUserId={user?.id ?? null}
+          isAdmin={isAdmin}
         />
       </section>
     </div>

@@ -109,14 +109,20 @@ export async function recordUploadedPhoto(opts: {
   return { ok: true, photoId: photoRow.id };
 }
 
-export async function deletePhoto(photoId: string) {
+export type DeletePhotoResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+export async function deletePhoto(
+  photoId: string,
+): Promise<DeletePhotoResult> {
   const supabase = await createClient();
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user) {
-    throw new Error("Not signed in");
+    return { ok: false, message: "Not signed in" };
   }
 
   const { data: photo, error: fetchErr } = await supabase
@@ -125,19 +131,25 @@ export async function deletePhoto(photoId: string) {
     .eq("id", photoId)
     .single();
   if (fetchErr || !photo) {
-    throw new Error("Photo not found");
+    return { ok: false, message: "Photo not found" };
   }
 
-  // RLS enforces who can delete — these calls just fail-fast if not allowed.
+  // RLS enforces who can delete — fail-fast if the caller isn't the
+  // uploader, a site admin, or a property admin (covered by the photos
+  // RLS policy + is_admin()/is_property_admin()).
   const { error: deleteErr } = await supabase
     .from("photos")
     .delete()
     .eq("id", photoId);
   if (deleteErr) {
-    throw new Error(deleteErr.message);
+    return { ok: false, message: deleteErr.message };
   }
 
+  // Best-effort storage cleanup. If this fails (e.g. object already
+  // missing) the DB row is gone, which is the user-visible state — log
+  // and move on. RLS on storage.objects mirrors photos table policy.
   await supabase.storage.from(PHOTOS_BUCKET).remove([photo.storage_path]);
   revalidatePath("/family");
   if (photo.property_id) revalidatePath("/properties");
+  return { ok: true };
 }
