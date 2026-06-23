@@ -38,8 +38,14 @@ export function ThemeToggle({
   align?: "start" | "end" | "center";
 }) {
   const { theme, resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+  // Detect client mount without a setState-in-effect (avoids the
+  // react-hooks/set-state-in-effect rule). Returns false during SSR and the
+  // initial hydration render, true thereafter — same flash-guard behavior.
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   // Before mount, render a neutral icon to avoid a flash of the wrong glyph.
   // (`resolvedTheme` is undefined on the server.)
