@@ -11,7 +11,9 @@ export {
   ALLOWED_MIME_TYPES,
   MAX_PHOTO_BYTES,
   generatePhotoPath,
+  generateGooglePhotoPath,
   isAllowedMime,
+  isValidPhotoStoragePath,
 } from "@/lib/photo-utils";
 
 const SIGNED_URL_TTL_SECONDS = 60 * 60;

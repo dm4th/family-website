@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
 import { withSignedUrls } from "@/lib/photos";
 import { ProfileAvatar } from "@/components/profile-avatar";
-import { PhotoUpload } from "@/components/photo-upload";
+import { AddPhotosModal } from "@/components/add-photos-modal";
 import {
   Eyebrow,
   SalonPanel,
@@ -80,6 +80,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
   );
 
   const isOwnProfile = user?.id === profile.id;
+  const { data: adminCheck } = await supabase.rpc("is_admin");
+  const isAdmin = adminCheck === true;
 
   const generationLabel = profile.generation
     ? ordinal(profile.generation) + " generation"
@@ -158,7 +160,7 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
           </p>
         </header>
 
-        <PhotoUpload
+        <AddPhotosModal
           attachment={{ kind: "profile", profileId: profile.id }}
         />
 
@@ -170,6 +172,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
               ? profile.avatar_url
               : null
           }
+          currentUserId={user?.id ?? null}
+          isAdmin={isAdmin}
         />
       </section>
     </div>

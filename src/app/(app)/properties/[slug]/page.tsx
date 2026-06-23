@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { withSignedUrls } from "@/lib/photos";
+import { canManageProperty } from "@/lib/property-auth";
 import { Markdown } from "@/components/markdown";
-import { PhotoUpload } from "@/components/photo-upload";
+import { AddPhotosModal } from "@/components/add-photos-modal";
+import { RemovePhotoButton } from "@/components/remove-photo-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,6 +68,16 @@ export default async function PropertyDetailPage({
   const restPhotos = signedPhotos.slice(1);
   const amenities = (property.amenities ?? []) as string[];
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const currentUserId = user?.id ?? null;
+  const { ok: canManage } = await canManageProperty(property.id);
+  const heroCanRemove =
+    !!heroPhoto &&
+    (canManage ||
+      (!!currentUserId && heroPhoto.uploadedBy === currentUserId));
+
   return (
     <div className="flex flex-col gap-14">
       <PageIntro
@@ -85,7 +97,7 @@ export default async function PropertyDetailPage({
 
       {/* Operations hero — large photo carries the spatial weight. */}
       {heroPhoto ? (
-        <figure className="relative aspect-[21/9] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
+        <figure className="group relative aspect-[21/9] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={heroPhoto.signedUrl}
@@ -97,6 +109,13 @@ export default async function PropertyDetailPage({
               {property.status}
             </Badge>
           )}
+          <RemovePhotoButton
+            photoId={heroPhoto.id}
+            canRemove={heroCanRemove}
+            variant="overlay"
+            confirmTitle="Remove the hero photo?"
+            confirmBody="This will permanently delete the photo from the property. The next most recent photo will become the hero."
+          />
         </figure>
       ) : (
         <div className="relative flex aspect-[21/9] items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-surface/60 text-foreground-subtle">
@@ -256,11 +275,15 @@ export default async function PropertyDetailPage({
           </p>
         </header>
 
-        <PhotoUpload
+        <AddPhotosModal
           attachment={{ kind: "property", propertyId: property.id }}
         />
 
-        <PropertyGallery photos={restPhotos} />
+        <PropertyGallery
+          photos={restPhotos}
+          currentUserId={currentUserId}
+          canManage={canManage}
+        />
       </section>
     </div>
   );

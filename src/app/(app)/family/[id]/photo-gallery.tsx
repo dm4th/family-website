@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { RemovePhotoButton } from "@/components/remove-photo-button";
 import { setAvatarFromPhoto } from "../../profile/actions";
 
 export type GalleryPhoto = {
@@ -23,10 +24,14 @@ export function PhotoGallery({
   photos,
   canSetAvatar,
   currentAvatarPath,
+  currentUserId,
+  isAdmin,
 }: {
   photos: GalleryPhoto[];
   canSetAvatar: boolean;
   currentAvatarPath: string | null;
+  currentUserId: string | null;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -50,6 +55,10 @@ export function PhotoGallery({
     }
   }
 
+  function canRemove(photo: GalleryPhoto): boolean {
+    return isAdmin || (!!currentUserId && photo.uploadedBy === currentUserId);
+  }
+
   const [featured, ...rest] = photos;
 
   return (
@@ -59,6 +68,7 @@ export function PhotoGallery({
         photo={featured!}
         isAvatar={currentAvatarPath === featured!.storagePath}
         canSetAvatar={canSetAvatar}
+        canRemove={canRemove(featured!)}
         busyId={busyId}
         onPromote={promote}
         featured
@@ -72,6 +82,7 @@ export function PhotoGallery({
                 photo={photo}
                 isAvatar={currentAvatarPath === photo.storagePath}
                 canSetAvatar={canSetAvatar}
+                canRemove={canRemove(photo)}
                 busyId={busyId}
                 onPromote={promote}
               />
@@ -87,6 +98,7 @@ function Tile({
   photo,
   isAvatar,
   canSetAvatar,
+  canRemove,
   busyId,
   onPromote,
   featured = false,
@@ -94,6 +106,7 @@ function Tile({
   photo: GalleryPhoto;
   isAvatar: boolean;
   canSetAvatar: boolean;
+  canRemove: boolean;
   busyId: string | null;
   onPromote: (id: string) => void;
   featured?: boolean;
@@ -121,7 +134,7 @@ function Tile({
           </Badge>
         )}
       </div>
-      {(photo.caption || (canSetAvatar && !isAvatar)) && (
+      {(photo.caption || (canSetAvatar && !isAvatar) || canRemove) && (
         <figcaption className="flex flex-col gap-2">
           {photo.caption && (
             <p
@@ -146,6 +159,7 @@ function Tile({
               {busyId === photo.id ? "Setting…" : "Use as my avatar"}
             </Button>
           )}
+          <RemovePhotoButton photoId={photo.id} canRemove={canRemove} />
         </figcaption>
       )}
     </figure>

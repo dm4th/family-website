@@ -132,6 +132,8 @@ export type NewPropertyContact = typeof propertyContacts.$inferInsert;
 // ----------------------------------------------------------------------------
 // photos
 // ----------------------------------------------------------------------------
+export type PhotoSource = "upload" | "google_photos";
+
 export const photos = pgTable(
   "photos",
   {
@@ -145,6 +147,8 @@ export const photos = pgTable(
     propertyId: uuid("property_id").references(() => properties.id, {
       onDelete: "set null",
     }),
+    source: text("source").$type<PhotoSource>().notNull().default("upload"),
+    googleMediaId: text("google_media_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -152,6 +156,7 @@ export const photos = pgTable(
   (table) => [
     index("photos_property_idx").on(table.propertyId, table.createdAt),
     index("photos_uploaded_by_idx").on(table.uploadedBy),
+    index("photos_source_idx").on(table.source),
   ],
 );
 
