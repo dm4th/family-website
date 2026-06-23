@@ -1,34 +1,7 @@
 # 06 — Property Booking & Calendar
 
 **Phase**: 2 · **Depends on**: 03 (properties exist), 02 (members exist)
-**Status**: 🟡 built-but-not-landed — the feature is fully implemented on a branch and passed two review rounds, but landing it cleanly requires branch surgery + a prod-DB fix. Read the handoff below before doing anything.
-
----
-
-## ⚠️ HANDOFF — how to land the existing booking work (read first)
-
-The booking feature is **already built and reviewed** (two rounds, 2026-06: closed an RLS self-approve hole, switched to exclusive `end_date`, added a GiST double-booking exclusion constraint). It is **not on `main`**. Landing it has two traps:
-
-### Trap 1 — the work is tangled with superseded photos commits
-- Booking lives on branch **`feat/google-photos-picker`** as commits **`de81af2`** ("Property booking & calendar…") + **`0117977`** ("Bookings: close RLS self-approve, switch to exclusive end_date, add DB double-book guard").
-- That same branch also carries an **older, divergent copy of the Google Photos Picker** (`feb8dbc`, `98ff49a`, `4141f7e`, `c78a0b5`) that was **superseded** by the version shipped to `main` in PR #1 (different commits). **Do not merge the whole branch** — it will collide with the shipped photos work.
-- Branch **`feat/property-booking`** is empty/stale (no commits beyond `main`) — delete it.
-- **Correct approach**: new branch off `main`, `git cherry-pick de81af2 0117977`, then resolve conflicts. A test cherry-pick conflicts in: `prds/00-master-plan.md`, `src/app/(app)/properties/[slug]/page.tsx`, and touches `src/lib/db/schema.ts`, `src/app/(app)/properties/[slug]/actions.ts`, the `edit/` pages, `src/components/app-shell/site-nav.tsx`, `src/lib/revisions.ts`. New (non-conflicting) files: everything under `src/app/(app)/properties/[slug]/calendar/`, `src/app/(app)/calendar/`, `src/app/api/ics/[scope]/route.ts`, `src/lib/bookings.ts`.
-
-### Trap 2 — prod ALREADY has the bookings migration applied, possibly the BUGGY version
-- `supabase migration list` shows version **`20260525000001`** (bookings) is **already applied to the prod DB** (it was pushed during the original booking session).
-- But that migration file was **edited in place** by the fix commit `0117977`. Because the version is already recorded as applied, **`supabase db push` will SKIP it** — the security fixes (self-approve trigger, exclusive `end_date` CHECK, `btree_gist` exclusion constraint) will **never reach prod** via the existing file.
-- **Before trusting prod**: verify what's actually live. Check whether the `enforce_booking_transitions` trigger and the `EXCLUDE USING gist (... daterange ...)` constraint exist on the prod `bookings` table. If they don't, prod has the vulnerable version.
-- **Fix**: author a **new** migration (e.g. `20260525150000_booking_fixes.sql`) that **idempotently** asserts the fixed state — `drop trigger if exists` + recreate, `drop policy if exists` + recreate the requester UPDATE policy, `alter table … add constraint … if not exists` for the exclusion constraint, and reconcile the `end_date` CHECK. This brings prod to the correct state whether it currently has the buggy or fixed version. Do **not** rely on re-applying the in-place-edited `20260525000001`.
-
-### Suggested landing sequence
-1. Verify prod booking schema (Trap 2) — know what you're starting from.
-2. New branch off `main`; cherry-pick `de81af2` + `0117977`; resolve the conflicts above (keep `main`'s shipped photos + the 05-shipped master-plan row).
-3. Add the idempotent `booking_fixes` migration so prod converges to the correct, reviewed state.
-4. `tsc` + `lint` (note: a pre-existing `theme-toggle.tsx` lint error is on `main`, unrelated). Re-run the booking review once more on the rebased result (the RLS is going to a live DB).
-5. PR → green Vercel preview → merge → `supabase db push` → smoke-test request/approve/decline + same-day turnover + ICS feed on the live site.
-
-**Review status**: the booking logic already passed review (RLS self-approve closed, `end_date` exclusive across conflict math / CHECK / exclusion constraint / ICS / calendar, double-book guard via `btree_gist`). Re-verify only the conflict-resolution + the new fix-migration.
+**Status**: ✅ shipped (2026-06-23) — landed on `main` via PR #2; migrations applied to prod and schema verified (self-approve trigger, exclusive `end_date` CHECK, `btree_gist` double-booking exclusion constraint all live). See [Implementation](#implementation) for what was built; the sections below are retained as design context.
 
 ---
 
