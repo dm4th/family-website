@@ -136,7 +136,10 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
   async function run() {
     abortRef.current?.abort();
     pickerWindowRef.current?.close();
-    pickerWindowRef.current = null;
+    // Intentionally don't `pickerWindowRef.current = null` here — TS would
+    // narrow .current to `null` for the rest of this async function, even
+    // though the JSX "Open picker" handler reassigns it. The unmount
+    // cleanup effect handles any leftover popup if the user navigates away.
     const ac = new AbortController();
     abortRef.current = ac;
 
