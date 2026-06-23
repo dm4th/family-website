@@ -24,7 +24,7 @@ The first-slice build was a single long session, deliberately. From here, every 
 | PRD | Status | Parallel-safe with | Notes |
 |---|---|---|---|
 | [05 — File uploads + Google Photos](05-file-uploads.md) | ✅ shipped (2026-06-23) | — | Direct-to-Supabase upload + Google Photos Picker (per-pick consent import) + per-photo Remove UI, shipped via PR #1. Delete authz (uploader / site admin / property admin) enforced in RLS + `deletePhoto`. Migrations applied to prod. |
-| [06 — Property booking](06-property-booking.md) | 🟢 ready | 05, 09, 10 | Single biggest user-facing value-add. Builds on properties + members; no upstream blockers. |
+| [06 — Property booking](06-property-booking.md) | 🟡 built, not landed | — | Fully implemented + reviewed (2 rounds) on branch `feat/google-photos-picker`, but landing needs branch surgery + a prod-DB fix migration. See the **HANDOFF** at the top of [06-property-booking.md](06-property-booking.md) before touching it. |
 | [09 — Family messaging](09-family-messaging.md) | 🟡 hold | — | Don't build until the family is actively using the portal — otherwise it's an empty room. Re-evaluate in 2-3 months of usage. |
 | [10 — Family timeline](10-family-timeline.md) | 🟡 hold | — | Lower priority; gets more valuable as the photo collection grows. Let that fill in first. |
 | [07 — Trust-doc RAG](07-trust-doc-rag.md) | 🔴 blocked | — | Gated on the trust-doc security decision (see Open decisions). Don't start until that conversation has happened. |
