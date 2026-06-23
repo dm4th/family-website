@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
@@ -40,6 +41,16 @@ export default async function AdminPage() {
     .select("id, slug, name, location, status")
     .order("status", { ascending: true })
     .order("name", { ascending: true });
+
+  const { data: pendingBookings } = await supabase
+    .from("bookings")
+    .select(
+      `id, start_date, end_date, guest_count, notes,
+       properties:property_id ( slug, name ),
+       profiles:requested_by ( full_name, email )`,
+    )
+    .eq("status", "pending")
+    .order("start_date", { ascending: true });
 
   return (
     <div className="flex flex-col gap-12">
@@ -106,6 +117,62 @@ export default async function AdminPage() {
               status: p.status as "active" | "maintenance" | "inactive",
             }))}
           />
+        </Section>
+      </BriefingPanel>
+
+      <BriefingPanel>
+        <Section
+          title="Pending bookings"
+          description="Approve or decline from each property's calendar — links below open the request in context."
+        >
+          {!pendingBookings || pendingBookings.length === 0 ? (
+            <p className="text-sm italic text-foreground-subtle">
+              Nothing waiting. The queue is clear.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border border-y border-border">
+              {pendingBookings.map((b) => {
+                const prop = Array.isArray(b.properties)
+                  ? b.properties[0]
+                  : b.properties;
+                const prof = Array.isArray(b.profiles)
+                  ? b.profiles[0]
+                  : b.profiles;
+                return (
+                  <li
+                    key={b.id}
+                    className="flex flex-wrap items-baseline justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-foreground">
+                        {prop?.name ?? "—"}{" "}
+                        <span className="text-foreground-subtle">
+                          · {b.start_date} → {b.end_date}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-xs text-foreground-subtle">
+                        {prof?.full_name ?? prof?.email ?? "Unknown"} ·{" "}
+                        {b.guest_count} guest{b.guest_count === 1 ? "" : "s"}
+                      </p>
+                      {b.notes && (
+                        <p className="mt-1 text-xs italic text-foreground-muted">
+                          {b.notes}
+                        </p>
+                      )}
+                    </div>
+                    {prop?.slug && (
+                      <Link
+                        href={`/properties/${prop.slug}/calendar`}
+                        className="text-sm text-foreground underline-offset-4 hover:underline"
+                      >
+                        Review →
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Section>
       </BriefingPanel>
     </div>

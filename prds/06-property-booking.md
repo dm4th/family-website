@@ -130,9 +130,44 @@ End-to-end, on either local dev or prod:
 
 ## Implementation
 
-_To be filled in by the contributor who ships this. Follow the format used in [03-properties.md](03-properties.md) Implementation section._
+- **Status**: 🟡 landing in progress. The reviewed work was cherry-picked clean off the tangled `feat/google-photos-picker` onto **`feat/booking-landing`** (off current `main`) as `de81af2` + `0117977`. Build + lint green (only the pre-existing `theme-toggle.tsx` lint error remains, on `main`). A new idempotent fix-migration `20260525150000_booking_fixes.sql` was authored to reconcile prod (see below). Remaining: PR → preview → merge → `supabase db push` → smoke test.
 
-- **Status**: not started
-- **Key files**: (list once shipped)
-- **Decisions made during build**: (any deviations from the recommendations above)
-- **Open follow-ups**: (what's deferred)
+- **Migrations**:
+  - `20260525000001_bookings.sql` — adds the `bookings` table + `properties.max_guests` / `properties.peak_period_ranges`. **Already applied to prod in its original (buggy) form** during the first booking session; `supabase db push` will skip it.
+  - `20260525150000_booking_fixes.sql` — **idempotent reconciliation** that carries the security fixes (btree_gist, strict `end_date > start_date` CHECK, `bookings_no_overlap` GiST exclusion constraint, `enforce_booking_transitions` self-approve guard) as a NEW version so they actually reach prod. Safe on buggy, fixed, or partially-fixed DBs — every statement is catalog-guarded. RLS policies are identical between buggy/fixed and are intentionally untouched.
+
+- **Key files**:
+  - Migrations: [supabase/migrations/20260525000001_bookings.sql](../supabase/migrations/20260525000001_bookings.sql) + idempotent fix [supabase/migrations/20260525150000_booking_fixes.sql](../supabase/migrations/20260525150000_booking_fixes.sql)
+  - Schema mirror: [src/lib/db/schema.ts](../src/lib/db/schema.ts) (bookings table, `BookingStatus`, `PeakPeriodRange`)
+  - Server helpers: [src/lib/bookings.ts](../src/lib/bookings.ts) — `isInPeakPeriod`, `findOverlappingBookings`, `determineInitialStatus`, ISO date helpers
+  - Server Actions: [src/app/(app)/properties/[slug]/calendar/actions.ts](../src/app/(app)/properties/[slug]/calendar/actions.ts) — `createBookingRequest`, `cancelBooking`, `approveBooking`, `declineBooking`
+  - Per-property calendar: [src/app/(app)/properties/[slug]/calendar/page.tsx](../src/app/(app)/properties/[slug]/calendar/page.tsx) + `_components/` (MonthCalendar, BookingRequestForm, AdminBookingRow, OwnBookingCancel)
+  - Unified calendar: [src/app/(app)/calendar/page.tsx](../src/app/(app)/calendar/page.tsx) (color-coded by property)
+  - ICS feeds: [src/app/api/ics/[scope]/route.ts](../src/app/api/ics/[scope]/route.ts) — scope = property slug or `me`
+  - Admin queue: [src/app/(app)/admin/page.tsx](../src/app/(app)/admin/page.tsx) (new "Pending bookings" briefing panel)
+  - Edit-form additions: [src/app/(app)/properties/[slug]/edit/property-edit-form.tsx](../src/app/(app)/properties/[slug]/edit/property-edit-form.tsx) (`max_guests` + peak-period repeater UI) and the matching parse/diff in [actions.ts](../src/app/(app)/properties/[slug]/actions.ts)
+  - Nav: [src/components/app-shell/site-nav.tsx](../src/components/app-shell/site-nav.tsx) (Operations group gains a "Calendar" link)
+  - PRDs deferred from this slice: see Open follow-ups below
+
+- **Review-driven fixes** (post-`de81af2`, before any prod apply):
+  - **RLS self-approve loophole closed** — added a `BEFORE INSERT OR UPDATE` trigger (`enforce_booking_transitions`) that constrains non-admin writes: requesters can only INSERT with status `pending`, or `approved` if `approved_by = requested_by` (the auto-approve path); on UPDATE they can only set status to `pending`/`cancelled` and cannot touch `approved_by`/`approved_at`. The prior RLS `WITH CHECK` only verified ownership and would have allowed `PATCH /bookings/:id` from a member to flip their own pending booking to approved.
+  - **Exclusive end_date semantics throughout** — `end_date` is now the EXCLUSIVE checkout day (matches RFC 5545 DTEND-exclusive and lets same-day turnover work). `CHECK end_date > start_date`. Conflict math (`findOverlappingBookings`) uses strict `<` / `>`. Peak-period iteration loops `[start, end)`. ICS export drops its `+1` offset. The form's drag-select stays inclusive (paints the nights you'll be there), and converts to exclusive on submit; the form shows "N nights — arrive Jun 14, depart Jun 21" so the conversion is visible.
+  - **DB-level double-booking guard** — `EXCLUDE USING gist (property_id WITH =, daterange(start_date, end_date, '[)') WITH &&) WHERE (status = 'approved')` (with the `btree_gist` extension). Two admins racing to approve overlapping pendings can no longer both win; the loser gets a constraint violation that the action surfaces as "Another approved booking now conflicts — refresh the queue".
+  - **Residual trust point**: INSERT auto-approve still relies on the Server Action to check peak periods. A member writing directly via PostgREST could insert `status='approved'` with their own `requested_by` outside peak windows but inside a configured peak window (bypassing peak gating). The exclusion constraint still prevents double-booking; only peak-period self-approve is bypassable. Acceptable in a closed family portal; revisit if we ever expand the surface area.
+
+- **Decisions made during build**:
+  - **Peak periods** live on the `properties` table as a `peak_period_ranges` JSONB column (recurring MM-DD pairs). Edited from the property edit page; admin-gated alongside status. Year-wrap is handled (Dec 22 → Jan 02 is one range, not two).
+  - **Auto-approval** kicks in when no approved-overlap, no pending-overlap, and dates are outside every peak range. Otherwise the booking lands `pending`. Approved-overlap is a hard reject at action time (also re-checked at approval time as a race-safety net).
+  - **Notifications** deferred — pending requests surface as a "Pending bookings" briefing panel on `/admin` (visible to site admins) and as an inline panel on each property's calendar page (visible to that property's admins). Resend never installed.
+  - **Audit trail** extended: `RevisionEntity` now includes `"booking"`. Booking inserts, status transitions, and cancellations all record revisions. The diff helper handles arrays + scalars; JSONB peak ranges are stringified before passing to the diff to avoid noisy "object inequality" diffs.
+  - **Custom calendar UI**: month grid in `month-calendar.tsx` (~250 lines with selection state and color-coded bands). No FullCalendar dependency. Re-used as-is by the unified `/calendar`.
+  - **ICS auth model**: the route inherits the proxy's auth gate — feeds only refresh when the subscriber is signed in. No public-token URLs in this slice. Calendar subscriptions will work for cookie-bearing browsers (e.g. viewing the .ics file directly) but most native calendar apps will fail to refresh because they don't carry cookies. Tracked as a follow-up.
+  - **Property creation + per-property admin grants**: confirmed both already exist (admin "Add a property" form and `PropertyAdminsEditor`). The booking system inherits both without new wiring — fresh properties default to `peak_period_ranges = []` and `max_guests = null` so they're immediately bookable.
+
+- **Open follow-ups**:
+  - **Public-token ICS subscription URLs** — needed for the feed to actually work in native calendar apps (which strip cookies on refresh).
+  - **Real email notifications** (Resend) — the in-app pending panel is fine for tight family use; add transactional emails when there are more than a handful of pending bookings or if family members aren't checking the portal frequently.
+  - **Recurring bookings** ("the family always goes the week before Labor Day") — explicitly out of scope for this slice.
+  - **Booking-cancellation visibility for the original requester** — currently they have to revisit the calendar to see the cancellation notes. Surfacing this in-app would benefit from the notifications work above.
+  - **Property access scoping** — gated on the master-plan open decision. If we ever scope properties to family branches, the calendar visibility logic + ICS feed scope checks need to be revisited.
+  - **Two-way Google Calendar sync** — Phase 2.5; the one-way ICS feed is enough for first cut.

@@ -89,9 +89,14 @@ export default async function PropertyDetailPage({
           undefined
         }
         action={
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/properties/${property.slug}/edit`}>Edit details</Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/properties/${property.slug}/calendar`}>Calendar</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/properties/${property.slug}/edit`}>Edit details</Link>
+            </Button>
+          </div>
         }
       />
 

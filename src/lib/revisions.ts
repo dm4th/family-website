@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 
-export type RevisionEntity = "property" | "profile" | "property_contact";
+export type RevisionEntity =
+  | "property"
+  | "profile"
+  | "property_contact"
+  | "booking";
 
 type Scalar = string | number | boolean | null | undefined;
 type FieldValue = Scalar | Scalar[];

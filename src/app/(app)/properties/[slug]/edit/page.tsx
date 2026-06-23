@@ -23,7 +23,7 @@ export default async function PropertyEditPage({
   const { data: property, error } = await supabase
     .from("properties")
     .select(
-      "id, slug, name, location, address, description, how_to, guidelines, amenities, status",
+      "id, slug, name, location, address, description, how_to, guidelines, amenities, status, max_guests, peak_period_ranges",
     )
     .eq("slug", slug)
     .single();
@@ -108,6 +108,12 @@ export default async function PropertyEditPage({
             guidelines: property.guidelines,
             amenities: property.amenities ?? [],
             status: property.status,
+            max_guests: property.max_guests ?? null,
+            peak_period_ranges:
+              (property.peak_period_ranges ?? []) as {
+                start: string;
+                end: string;
+              }[],
           }}
           canChangeStatus={canManage}
         />

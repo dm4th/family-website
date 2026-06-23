@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import {
 
 const initial: PropertyFormState = { status: "idle" };
 
+type PeakRange = { start: string; end: string };
+
 export type PropertyEditValues = {
   id: string;
   name: string;
@@ -23,6 +25,8 @@ export type PropertyEditValues = {
   guidelines: string | null;
   amenities: string[];
   status: string;
+  max_guests: number | null;
+  peak_period_ranges: PeakRange[];
 };
 
 export function PropertyEditForm({
@@ -34,6 +38,9 @@ export function PropertyEditForm({
 }) {
   const action = updateProperty.bind(null, property.id);
   const [state, formAction, isPending] = useActionState(action, initial);
+  const [peakRanges, setPeakRanges] = useState<PeakRange[]>(
+    property.peak_period_ranges ?? [],
+  );
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -136,6 +143,38 @@ export function PropertyEditForm({
         </Field>
       )}
 
+      {canChangeStatus && (
+        <Field
+          label="Max guests"
+          htmlFor="max_guests"
+          hint="Optional cap per booking. Leave blank for no limit."
+        >
+          <Input
+            id="max_guests"
+            name="max_guests"
+            type="number"
+            min={1}
+            defaultValue={property.max_guests ?? ""}
+            className="max-w-[10rem]"
+          />
+        </Field>
+      )}
+
+      {canChangeStatus && (
+        <Field
+          label="Peak periods"
+          htmlFor="peak_period_ranges"
+          hint="Recurring MM-DD windows that require admin approval each year. e.g., 07-01 → 08-31 for the summer."
+        >
+          <input
+            type="hidden"
+            name="peak_period_ranges"
+            value={JSON.stringify(peakRanges)}
+          />
+          <PeakRangeEditor ranges={peakRanges} onChange={setPeakRanges} />
+        </Field>
+      )}
+
       <div className="mt-2 flex items-center justify-end gap-3 border-t border-border pt-5">
         {state.status === "saved" && (
           <p className="text-sm text-accent-operations">
@@ -150,6 +189,65 @@ export function PropertyEditForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+function PeakRangeEditor({
+  ranges,
+  onChange,
+}: {
+  ranges: PeakRange[];
+  onChange: (next: PeakRange[]) => void;
+}) {
+  function update(i: number, patch: Partial<PeakRange>) {
+    onChange(ranges.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  }
+  function remove(i: number) {
+    onChange(ranges.filter((_, idx) => idx !== i));
+  }
+  function add() {
+    onChange([...ranges, { start: "", end: "" }]);
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {ranges.length === 0 && (
+        <p className="text-xs italic text-foreground-subtle">
+          No peak periods. All requests auto-approve if there&apos;s no conflict.
+        </p>
+      )}
+      {ranges.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Input
+            placeholder="07-01"
+            pattern="\d{2}-\d{2}"
+            value={r.start}
+            onChange={(e) => update(i, { start: e.target.value })}
+            className="w-24"
+          />
+          <span className="text-foreground-subtle">→</span>
+          <Input
+            placeholder="08-31"
+            pattern="\d{2}-\d{2}"
+            value={r.end}
+            onChange={(e) => update(i, { end: e.target.value })}
+            className="w-24"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => remove(i)}
+          >
+            Remove
+          </Button>
+        </div>
+      ))}
+      <div>
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          Add peak period
+        </Button>
+      </div>
+    </div>
   );
 }
 
