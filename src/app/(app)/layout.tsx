@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SiteHeader } from "@/components/app-shell/site-header";
 import { SiteFooter } from "@/components/app-shell/site-footer";
+import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
   children,
@@ -40,6 +41,7 @@ export default async function AppLayout({
         {children}
       </main>
       <SiteFooter />
+      <Toaster position="bottom-right" richColors closeButton />
     </div>
   );
 }
