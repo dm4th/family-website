@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import {
   BriefingPanel,
@@ -15,30 +15,17 @@ type FeatureInfo = {
   tagline: string;
   description: string;
   rationale: string;
-  prd: string;
   mode: PageMode;
 };
 
 const FEATURES: Record<string, FeatureInfo> = {
-  booking: {
-    title: "Property booking",
-    tagline:
-      "Reserve dates at the family properties without scheduling collisions.",
-    description:
-      "Interactive calendar per property, conflict detection, admin approval for peak periods, ICS export so bookings show up in your personal calendar.",
-    rationale:
-      "We're shipping the read-only side of the portal first so the family has a place to live before we add coordination on top.",
-    prd: "prds/06-property-booking.md",
-    mode: "operations",
-  },
   documents: {
     title: "Trust documents & AI",
     tagline: "Ask plain-language questions about trust documents.",
     description:
       "Upload trust and estate documents, then ask things like \"When can I access my trust funds?\" and get cited answers — without paging a lawyer for routine questions.",
     rationale:
-      "Trust docs are sensitive, so we haven't made the security-posture decisions yet (encryption-at-rest, LLM data agreement, vector DB choice). That conversation happens before this feature ships.",
-    prd: "prds/07-trust-doc-rag.md",
+      "Trust documents are sensitive, so we want to settle how they're protected before anything goes online — how they're encrypted, what an AI assistant is allowed to keep, and where the search runs. That conversation comes first.",
     mode: "advisory",
   },
   finances: {
@@ -47,8 +34,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     description:
       "Per-beneficiary balance, distribution history, family-wide aggregate metrics. Manual entry by trustees first; automated feeds later.",
     rationale:
-      "Same security gating as trust documents. We also need a real conversation about which numbers belong in-app vs. in your existing family-office tools.",
-    prd: "prds/08-financial-dashboard.md",
+      "Held to the same care as the trust documents. We also want to agree together on which numbers belong here versus in the family's existing financial tools.",
     mode: "advisory",
   },
   messaging: {
@@ -57,8 +43,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     description:
       "Comments on property pages and profiles, plus a daily/weekly digest email summarizing what's been added or changed.",
     rationale:
-      "Only worth building once people are genuinely using the portal day-to-day — otherwise it's an empty room. Revisit after the first slice has been in family hands for a while.",
-    prd: "prds/09-family-messaging.md",
+      "Worth building once the family is using the site day-to-day — otherwise it's an empty room. We'll revisit once everyone's settled in.",
     mode: "family",
   },
   timeline: {
@@ -67,8 +52,7 @@ const FEATURES: Record<string, FeatureInfo> = {
     description:
       "Browsable chronological timeline of family events. AI-assisted photo tagging by year and people. Record short stories from the older generation.",
     rationale:
-      "This is the long-arc \"legacy\" feature. It gets more valuable as the photo collection grows, so we're letting that fill in first.",
-    prd: "prds/10-family-timeline.md",
+      "This is the long-arc \"legacy\" feature. It gets richer as the photo collection grows, so we're letting that fill in first.",
     mode: "family",
   },
 };
@@ -79,6 +63,9 @@ export default async function ComingSoonPage({
   params: Params;
 }) {
   const { feature } = await params;
+  // Property booking has shipped — send anyone on its old "coming soon" link
+  // straight to the live calendar.
+  if (feature === "booking") redirect("/calendar");
   const info = FEATURES[feature];
   if (!info) notFound();
 
@@ -108,11 +95,8 @@ export default async function ComingSoonPage({
           </section>
 
           <div className="border-t border-border pt-5 text-xs text-foreground-subtle">
-            Plans live in{" "}
-            <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-foreground-muted">
-              {info.prd}
-            </code>
-            . Edit them anytime to push for priority changes.
+            Want this one sooner, or have ideas for how it should work? Let us
+            know — the family&apos;s priorities shape what gets built next.
           </div>
         </div>
       </BriefingPanel>

@@ -74,22 +74,25 @@ export default async function Dashboard() {
       eyebrow: "Operations",
       title: "Properties",
       blurb:
-        "Family-shared places — house rules, contacts, photos. Wiki-editable by anyone.",
+        "Family-shared places — house rules, contacts, and photos. Anyone in the family can edit them.",
       href: "/properties",
       badge:
         propertyCount === null
           ? null
           : `${propertyCount} ${propertyCount === 1 ? "place" : "places"}`,
     },
+    {
+      mode: "operations",
+      eyebrow: "Operations",
+      title: "Calendar",
+      blurb:
+        "Reserve dates at the family properties, see who's where, and avoid double-bookings.",
+      href: "/calendar",
+      badge: null,
+    },
   ];
 
   const comingSoon: ComingSoon[] = [
-    {
-      title: "Property booking",
-      blurb: "Reserve dates without scheduling collisions.",
-      href: "/coming-soon/booking",
-      mode: "operations",
-    },
     {
       title: "Documents & AI",
       blurb: "Plain-language answers from trust documents.",
@@ -145,8 +148,8 @@ export default async function Dashboard() {
       <section className="flex flex-col gap-6">
         <SectionRule label="In flight" />
         <p className="max-w-2xl text-sm text-foreground-muted">
-          The roadmap. Each lives in a PRD in the repo; click through to read
-          what we&apos;re thinking and why.
+          What we&apos;re planning next. Click through to read what each one
+          will do and why — and tell us what you&apos;d like sooner.
         </p>
         <ul className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
           {comingSoon.map((c) => (
