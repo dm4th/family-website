@@ -1,7 +1,7 @@
 # 12 — Authoring UX (the shared content-editing layer)
 
 **Phase**: 2.5 (foundational) · **Depends on**: nothing new — retrofits existing features
-**Status**: 🟢 ready — **build this before [11 — Family Legacy](11-family-legacy.md)**; Legacy is entirely content authoring and should consume this layer natively. Also retrofit to properties + profiles.
+**Status**: 🚧 in-progress (slice 1) — **build this before [11 — Family Legacy](11-family-legacy.md)**; Legacy is entirely content authoring and should consume this layer natively. Also retrofit to properties + profiles.
 
 ---
 
@@ -122,7 +122,15 @@ src/app/(app)/profile/edit/profile-edit-form.tsx              # use RichTextFiel
 
 _Filled in per slice as each ships._
 
-- **Slice 1 — RichTextField + property/profile retrofit**: _status: not started_
+- **Slice 1 — RichTextField + property/profile retrofit**: ✅ _shipped on branch `prd12-authoring-richtext`_
+  - **New shared layer**: `src/components/authoring/` with `rich-text-field.tsx` + `index.ts` barrel.
+  - **`RichTextField`** — the v1 "lightweight toolbar over `<textarea>`" approach (no new deps; `lucide-react`, `react-markdown`, `remark-gfm` already present). A controlled, **named** `<textarea>` (so existing Server Actions read `formData.get(name)` unchanged) with:
+    - A formatting toolbar — Bold, Italic, Heading, Bulleted/Numbered list, Quote, Link — that inserts Markdown by operating on the textarea selection. The user never types syntax. Wrap-style tools (`wrapSelection`) wrap the selection; line-style tools (`prefixLines`) prefix every touched line.
+    - A **Write / Preview** toggle. Preview renders through the existing `Markdown` component (`tone`-aware), so preview is byte-for-byte the display renderer — WYSIWYG-truthful and inheriting the no-raw-HTML security posture.
+    - Caret/selection restored after each toolbar edit via a `pendingSelection` ref + `useLayoutEffect` (controlled textareas otherwise drop the selection on re-render). Toolbar buttons use `onMouseDown→preventDefault` so they don't steal selection.
+  - **Retrofits**: property `description` / `how_to` / `guidelines` → `RichTextField` (`ledger` tone); profile `bio` → `RichTextField` (`salon` tone). Removed the now-redundant "Markdown supported" hints. **No Server Action / DB changes** — same field names, same Markdown storage, same `recordRevision()` path.
+  - **Gotchas for downstream**: (1) React 19's `react-hooks/refs` lint rule forbids building ref-capturing closures during render — keep tool definitions as plain data (`TOOLS`) and read refs only inside the `applyTool` event handler. (2) `Markdown` is client-safe (plain `react-markdown`, no `server-only`), so importing it into a `"use client"` component is fine. (3) Button icon size key is `icon-sm` (not `sm`).
+  - **Verified**: `tsc --noEmit` clean, `eslint` clean on changed files, `npm run build` succeeds. Manual non-technical-user verification (recipe steps 1–2, 6) still recommended before merge.
 - **Slice 2 — ChipListField + FuzzyDateField**: _status: not started_
 - **Slice 3 — PeoplePicker**: _status: not started (coordinate with Legacy slice 1 / `people` table)_
 - **Slice 4 — Inline edit + CreateFlow**: _status: not started_
