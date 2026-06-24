@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useActionState } from "react";
 
+import { RichTextField } from "@/components/authoring";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   updateOwnProfile,
   type ProfileFormState,
@@ -93,11 +93,12 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
       </Field>
 
       <Field label="Bio" htmlFor="bio" hint="A few sentences. Optional.">
-        <Textarea
+        <RichTextField
           id="bio"
           name="bio"
+          tone="salon"
           rows={4}
-          defaultValue={profile.bio ?? ""}
+          defaultValue={profile.bio}
         />
       </Field>
 
