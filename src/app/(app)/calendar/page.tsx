@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { buildIcsFeedLinks, getSiteOrigin } from "@/lib/ics";
 import {
   Eyebrow,
   LedgerPanel,
   PageIntro,
 } from "@/components/shell";
+import { SubscribeToCalendar } from "@/components/subscribe-to-calendar";
 
 import { MonthCalendar, type CalendarBand } from "../properties/[slug]/calendar/_components/month-calendar";
 
@@ -41,6 +43,16 @@ export default async function UnifiedCalendarPage() {
     .from("properties")
     .select("id, slug, name")
     .order("name", { ascending: true });
+
+  // "me" feed: every approved booking the viewer holds, across all properties.
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("ics_token")
+    .eq("id", user.id)
+    .single();
+  const feedLinks = me?.ics_token
+    ? buildIcsFeedLinks(await getSiteOrigin(), "me", me.ics_token)
+    : null;
 
   const propertyList = properties ?? [];
   const propertyTone = new Map<string, string>(
@@ -111,6 +123,16 @@ export default async function UnifiedCalendarPage() {
           </ul>
         </div>
       </LedgerPanel>
+
+      {feedLinks && (
+        <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
+          <Eyebrow className="mb-3">Subscribe to your bookings</Eyebrow>
+          <SubscribeToCalendar
+            links={feedLinks}
+            blurb="Add all your approved bookings — across every property — to your personal calendar. Apps refresh every few hours, so new bookings aren't instant."
+          />
+        </LedgerPanel>
+      )}
 
       <MonthCalendar bands={bands} />
 

@@ -3,7 +3,7 @@
 **Phase**: 2 · **Depends on**: 03 (properties exist), 02 (members exist)
 **Status**: ✅ shipped (2026-06-23) — landed on `main` via PR #2; migrations applied to prod and schema verified (self-approve trigger, exclusive `end_date` CHECK, `btree_gist` double-booking exclusion constraint all live). See [Implementation](#implementation) for what was built; the sections below are retained as design context.
 
-> ⚠️ **Calendar integration is only half-done.** A one-way ICS feed shipped, but it is **cookie-authenticated**, so it works as a one-time download into a calendar app on the signed-in device — **not** as a live, auto-updating Google Calendar subscription (Google's servers fetch the feed with no login cookie and get a 401). There's also no "Add to Google Calendar" affordance and no subscribe link on the unified `/calendar`. The plan to finish it is in **[Google Calendar integration — status & plan](#google-calendar-integration--status--plan)** below. Status there: 🟢 ready (small follow-up slice).
+> ✅ **Calendar integration is complete** (2026-06-23, branch `feat/google-calendar-subscribe`). The ICS feed is now **token-authenticated** so Google/Apple/Outlook poll it cookielessly as a live, auto-updating subscription; both the per-property and unified `/calendar` pages have "Add to Google Calendar" / webcal / copyable-URL affordances plus a rotatable "reset my calendar link" control. Details in **[Google Calendar integration — status & plan](#google-calendar-integration--status--plan)** below (see [Implementation (shipped)](#implementation-shipped)).
 
 ---
 
@@ -140,7 +140,7 @@ End-to-end, on either local dev or prod:
   - **Property creation + per-property admin grants**: confirmed both already exist (admin "Add a property" form and `PropertyAdminsEditor`). The booking system inherits both without new wiring — fresh properties default to `peak_period_ranges = []` and `max_guests = null` so they're immediately bookable.
 
 - **Open follow-ups**:
-  - **Real Google Calendar integration** — the shipped ICS feed is cookie-authed and doesn't auto-sync. See the scoped plan in [Google Calendar integration — status & plan](#google-calendar-integration--status--plan). _(Was previously listed here as "public-token ICS subscription URLs"; that's the core of the fix.)_
+  - ~~**Real Google Calendar integration**~~ — ✅ **shipped 2026-06-23** (token-authenticated feed + subscribe affordances). See [Google Calendar integration — status & plan](#google-calendar-integration--status--plan).
   - **Real email notifications** (Resend) — the in-app pending panel is fine for tight family use; add transactional emails when there are more than a handful of pending bookings or if family members aren't checking the portal frequently.
   - **Recurring bookings** ("the family always goes the week before Labor Day") — explicitly out of scope for this slice.
   - **Booking-cancellation visibility for the original requester** — currently they have to revisit the calendar to see the cancellation notes. Surfacing this in-app would benefit from the notifications work above.
@@ -151,16 +151,16 @@ End-to-end, on either local dev or prod:
 
 ## Google Calendar integration — status & plan
 
-**Status**: 🟢 ready — a small, well-scoped follow-up slice. Make the existing ICS feed actually auto-sync into Google Calendar (and Apple/Outlook), and give members a one-click way to add it.
+**Status**: ✅ shipped (2026-06-23, branch `feat/google-calendar-subscribe`). The ICS feed is now token-authenticated so Google/Apple/Outlook can poll it cookielessly, and both calendar pages have one-click subscribe affordances + a rotatable link. See [Implementation (shipped)](#implementation-shipped) below; the plan that follows is retained as design context.
 
 ### What shipped vs. what's missing
 
-| | State |
+| | State (now all ✅ — see [Implementation](#implementation-shipped)) |
 |---|---|
-| One-way ICS feed (`/api/ics/[scope]`, scopes: property slug, `me`, `all`) | ✅ built — generates valid RFC 5545 all-day events with exclusive `DTEND` |
-| "Subscribe (ICS)" link | ⚠️ only on the **per-property** calendar; missing from the unified `/calendar` |
-| Live auto-updating subscription | ❌ **broken** — feed is cookie-authenticated |
-| "Add to Google Calendar" button / `webcal://` link | ❌ none |
+| One-way ICS feed (`/api/ics/[scope]`, scopes: property slug, `me`, `all`) | ✅ valid RFC 5545 all-day events with exclusive `DTEND`; `all` scope added to the cookie path |
+| Subscribe affordances on both per-property **and** unified `/calendar` | ✅ `SubscribeToCalendar` panel on both |
+| Live auto-updating subscription | ✅ token-authenticated; pollers reach it cookielessly |
+| "Add to Google Calendar" button / `webcal://` link | ✅ both, plus copyable URL + reset-link control |
 
 ### The core problem: the feed is cookie-authenticated
 
@@ -193,3 +193,24 @@ End-to-end, on either local dev or prod:
 3. Approve a new booking → it shows up in Google after the feed's refresh interval (Google polls ~every few hours; not instant — note this in the UI copy).
 4. Click "Reset my calendar link" → the old URL now 401s; the new one works.
 5. Hit `/api/ics/me` with **no token and no cookie** → `401` (no public leakage without the token).
+
+### Implementation (shipped)
+
+- **Key files**:
+  - Migration [supabase/migrations/20260623000001_ics_token.sql](../supabase/migrations/20260623000001_ics_token.sql) — adds `profiles.ics_token uuid not null default gen_random_uuid()` (+ unique index) and the `ics_bookings_for_token(token, scope)` reader.
+  - Feed route [src/app/api/ics/[scope]/route.ts](../src/app/api/ics/[scope]/route.ts) — dual auth path: `?token=` → RPC (cookieless), else session cookie. Added the `all` scope to the cookie path (it was previously slug-or-`me` only).
+  - Proxy allow-list [src/lib/supabase/middleware.ts](../src/lib/supabase/middleware.ts) — `/api/ics/` is exempt from the auth-redirect (the token is the gate); nothing else under `/api` is.
+  - Link builder [src/lib/ics.ts](../src/lib/ics.ts) — `buildIcsFeedLinks()` (https / webcal / Google add-by-URL) + `getSiteOrigin()`.
+  - UI [src/components/subscribe-to-calendar.tsx](../src/components/subscribe-to-calendar.tsx) — used by the unified `/calendar` (`me` scope) and per-property calendar (property scope). Reset control rotates the token.
+  - Token rotation: `resetIcsToken()` in [src/app/(app)/profile/actions.ts](../src/app/(app)/profile/actions.ts).
+  - Schema mirror: `icsToken` on `profiles` in [src/lib/db/schema.ts](../src/lib/db/schema.ts).
+
+- **Decisions / deviations from the plan above**:
+  - **SECURITY DEFINER function instead of a service-role lookup.** The plan said "resolve the member by token (service-role lookup)," but the project configures **no** service-role/secret key (only the publishable key). Rather than introduce a new secret, the cookieless read goes through `ics_bookings_for_token()` — a `security definer` function the `anon` role may execute, which validates the token internally and returns only that scope's approved bookings. Smaller trusted surface than a service-role client, and consistent with the existing `is_admin()` / `is_property_admin()` pattern. Invalid/absent token raises SQLSTATE `28000` → route maps to `401`.
+  - **Single rotatable `profiles.ics_token`** (not an `ics_tokens` table). One token per member, reset = regenerate. Enough for a closed family portal; multi/named tokens can come later if needed.
+  - **Google link uses the `addbyurl` settings endpoint** (`/calendar/u/0/r/settings/addbyurl?url=…` with the https feed URL) rather than the `?cid=` form — more reliable for subscribing to an external ICS.
+  - **Any valid member token can read `me` / `all` / any property scope.** Consistent with the in-app model (every authenticated member can already see all bookings); the token just ports that same visibility to a cookieless poller.
+
+- **Open follow-ups**:
+  - **Reset link is per-page only via `router.refresh()`** — a member subscribed on multiple devices must re-add the feed after a reset (expected for a secret rotation).
+  - **No rate-limiting on the token feed** — a leaked URL grants read until rotated. Fine for family scale; revisit if the portal opens wider.

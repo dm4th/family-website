@@ -47,6 +47,8 @@ export const profiles = pgTable(
     relationshipNotes: text("relationship_notes"),
     phone: text("phone"),
     bio: text("bio"),
+    // Rotatable secret that authorizes cookieless ICS calendar-feed reads.
+    icsToken: uuid("ics_token").notNull().default(sql`gen_random_uuid()`),
     deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
