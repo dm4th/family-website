@@ -2,11 +2,10 @@
 
 import { useActionState, useState } from "react";
 
-import { RichTextField } from "@/components/authoring";
+import { ChipListField, RichTextField } from "@/components/authoring";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   updateProperty,
   type PropertyFormState,
@@ -114,14 +113,16 @@ export function PropertyEditForm({
       <Field
         label="Amenities"
         htmlFor="amenities"
-        hint="One amenity per line."
+        hint="Add what the place has — one per chip."
       >
-        <Textarea
+        <ChipListField
           id="amenities"
           name="amenities"
-          rows={5}
-          defaultValue={property.amenities.join("\n")}
-          placeholder="Dock&#10;Canoe&#10;Wood stove"
+          inputAriaLabel="Add an amenity"
+          defaultItems={property.amenities}
+          placeholder="e.g., Dock, Canoe, Wood stove"
+          addLabel="Add amenity"
+          emptyHint="No amenities listed yet."
         />
       </Field>
 
