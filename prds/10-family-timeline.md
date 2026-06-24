@@ -1,7 +1,7 @@
 # 10 — Family Timeline & History
 
 **Phase**: 4 · **Depends on**: photo collection has reached critical mass
-**Status**: 🟡 hold. Gets dramatically more valuable as the photo collection grows; not worth building empty. Re-evaluate once `photos` has ≥ ~500 rows or 3+ months of usage.
+**Status**: 🔵 absorbed into [11 — Family Legacy](11-family-legacy.md) (the timeline is Legacy slice 3). This file is retained for its detailed timeline schema and UX notes — build the timeline from here, but read PRD 11 first for the parent context and the `people`-table backbone that subjects now reference.
 
 ## Onboarding (read first if you're picking this up cold)
 

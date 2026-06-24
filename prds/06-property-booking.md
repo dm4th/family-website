@@ -3,6 +3,8 @@
 **Phase**: 2 · **Depends on**: 03 (properties exist), 02 (members exist)
 **Status**: ✅ shipped (2026-06-23) — landed on `main` via PR #2; migrations applied to prod and schema verified (self-approve trigger, exclusive `end_date` CHECK, `btree_gist` double-booking exclusion constraint all live). See [Implementation](#implementation) for what was built; the sections below are retained as design context.
 
+> ⚠️ **Calendar integration is only half-done.** A one-way ICS feed shipped, but it is **cookie-authenticated**, so it works as a one-time download into a calendar app on the signed-in device — **not** as a live, auto-updating Google Calendar subscription (Google's servers fetch the feed with no login cookie and get a 401). There's also no "Add to Google Calendar" affordance and no subscribe link on the unified `/calendar`. The plan to finish it is in **[Google Calendar integration — status & plan](#google-calendar-integration--status--plan)** below. Status there: 🟢 ready (small follow-up slice).
+
 ---
 
 ## Onboarding (read first if you're picking this up cold)
@@ -138,9 +140,56 @@ End-to-end, on either local dev or prod:
   - **Property creation + per-property admin grants**: confirmed both already exist (admin "Add a property" form and `PropertyAdminsEditor`). The booking system inherits both without new wiring — fresh properties default to `peak_period_ranges = []` and `max_guests = null` so they're immediately bookable.
 
 - **Open follow-ups**:
-  - **Public-token ICS subscription URLs** — needed for the feed to actually work in native calendar apps (which strip cookies on refresh).
+  - **Real Google Calendar integration** — the shipped ICS feed is cookie-authed and doesn't auto-sync. See the scoped plan in [Google Calendar integration — status & plan](#google-calendar-integration--status--plan). _(Was previously listed here as "public-token ICS subscription URLs"; that's the core of the fix.)_
   - **Real email notifications** (Resend) — the in-app pending panel is fine for tight family use; add transactional emails when there are more than a handful of pending bookings or if family members aren't checking the portal frequently.
   - **Recurring bookings** ("the family always goes the week before Labor Day") — explicitly out of scope for this slice.
   - **Booking-cancellation visibility for the original requester** — currently they have to revisit the calendar to see the cancellation notes. Surfacing this in-app would benefit from the notifications work above.
   - **Property access scoping** — gated on the master-plan open decision. If we ever scope properties to family branches, the calendar visibility logic + ICS feed scope checks need to be revisited.
-  - **Two-way Google Calendar sync** — Phase 2.5; the one-way ICS feed is enough for first cut.
+  - **Two-way Google Calendar sync** (Google → us, write-back) — still Phase 2.5+ and out of scope. Note this is distinct from the one-way *live subscription* below, which is the realistic near-term goal.
+
+---
+
+## Google Calendar integration — status & plan
+
+**Status**: 🟢 ready — a small, well-scoped follow-up slice. Make the existing ICS feed actually auto-sync into Google Calendar (and Apple/Outlook), and give members a one-click way to add it.
+
+### What shipped vs. what's missing
+
+| | State |
+|---|---|
+| One-way ICS feed (`/api/ics/[scope]`, scopes: property slug, `me`, `all`) | ✅ built — generates valid RFC 5545 all-day events with exclusive `DTEND` |
+| "Subscribe (ICS)" link | ⚠️ only on the **per-property** calendar; missing from the unified `/calendar` |
+| Live auto-updating subscription | ❌ **broken** — feed is cookie-authenticated |
+| "Add to Google Calendar" button / `webcal://` link | ❌ none |
+
+### The core problem: the feed is cookie-authenticated
+
+[src/app/api/ics/[scope]/route.ts](../src/app/api/ics/[scope]/route.ts) resolves the viewer via `supabase.auth.getUser()` (a session cookie) and returns `401` without one. When a user "subscribes by URL," **Google's servers** fetch the feed on a schedule with **no cookie** → 401 → the calendar silently stops updating (or never imports). So the current link only works as a **one-time download** in a browser that already has the session. Calling it "Subscribe" is misleading today.
+
+### Plan to make it real
+
+1. **Token-authenticate the feed instead of (or in addition to) the cookie.**
+   - Give each member a rotatable secret token — e.g. `profiles.ics_token uuid` (default `gen_random_uuid()`), or a small `ics_tokens` table if we want multiple/named tokens with revocation.
+   - Feed URLs carry it: `/api/ics/me?token=…`, `/api/ics/all?token=…`, `/api/ics/<slug>?token=…`.
+   - In the route, if a `token` is present, resolve the member by token (service-role lookup) and skip the cookie check; otherwise fall back to the existing cookie path (so in-browser downloads still work).
+2. **Let the route through the auth proxy.** `/api/ics/*` currently sits behind the global auth gate in [src/proxy.ts](../src/proxy.ts); add it to the allow-list so Google can reach it, since the **token** is now the authorization. (Don't expose any other API this way.)
+3. **Treat the token as a bearer secret.** Anyone with the URL can read that scope's bookings (family-private, but no further login). Acceptable in a closed family portal, but: make tokens **rotatable** (a "reset my calendar link" button that invalidates the old URL), and never log full feed URLs.
+4. **Add the affordances** on both the per-property calendar **and** the unified `/calendar`:
+   - An **"Add to Google Calendar"** button → `https://calendar.google.com/calendar/r?cid=<url-encoded https feed URL>`.
+   - A **`webcal://…`** link (opens Apple Calendar / Outlook subscribe dialogs).
+   - A **copyable URL** + one-line "paste this into your calendar app → Subscribe" instructions for everyone else.
+   - Offer the right scope per context: `me` (all my bookings everywhere) on the unified calendar; that property's feed on a property page.
+
+### Reuse / touchpoints
+
+- Extend [src/app/api/ics/[scope]/route.ts](../src/app/api/ics/[scope]/route.ts) (token branch); allow-list in [src/proxy.ts](../src/proxy.ts)
+- Migration: add `ics_token` to `profiles` (or an `ics_tokens` table) + RLS; mirror in [src/lib/db/schema.ts](../src/lib/db/schema.ts)
+- UI: a small `SubscribeToCalendar` component used by [/calendar](../src/app/(app)/calendar/page.tsx) and [per-property calendar](../src/app/(app)/properties/[slug]/calendar/page.tsx)
+
+### Verification recipe
+
+1. Reset/obtain your calendar link → copy the `me` feed URL with token.
+2. Paste it into Google Calendar's "From URL", **signed out of the portal in that context** → an approved booking appears (proves the cookie isn't required).
+3. Approve a new booking → it shows up in Google after the feed's refresh interval (Google polls ~every few hours; not instant — note this in the UI copy).
+4. Click "Reset my calendar link" → the old URL now 401s; the new one works.
+5. Hit `/api/ics/me` with **no token and no cookie** → `401` (no public leakage without the token).
