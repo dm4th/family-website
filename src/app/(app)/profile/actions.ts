@@ -62,6 +62,32 @@ export async function updateOwnProfile(
   return { status: "saved" };
 }
 
+/**
+ * Rotate the caller's calendar-feed token, invalidating any previously shared
+ * subscription URL. The RLS "profiles: self update" policy permits this; the
+ * privileged-column guard only blocks role / deactivated_at, not ics_token.
+ */
+export async function resetIcsToken(): Promise<void> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    throw new Error("Not signed in");
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ ics_token: crypto.randomUUID() })
+    .eq("id", user.id);
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/calendar");
+}
+
 export async function setAvatarFromPhoto(photoId: string) {
   const supabase = await createClient();
   const {

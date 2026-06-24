@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { canManageProperty } from "@/lib/property-auth";
+import { buildIcsFeedLinks, getSiteOrigin } from "@/lib/ics";
 import {
   Eyebrow,
   LedgerPanel,
@@ -10,6 +11,7 @@ import {
   SectionRule,
 } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import { SubscribeToCalendar } from "@/components/subscribe-to-calendar";
 import type { PeakPeriodRange } from "@/lib/db/schema";
 
 import { BookingRequestForm } from "./_components/booking-request-form";
@@ -87,6 +89,17 @@ export default async function PropertyCalendarPage({
 
   const { ok: canAdmin } = await canManageProperty(property.id);
 
+  // Calendar-subscription links for this property's feed, keyed to the
+  // viewer's personal feed token.
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("ics_token")
+    .eq("id", user.id)
+    .single();
+  const feedLinks = me?.ics_token
+    ? buildIcsFeedLinks(await getSiteOrigin(), property.slug, me.ics_token)
+    : null;
+
   // Pull a generous window so the calendar can scroll freely without refetch.
   // Bookings outside ±6 months are reachable via the agenda list.
   const now = new Date();
@@ -142,14 +155,9 @@ export default async function PropertyCalendarPage({
           property.location ? `Bookings · ${property.location}` : "Bookings"
         }
         action={
-          <div className="flex gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/properties/${property.slug}`}>Back to property</Link>
-            </Button>
-            <Button asChild variant="ghost" size="sm">
-              <Link href={`/api/ics/${property.slug}`}>Subscribe (ICS)</Link>
-            </Button>
-          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/properties/${property.slug}`}>Back to property</Link>
+          </Button>
         }
       />
 
@@ -237,6 +245,16 @@ export default async function PropertyCalendarPage({
               </ul>
             )}
           </LedgerPanel>
+
+          {feedLinks && (
+            <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
+              <Eyebrow className="mb-3">Subscribe</Eyebrow>
+              <SubscribeToCalendar
+                links={feedLinks}
+                blurb={`Add ${property.name}'s approved bookings to your calendar. Apps refresh every few hours — new bookings aren't instant.`}
+              />
+            </LedgerPanel>
+          )}
 
           {peakRanges.length > 0 && (
             <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">

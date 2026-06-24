@@ -36,6 +36,11 @@ export async function updateSession(request: NextRequest) {
   const isPublicPath =
     pathname.startsWith("/login") ||
     pathname.startsWith("/auth") ||
+    // ICS calendar feeds authorize via a per-member `?token=`, not the session
+    // cookie, so external calendar pollers (Google/Apple) can reach them. The
+    // route itself returns 401 without a valid token. Nothing else under /api
+    // is exempted.
+    pathname.startsWith("/api/ics/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico";
 
