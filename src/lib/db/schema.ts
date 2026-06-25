@@ -192,6 +192,55 @@ export const photoSubjects = pgTable(
 export type PhotoSubject = typeof photoSubjects.$inferSelect;
 
 // ----------------------------------------------------------------------------
+// people — Family Legacy keystone (PRD 11). Every recorded human, living or
+// not. Living members link to their profiles row; ancestors have profile_id
+// null. Built alongside the PRD 12 PeoplePicker.
+// ----------------------------------------------------------------------------
+export const people = pgTable(
+  "people",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    displayName: text("display_name").notNull(),
+    givenName: text("given_name"),
+    familyName: text("family_name"),
+    birthDate: date("birth_date"),
+    birthCirca: text("birth_circa"),
+    deathDate: date("death_date"),
+    deathCirca: text("death_circa"),
+    familyBranch: text("family_branch"),
+    bio: text("bio"),
+    photoId: uuid("photo_id").references(() => photos.id, {
+      onDelete: "set null",
+    }),
+    profileId: uuid("profile_id").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    createdBy: uuid("created_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("people_profile_id_key")
+      .on(table.profileId)
+      .where(sql`profile_id is not null`),
+    index("people_display_name_idx").on(table.displayName),
+    index("people_family_branch_idx").on(table.familyBranch),
+  ],
+);
+
+export type Person = typeof people.$inferSelect;
+export type NewPerson = typeof people.$inferInsert;
+
+// ----------------------------------------------------------------------------
 // revisions (immutable audit log)
 // ----------------------------------------------------------------------------
 export type RevisionEntity =
