@@ -148,3 +148,20 @@ _Filled in per slice as each ships._
   - **`CreateFlow`** (`create-flow.tsx`) — a light "+ Add" trigger opening a focused `Sheet` (reuses the existing primitive, no new dep) with minimal fields + instant save; closes on success. Same async-action pattern.
   - **`SaveState`** (`save-state.ts`) — shared `{idle|saved|error}` result shape, matching the existing `PropertyFormState`/`ProfileFormState` convention so actions drop in unchanged.
   - **Gotcha**: don't drive auto-close / auto-collapse from a `useEffect` watching the action result — React 19 lint forbids synchronous `setState` in effects. Run the action inside the `<form action={…}>` async handler and branch on its returned `SaveState` there.
+
+### Branch isolation — how to open a clean authoring-only PR
+
+⚠️ **Heads-up on this branch's history.** This work was authored on `feat/google-calendar-subscribe`, which was stacked on top of the **Google Calendar** commit `c0938a2` (PRD 06) — unrelated to authoring. (The slice notes above say "branch `prd12-authoring-richtext`"; the actual commits live on `feat/google-calendar-subscribe`.) That calendar commit has been **split into its own PR — [#4](https://github.com/dm4th/family-website/pull/4), branch `feat/google-calendar-ics`** — so it reviews and merges independently. For a clean PRD 12 review, this branch must **exclude** `c0938a2`. The branch name is also now a misnomer for authoring work — rename it.
+
+**Recommended sequence (lowest-conflict):**
+1. Let **PR #4 merge to `main`** first. It carries the calendar changes, including `profiles.ics_token` in `schema.ts` and `resetIcsToken()` in `profile/actions.ts`.
+2. On this branch: `git fetch origin && git rebase origin/main`. Because `c0938a2` is now in `main`, git drops it from the branch as already-applied, leaving authoring-only history. The remaining commits replay onto a `main` that already contains the calendar changes — the same tree they were built against — so conflicts should be minimal.
+3. Rename: `git branch -m feat/authoring-ux` (any non-calendar name).
+4. **Verify isolation** — `git diff origin/main...HEAD --name-only` should list only authoring + `people` files. It must **not** include `src/app/api/ics/[scope]/route.ts`, `src/lib/ics.ts`, `src/components/subscribe-to-calendar.tsx`, `src/lib/supabase/middleware.ts`, or `supabase/migrations/20260623000001_ics_token.sql` — those belong to #4.
+5. `git push -u origin feat/authoring-ux` and open the PR.
+
+**If you can't wait for #4:** `git rebase --onto origin/main c0938a2` drops just the calendar commit now, but expect to resolve conflicts in files both touched — `src/lib/db/schema.ts` (icsToken vs. the people table) and possibly `src/app/(app)/profile/actions.ts` — by keeping **both** sides.
+
+**Scope of the isolated PR.** It legitimately covers **PRD 12 (authoring layer)** *and* **PRD 11 slice 1 (the `people` keystone table + seed)** — intentionally landed together because `PeoplePicker` needs `people`. Title/describe it as both. ⚠️ The `people` migrations (`20260624000001_people.sql`, `…02_people_seed.sql`) were **already pushed to prod** from this branch, so flag that for reviewers: the migration is live, and the code that consumes it is what's under review.
+
+**Migration-ordering note.** #4's `20260623000001_ics_token.sql` is older-dated than the already-applied `20260624…` people migrations. `supabase db push` after #4 merges should still apply the missing older file (Supabase tracks applied state by version, not wall-clock order), but eyeball `supabase migration list` afterward to confirm.
