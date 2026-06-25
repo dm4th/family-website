@@ -3,7 +3,7 @@
 **Phase**: 2 · **Depends on**: 03 (properties exist), 02 (members exist)
 **Status**: ✅ shipped (2026-06-23) — landed on `main` via PR #2; migrations applied to prod and schema verified (self-approve trigger, exclusive `end_date` CHECK, `btree_gist` double-booking exclusion constraint all live). See [Implementation](#implementation) for what was built; the sections below are retained as design context.
 
-> ✅ **Calendar integration is complete** (2026-06-23, branch `feat/google-calendar-subscribe`). The ICS feed is now **token-authenticated** so Google/Apple/Outlook poll it cookielessly as a live, auto-updating subscription; both the per-property and unified `/calendar` pages have "Add to Google Calendar" / webcal / copyable-URL affordances plus a rotatable "reset my calendar link" control. Details in **[Google Calendar integration — status & plan](#google-calendar-integration--status--plan)** below (see [Implementation (shipped)](#implementation-shipped)).
+> ✅ **Calendar integration is complete** (2026-06-23, branch `feat/google-calendar-ics`). The ICS feed is now **token-authenticated** so Google/Apple/Outlook poll it cookielessly as a live, auto-updating subscription; both the per-property and unified `/calendar` pages have "Add to Google Calendar" / webcal / copyable-URL affordances plus a rotatable "reset my calendar link" control. Details in **[Google Calendar integration — status & plan](#google-calendar-integration--status--plan)** below (see [Implementation (shipped)](#implementation-shipped)).
 
 ---
 
@@ -151,7 +151,7 @@ End-to-end, on either local dev or prod:
 
 ## Google Calendar integration — status & plan
 
-**Status**: ✅ shipped (2026-06-23, branch `feat/google-calendar-subscribe`). The ICS feed is now token-authenticated so Google/Apple/Outlook can poll it cookielessly, and both calendar pages have one-click subscribe affordances + a rotatable link. See [Implementation (shipped)](#implementation-shipped) below; the plan that follows is retained as design context.
+**Status**: ✅ shipped (2026-06-23, branch `feat/google-calendar-ics`). The ICS feed is now token-authenticated so Google/Apple/Outlook can poll it cookielessly, and both calendar pages have one-click subscribe affordances + a rotatable link. See [Implementation (shipped)](#implementation-shipped) below; the plan that follows is retained as design context.
 
 ### What shipped vs. what's missing
 
@@ -211,6 +211,12 @@ End-to-end, on either local dev or prod:
   - **Google link uses the `addbyurl` settings endpoint** (`/calendar/u/0/r/settings/addbyurl?url=…` with the https feed URL) rather than the `?cid=` form — more reliable for subscribing to an external ICS.
   - **Any valid member token can read `me` / `all` / any property scope.** Consistent with the in-app model (every authenticated member can already see all bookings); the token just ports that same visibility to a cookieless poller.
 
+- **Review-driven fix (applied on the landing branch)**:
+  - **Malformed-token requests now return `401`, not `500`.** A non-uuid `?token=` is rejected up front via `UUID_RE` in the feed route (with a defensive `22P02` catch behind it), so a poller probing with a junk token gets a clean `401` instead of an unhandled cast error. ([route.ts](../src/app/api/ics/[scope]/route.ts) `loadByToken`)
+
 - **Open follow-ups**:
+  - **A `me` feed link is effectively an all-bookings bearer credential.** Because any valid token may also request the `all` scope, a leaked "My bookings" URL exposes *every* family booking (names / emails / locations), not just the owner's. Accepted for a closed family (it matches the in-app visibility model) and the subscribe UI warns "treat it like a password"; rotation is the mitigation. Tighten the copy, or move to per-scope tokens, if least-privilege is ever wanted.
+  - **Token feeds set `Cache-Control: public, max-age=300`.** No cross-member bleed (the cache key includes the secret token), but a shared/CDN cache can keep serving the old feed for up to 5 min after a reset. Switch to `private` or shorten the max-age if instant revocation matters.
+  - **Set `NEXT_PUBLIC_SITE_URL` in prod.** `getSiteOrigin()` falls back to the (spoofable) `x-forwarded-host` header when it's unset; this only affects the feed link shown to the owner, but pin it to be safe.
   - **Reset link is per-page only via `router.refresh()`** — a member subscribed on multiple devices must re-add the feed after a reset (expected for a secret rotation).
   - **No rate-limiting on the token feed** — a leaked URL grants read until rotated. Fine for family scale; revisit if the portal opens wider.

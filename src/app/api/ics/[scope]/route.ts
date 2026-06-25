@@ -43,6 +43,9 @@ function feedTitle(scope: string, bookings: FeedBooking[]): string {
   return `Mathieson Family — ${name}`;
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Token path: cookieless callers (Google/Apple/Outlook pollers) authorize with
  * `?token=`. A SECURITY DEFINER function validates the token and returns the
@@ -54,13 +57,21 @@ async function loadByToken(
   scope: string,
   token: string,
 ): Promise<FeedBooking[] | null> {
+  // A feed token is always a uuid. Reject anything else up front as
+  // unauthorized — otherwise PostgREST tries to cast it and raises a 22P02
+  // (invalid_text_representation), which would surface as a 500 to a poller
+  // probing with a junk token instead of a clean 401.
+  if (!UUID_RE.test(token)) return null;
+
   const { data, error } = await supabase.rpc("ics_bookings_for_token", {
     p_token: token,
     p_scope: scope,
   });
   if (error) {
-    // 28000 = the function's "invalid ics token" signal → unauthorized.
-    if (error.code === "28000") return null;
+    // Treat an invalid/unparseable token as unauthorized (401), not a 500:
+    //   28000 = the function's explicit "invalid ics token" raise
+    //   22P02 = a malformed uuid that slipped past the guard (defensive)
+    if (error.code === "28000" || error.code === "22P02") return null;
     throw new Error(error.message);
   }
   type Row = {
