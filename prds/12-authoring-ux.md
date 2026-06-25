@@ -165,3 +165,12 @@ _Filled in per slice as each ships._
 **Scope of the isolated PR.** It legitimately covers **PRD 12 (authoring layer)** *and* **PRD 11 slice 1 (the `people` keystone table + seed)** — intentionally landed together because `PeoplePicker` needs `people`. Title/describe it as both. ⚠️ The `people` migrations (`20260624000001_people.sql`, `…02_people_seed.sql`) were **already pushed to prod** from this branch, so flag that for reviewers: the migration is live, and the code that consumes it is what's under review.
 
 **Migration-ordering note.** #4's `20260623000001_ics_token.sql` is older-dated than the already-applied `20260624…` people migrations. `supabase db push` after #4 merges should still apply the missing older file (Supabase tracks applied state by version, not wall-clock order), but eyeball `supabase migration list` afterward to confirm.
+
+### Post-merge review follow-ups (PR #5)
+
+Shipped via PR #5 (squash-merged to `main`). The review was clean — these are minor, non-blocking polish items for a later pass, not bugs:
+
+- **`RichTextField` link tool** inserts `[text](https://)`, so a non-technical user still types the URL into the textarea. Acceptable for v1, but a small "paste a link" prompt (or a tiny URL popover) would finish the no-syntax promise.
+- **`searchPeople` wildcard escaping** handles `%` and `_` but not a literal backslash. Harmless (the `.ilike()` value is parameterized — worst case is empty results), but escaping `\` first is tidier.
+- **`RichTextField` a11y**: the Write/Preview toggle uses `role="tablist"`/`role="tab"` without a matching `role="tabpanel"` + `aria-controls` wiring. Minor; tidy when convenient.
+- **Person-edit guardrail** (the one that matters) lives in [PRD 11](11-family-legacy.md) slice 1 — the future person create/edit Server Action must set `created_by`/`updated_by` and call `recordRevision()`, since `people` has open wiki RLS and no audit-column trigger.
