@@ -1,7 +1,7 @@
 # 12 — Authoring UX (the shared content-editing layer)
 
 **Phase**: 2.5 (foundational) · **Depends on**: nothing new — retrofits existing features
-**Status**: 🚧 in-progress (slice 1) — **build this before [11 — Family Legacy](11-family-legacy.md)**; Legacy is entirely content authoring and should consume this layer natively. Also retrofit to properties + profiles.
+**Status**: ✅ shipped — all four slices built; slices 1–3 live-verified and retrofitted (properties + profiles + the `people` keystone). Slice 4 (`InlineEditable`/`CreateFlow`) is built and build-verified, staged for its first [11 — Family Legacy](11-family-legacy.md) consumer. Legacy should consume this layer natively.
 
 ---
 
@@ -137,11 +137,12 @@ _Filled in per slice as each ships._
   - **`FuzzyDateField`** (`fuzzy-date-field.tsx`) — exact (native `<input type="date">`) **or** "Approximate" free-text mode ("circa 1968", "summer 1972"), toggled via an accessible `radiogroup`. Dependency-free. **Value contract** (exported `FuzzyDate` type): submits JSON in one hidden input — `{precision:"exact",date}` / `{precision:"circa",text}` / `{precision:"none"}` — read with `JSON.parse(formData.get(name))`. **No shipped consumer yet** — staged for Legacy (PRD 11) photo/event dates; build-verified, not yet exercised in a live form.
   - **Gotchas**: (1) shadcn `Input` spreads `{...props}`, so under React 19 a `ref` forwards to the DOM node — no `forwardRef` needed. (2) Chips render *above* the add-input, so adding pushes the input down; the component re-focuses the input after each add so keyboard entry keeps working.
   - **Verified**: `tsc` + `eslint` clean, `npm run build` passes; `ChipListField` exercised live in-browser (add/Enter, multi-add, remove ×, case-insensitive dedupe, empty hint).
-- **Slice 3 — PeoplePicker**: 🚧 _built; awaiting live data on branch `prd12-authoring-richtext`_
+- **Slice 3 — PeoplePicker**: ✅ _shipped + live-verified on branch `prd12-authoring-richtext`_
   - **Landed the `people` keystone early** (PRD 11 slice 1's table) since PeoplePicker needs a real backing store — both PRDs anticipated this ("can land alongside it"). Migration `supabase/migrations/20260624000001_people.sql` + Drizzle mirror in `schema.ts`: full PRD-11 column set, unique partial index on `profile_id`, wiki RLS (authenticated read + insert/update, admin-only delete), and a **backfill** of one `people` row per existing `profiles` row.
   - **`searchPeople`** (`people-actions.ts`) — `"use server"` ILIKE typeahead over `people` (wildcards escaped), returns `{id, displayName, familyBranch, isMember, inMemoriam}`, limit 8; empty query returns first alphabetical slice for suggestions.
   - **`PeoplePicker`** (`people-picker.tsx`) — dependency-free combobox (no cmdk/popover): debounced search, keyboard nav (↑/↓/Enter/Esc), outside-click close, in-memoriam `†` marker, selected people as removable chips. Submits one hidden input per id → `formData.getAll(name)`, mapping cleanly to a join table.
-  - **Status**: build-verified (tsc/eslint/build). **Not yet live-verified** — blocked on applying the migration + seeding ancestors to the hosted DB (Dan is providing the people list). Once seeded: tag-by-name browser pass.
+  - **Applied + seeded to prod**: migration pushed to the hosted DB (`supabase db push`); backfill created member rows, and Dan's initial CSV seeded 8 people total (`20260624000002_people_seed.sql`) — Dan's member row enriched (no duplicate), 6 ancestors/members added, zero duplicate display names.
+  - **Live-verified**: via a throwaway dev harness — typeahead "ma" returned the right 7 matches (branch labels, alphabetical, CC Conver excluded), select→chip with dedup, outside-click/Escape close, and Submit captured the real person UUID through `formData.getAll`. ✅
 - **Slice 4 — Inline edit + CreateFlow**: ✅ _built on branch `prd12-authoring-richtext` (staged for Legacy — no shipped consumer yet)_
   - **`InlineEditable`** (`inline-editable.tsx`) — "edit where you read": renders `display` with a persistent (not hover-only, for touch/elders) Edit affordance; clicking swaps in `children` (the edit fields) with Save/Cancel and a transient "Saved. Logged to revisions." The save runs in the form action handler (async) — **not** a state-watching effect — so it satisfies React 19's `react-hooks/set-state-in-effect`. `recordRevision()` stays in the consumer's focused Server Action, exactly like `updateProperty`.
   - **`CreateFlow`** (`create-flow.tsx`) — a light "+ Add" trigger opening a focused `Sheet` (reuses the existing primitive, no new dep) with minimal fields + instant save; closes on success. Same async-action pattern.
