@@ -136,7 +136,9 @@ Each slice should: branch, ship, fill in its Implementation section, and flip st
 
 _Filled in per slice as each ships._
 
-- **Slice 1 — Photo Archive + `people` keystone**: _status: not started_
+- **Slice 1 — Photo Archive + `people` keystone**: _status: not started — **but the `people` table itself landed early** via PRD 12 slice 3 (PeoplePicker needed a real backing store)._
+  - **`people` table is already created**: `supabase/migrations/20260624000001_people.sql` + Drizzle mirror in `src/lib/db/schema.ts`. It implements this PRD's keystone column set (`display_name`, `given_name`/`family_name`, `birth_date`/`birth_circa`, `death_date`/`death_circa`, `family_branch`, `bio`, nullable `photo_id` + `profile_id` FKs, audit cols), the unique-per-living-member partial index on `profile_id`, wiki RLS (authenticated read + insert/update, admin-only delete), and the **profile→person backfill**. **Applied to prod** and seeded from Dan's initial CSV (`20260624000002_people_seed.sql`) — 8 people live (members linked, ancestors `profile_id` null). Note: one existing profile (`pfmathieson@gmail.com`) has no `full_name`, so its backfilled person shows the email as `display_name` until enriched.
+  - **What's left for this slice**: `albums` / `album_photos`, the `photos` extensions (`taken_on` / `circa` / `is_archival`), the "archival" `PhotoUpload` kind, subject-tagging wired to `people` (use the `PeoplePicker` from PRD 12), and the `/family/archive` routes. The keystone dependency is done.
 - **Slice 2 — Family Tree**: _status: not started_
 - **Slice 3 — Timeline**: _status: not started (see PRD 10)_
 - **Slice 4 — Stories**: _status: not started_

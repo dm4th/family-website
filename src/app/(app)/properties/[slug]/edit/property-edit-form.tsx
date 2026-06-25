@@ -2,10 +2,10 @@
 
 import { useActionState, useState } from "react";
 
+import { ChipListField, RichTextField } from "@/components/authoring";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   updateProperty,
   type PropertyFormState,
@@ -74,53 +74,55 @@ export function PropertyEditForm({
       <Field
         label="About"
         htmlFor="description"
-        hint="Markdown supported. A short overview of the place."
+        hint="A short overview of the place."
       >
-        <Textarea
+        <RichTextField
           id="description"
           name="description"
           rows={4}
-          defaultValue={property.description ?? ""}
+          defaultValue={property.description}
         />
       </Field>
 
       <Field
         label="How things work here"
         htmlFor="how_to"
-        hint="Trash schedule, WiFi, quirks, boat/dock notes. Markdown supported."
+        hint="Trash schedule, WiFi, quirks, boat/dock notes."
       >
-        <Textarea
+        <RichTextField
           id="how_to"
           name="how_to"
           rows={8}
-          defaultValue={property.how_to ?? ""}
+          defaultValue={property.how_to}
         />
       </Field>
 
       <Field
         label="House rules"
         htmlFor="guidelines"
-        hint="House rules family members agree to follow. Markdown supported."
+        hint="House rules family members agree to follow."
       >
-        <Textarea
+        <RichTextField
           id="guidelines"
           name="guidelines"
           rows={6}
-          defaultValue={property.guidelines ?? ""}
+          defaultValue={property.guidelines}
         />
       </Field>
 
       <Field
         label="Amenities"
         htmlFor="amenities"
-        hint="One amenity per line."
+        hint="Add what the place has — one per chip."
       >
-        <Textarea
+        <ChipListField
           id="amenities"
           name="amenities"
-          rows={5}
-          defaultValue={property.amenities.join("\n")}
-          placeholder="Dock&#10;Canoe&#10;Wood stove"
+          inputAriaLabel="Add an amenity"
+          defaultItems={property.amenities}
+          placeholder="e.g., Dock, Canoe, Wood stove"
+          addLabel="Add amenity"
+          emptyHint="No amenities listed yet."
         />
       </Field>
 

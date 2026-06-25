@@ -1,7 +1,7 @@
 # 12 — Authoring UX (the shared content-editing layer)
 
 **Phase**: 2.5 (foundational) · **Depends on**: nothing new — retrofits existing features
-**Status**: 🟢 ready — **build this before [11 — Family Legacy](11-family-legacy.md)**; Legacy is entirely content authoring and should consume this layer natively. Also retrofit to properties + profiles.
+**Status**: ✅ shipped — all four slices built; slices 1–3 live-verified and retrofitted (properties + profiles + the `people` keystone). Slice 4 (`InlineEditable`/`CreateFlow`) is built and build-verified, staged for its first [11 — Family Legacy](11-family-legacy.md) consumer. Legacy should consume this layer natively.
 
 ---
 
@@ -122,7 +122,46 @@ src/app/(app)/profile/edit/profile-edit-form.tsx              # use RichTextFiel
 
 _Filled in per slice as each ships._
 
-- **Slice 1 — RichTextField + property/profile retrofit**: _status: not started_
-- **Slice 2 — ChipListField + FuzzyDateField**: _status: not started_
-- **Slice 3 — PeoplePicker**: _status: not started (coordinate with Legacy slice 1 / `people` table)_
-- **Slice 4 — Inline edit + CreateFlow**: _status: not started_
+- **Slice 1 — RichTextField + property/profile retrofit**: ✅ _shipped on branch `prd12-authoring-richtext`_
+  - **New shared layer**: `src/components/authoring/` with `rich-text-field.tsx` + `index.ts` barrel.
+  - **`RichTextField`** — the v1 "lightweight toolbar over `<textarea>`" approach (no new deps; `lucide-react`, `react-markdown`, `remark-gfm` already present). A controlled, **named** `<textarea>` (so existing Server Actions read `formData.get(name)` unchanged) with:
+    - A formatting toolbar — Bold, Italic, Heading, Bulleted/Numbered list, Quote, Link — that inserts Markdown by operating on the textarea selection. The user never types syntax. Wrap-style tools (`wrapSelection`) wrap the selection; line-style tools (`prefixLines`) prefix every touched line.
+    - A **Write / Preview** toggle. Preview renders through the existing `Markdown` component (`tone`-aware), so preview is byte-for-byte the display renderer — WYSIWYG-truthful and inheriting the no-raw-HTML security posture.
+    - Caret/selection restored after each toolbar edit via a `pendingSelection` ref + `useLayoutEffect` (controlled textareas otherwise drop the selection on re-render). Toolbar buttons use `onMouseDown→preventDefault` so they don't steal selection.
+  - **Retrofits**: property `description` / `how_to` / `guidelines` → `RichTextField` (`ledger` tone); profile `bio` → `RichTextField` (`salon` tone). Removed the now-redundant "Markdown supported" hints. **No Server Action / DB changes** — same field names, same Markdown storage, same `recordRevision()` path.
+  - **Gotchas for downstream**: (1) React 19's `react-hooks/refs` lint rule forbids building ref-capturing closures during render — keep tool definitions as plain data (`TOOLS`) and read refs only inside the `applyTool` event handler. (2) `Markdown` is client-safe (plain `react-markdown`, no `server-only`), so importing it into a `"use client"` component is fine. (3) Button icon size key is `icon-sm` (not `sm`).
+  - **Verified**: `tsc --noEmit` clean, `eslint` clean on changed files, `npm run build` succeeds. Manual non-technical-user verification (recipe steps 1–2, 6) still recommended before merge.
+- **Slice 2 — ChipListField + FuzzyDateField**: ✅ _shipped on branch `prd12-authoring-richtext`_
+  - **`ChipListField`** (`chip-list-field.tsx`) — generalizes `PeakRangeEditor`. Add via the input + Enter or an "Add" button; each item is a removable chip (× button, `aria-label="Remove …"`). Case-insensitive de-dupe, `maxItems` cap, optional `emptyHint`. Submits via a hidden input — `submitAs="newlines"` (default, joins with `\n` to match legacy "one per line" parsers) or `submitAs="multiple"` (one hidden input per item, read via `formData.getAll`). Accepts an `id` so a sibling `<Label htmlFor>` targets the add-input.
+  - **Retrofit**: property **amenities** → `ChipListField` (`submitAs="newlines"`, `id="amenities"`). **No Server Action change** — `parseAmenities` still splits the newline-joined hidden value. Removed the unused `Textarea` import from the property form.
+  - **`FuzzyDateField`** (`fuzzy-date-field.tsx`) — exact (native `<input type="date">`) **or** "Approximate" free-text mode ("circa 1968", "summer 1972"), toggled via an accessible `radiogroup`. Dependency-free. **Value contract** (exported `FuzzyDate` type): submits JSON in one hidden input — `{precision:"exact",date}` / `{precision:"circa",text}` / `{precision:"none"}` — read with `JSON.parse(formData.get(name))`. **No shipped consumer yet** — staged for Legacy (PRD 11) photo/event dates; build-verified, not yet exercised in a live form.
+  - **Gotchas**: (1) shadcn `Input` spreads `{...props}`, so under React 19 a `ref` forwards to the DOM node — no `forwardRef` needed. (2) Chips render *above* the add-input, so adding pushes the input down; the component re-focuses the input after each add so keyboard entry keeps working.
+  - **Verified**: `tsc` + `eslint` clean, `npm run build` passes; `ChipListField` exercised live in-browser (add/Enter, multi-add, remove ×, case-insensitive dedupe, empty hint).
+- **Slice 3 — PeoplePicker**: ✅ _shipped + live-verified on branch `prd12-authoring-richtext`_
+  - **Landed the `people` keystone early** (PRD 11 slice 1's table) since PeoplePicker needs a real backing store — both PRDs anticipated this ("can land alongside it"). Migration `supabase/migrations/20260624000001_people.sql` + Drizzle mirror in `schema.ts`: full PRD-11 column set, unique partial index on `profile_id`, wiki RLS (authenticated read + insert/update, admin-only delete), and a **backfill** of one `people` row per existing `profiles` row.
+  - **`searchPeople`** (`people-actions.ts`) — `"use server"` ILIKE typeahead over `people` (wildcards escaped), returns `{id, displayName, familyBranch, isMember, inMemoriam}`, limit 8; empty query returns first alphabetical slice for suggestions.
+  - **`PeoplePicker`** (`people-picker.tsx`) — dependency-free combobox (no cmdk/popover): debounced search, keyboard nav (↑/↓/Enter/Esc), outside-click close, in-memoriam `†` marker, selected people as removable chips. Submits one hidden input per id → `formData.getAll(name)`, mapping cleanly to a join table.
+  - **Applied + seeded to prod**: migration pushed to the hosted DB (`supabase db push`); backfill created member rows, and Dan's initial CSV seeded 8 people total (`20260624000002_people_seed.sql`) — Dan's member row enriched (no duplicate), 6 ancestors/members added, zero duplicate display names.
+  - **Live-verified**: via a throwaway dev harness — typeahead "ma" returned the right 7 matches (branch labels, alphabetical, CC Conver excluded), select→chip with dedup, outside-click/Escape close, and Submit captured the real person UUID through `formData.getAll`. ✅
+- **Slice 4 — Inline edit + CreateFlow**: ✅ _built on branch `prd12-authoring-richtext` (staged for Legacy — no shipped consumer yet)_
+  - **`InlineEditable`** (`inline-editable.tsx`) — "edit where you read": renders `display` with a persistent (not hover-only, for touch/elders) Edit affordance; clicking swaps in `children` (the edit fields) with Save/Cancel and a transient "Saved. Logged to revisions." The save runs in the form action handler (async) — **not** a state-watching effect — so it satisfies React 19's `react-hooks/set-state-in-effect`. `recordRevision()` stays in the consumer's focused Server Action, exactly like `updateProperty`.
+  - **`CreateFlow`** (`create-flow.tsx`) — a light "+ Add" trigger opening a focused `Sheet` (reuses the existing primitive, no new dep) with minimal fields + instant save; closes on success. Same async-action pattern.
+  - **`SaveState`** (`save-state.ts`) — shared `{idle|saved|error}` result shape, matching the existing `PropertyFormState`/`ProfileFormState` convention so actions drop in unchanged.
+  - **Gotcha**: don't drive auto-close / auto-collapse from a `useEffect` watching the action result — React 19 lint forbids synchronous `setState` in effects. Run the action inside the `<form action={…}>` async handler and branch on its returned `SaveState` there.
+
+### Branch isolation — how to open a clean authoring-only PR
+
+⚠️ **Heads-up on this branch's history.** This work was authored on `feat/google-calendar-subscribe`, which was stacked on top of the **Google Calendar** commit `c0938a2` (PRD 06) — unrelated to authoring. (The slice notes above say "branch `prd12-authoring-richtext`"; the actual commits live on `feat/google-calendar-subscribe`.) That calendar commit has been **split into its own PR — [#4](https://github.com/dm4th/family-website/pull/4), branch `feat/google-calendar-ics`** — so it reviews and merges independently. For a clean PRD 12 review, this branch must **exclude** `c0938a2`. The branch name is also now a misnomer for authoring work — rename it.
+
+**Recommended sequence (lowest-conflict):**
+1. Let **PR #4 merge to `main`** first. It carries the calendar changes, including `profiles.ics_token` in `schema.ts` and `resetIcsToken()` in `profile/actions.ts`.
+2. On this branch: `git fetch origin && git rebase origin/main`. Because `c0938a2` is now in `main`, git drops it from the branch as already-applied, leaving authoring-only history. The remaining commits replay onto a `main` that already contains the calendar changes — the same tree they were built against — so conflicts should be minimal.
+3. Rename: `git branch -m feat/authoring-ux` (any non-calendar name).
+4. **Verify isolation** — `git diff origin/main...HEAD --name-only` should list only authoring + `people` files. It must **not** include `src/app/api/ics/[scope]/route.ts`, `src/lib/ics.ts`, `src/components/subscribe-to-calendar.tsx`, `src/lib/supabase/middleware.ts`, or `supabase/migrations/20260623000001_ics_token.sql` — those belong to #4.
+5. `git push -u origin feat/authoring-ux` and open the PR.
+
+**If you can't wait for #4:** `git rebase --onto origin/main c0938a2` drops just the calendar commit now, but expect to resolve conflicts in files both touched — `src/lib/db/schema.ts` (icsToken vs. the people table) and possibly `src/app/(app)/profile/actions.ts` — by keeping **both** sides.
+
+**Scope of the isolated PR.** It legitimately covers **PRD 12 (authoring layer)** *and* **PRD 11 slice 1 (the `people` keystone table + seed)** — intentionally landed together because `PeoplePicker` needs `people`. Title/describe it as both. ⚠️ The `people` migrations (`20260624000001_people.sql`, `…02_people_seed.sql`) were **already pushed to prod** from this branch, so flag that for reviewers: the migration is live, and the code that consumes it is what's under review.
+
+**Migration-ordering note.** #4's `20260623000001_ics_token.sql` is older-dated than the already-applied `20260624…` people migrations. `supabase db push` after #4 merges should still apply the missing older file (Supabase tracks applied state by version, not wall-clock order), but eyeball `supabase migration list` afterward to confirm.
