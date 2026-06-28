@@ -10,7 +10,7 @@ A page per family property that holds everything a family member needs to know a
 Seeded properties (after migration `20260523000004`):
 - **Loon-A-See** (`loon-a-see`) — Squam Lake, New Hampshire
 - **Loon-E-Bin** (`loon-e-bin`) — Squam Lake, New Hampshire
-- **Mumford's Motel** (`mumfords-motel`) — Big Sky, Montana
+- **Moosedraw** (`moosedraw`) — Big Sky, Montana _(renamed from "Mumford's Motel" / `mumfords-motel` via migration `20260624000004`)_
 
 ## User stories
 

@@ -54,7 +54,7 @@ export function PropertiesSection({
               id="prop-name"
               name="name"
               required
-              placeholder="Mumford's Cabin"
+              placeholder="e.g., Lake House"
             />
           </FieldCol>
           <FieldCol>
