@@ -11,6 +11,13 @@ import {
   parseIsoDate,
   type PeakPeriodRange,
 } from "@/lib/bookings";
+import {
+  notifyBookingApproved,
+  notifyBookingAutoApprovedAdmins,
+  notifyBookingCancelled,
+  notifyBookingDeclined,
+  notifyBookingRequested,
+} from "@/lib/notifications/bookings";
 
 export type BookingActionState =
   | { status: "idle" }
@@ -155,6 +162,26 @@ export async function createBookingRequest(
     },
   });
 
+  // Best-effort notifications (never block the booking):
+  //  - auto-approved → confirm the booker AND send a calm FYI to the property
+  //    admins + site admin (the family's explicit ask).
+  //  - pending → urgently alert the property admins + site admin to act.
+  const notifyInput = {
+    bookingId: inserted.id,
+    propertyId,
+    requestedBy: user.id,
+    startDate: startIso,
+    endDate: endIso,
+    guestCount,
+    notes,
+  };
+  if (initialStatus === "approved") {
+    await notifyBookingApproved(supabase, notifyInput, { autoApproved: true });
+    await notifyBookingAutoApprovedAdmins(supabase, notifyInput);
+  } else {
+    await notifyBookingRequested(supabase, notifyInput);
+  }
+
   revalidatePath(`/properties/${property.slug}/calendar`);
   revalidatePath("/calendar");
   revalidatePath("/admin");
@@ -232,6 +259,24 @@ export async function cancelBooking(
     after: { status: "cancelled", cancellation_notes: cancellationNotes },
   });
 
+  // Only notify when an admin cancelled someone else's booking — a member
+  // cancelling their own already knows. Best-effort.
+  if (!isOwner && canAdmin) {
+    await notifyBookingCancelled(
+      supabase,
+      {
+        bookingId: booking.id,
+        propertyId: booking.property_id,
+        requestedBy: booking.requested_by,
+        startDate: booking.start_date,
+        endDate: booking.end_date,
+        guestCount: booking.guest_count,
+        notes: booking.notes,
+      },
+      cancellationNotes,
+    );
+  }
+
   const { data: property } = await supabase
     .from("properties")
     .select("slug")
@@ -260,7 +305,9 @@ async function setBookingDecision(
 
   const { data: booking, error: fetchErr } = await supabase
     .from("bookings")
-    .select("id, property_id, start_date, end_date, status")
+    .select(
+      "id, property_id, requested_by, start_date, end_date, status, guest_count, notes",
+    )
     .eq("id", bookingId)
     .single();
   if (fetchErr || !booking) {
@@ -316,6 +363,24 @@ async function setBookingDecision(
     before: { status: "pending" },
     after: { status: decision },
   });
+
+  // Best-effort: let the requester know the outcome.
+  const decisionInput = {
+    bookingId: booking.id,
+    propertyId: booking.property_id,
+    requestedBy: booking.requested_by,
+    startDate: booking.start_date,
+    endDate: booking.end_date,
+    guestCount: booking.guest_count,
+    notes: booking.notes,
+  };
+  if (decision === "approved") {
+    await notifyBookingApproved(supabase, decisionInput, {
+      autoApproved: false,
+    });
+  } else {
+    await notifyBookingDeclined(supabase, decisionInput);
+  }
 
   const { data: property } = await supabase
     .from("properties")
