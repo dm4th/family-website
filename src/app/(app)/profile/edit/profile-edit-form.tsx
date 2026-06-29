@@ -103,10 +103,10 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
           href={`/family/${profile.id}`}
           className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
         >
-          View your profile →
+          View Your Profile →
         </Link>
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving…" : "Save changes"}
+          {isPending ? "Saving…" : "Save Changes"}
         </Button>
       </div>
 

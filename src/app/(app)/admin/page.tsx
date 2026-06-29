@@ -122,8 +122,8 @@ export default async function AdminPage() {
 
       <BriefingPanel>
         <Section
-          title="Pending bookings"
-          description="Approve or decline from each property's calendar — links below open the request in context."
+          title="Pending Bookings"
+          description="Approve or decline from each property's calendar. Links below open the request in context."
         >
           {!pendingBookings || pendingBookings.length === 0 ? (
             <p className="text-sm italic text-foreground-subtle">

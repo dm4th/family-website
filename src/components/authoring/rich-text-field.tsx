@@ -36,8 +36,8 @@ const TOOLS: { kind: ToolKind; label: string; icon: typeof Bold }[] = [
   { kind: "bold", label: "Bold", icon: Bold },
   { kind: "italic", label: "Italic", icon: Italic },
   { kind: "heading", label: "Heading", icon: Heading2 },
-  { kind: "bullet", label: "Bulleted list", icon: List },
-  { kind: "numbered", label: "Numbered list", icon: ListOrdered },
+  { kind: "bullet", label: "Bulleted List", icon: List },
+  { kind: "numbered", label: "Numbered List", icon: ListOrdered },
   { kind: "quote", label: "Quote", icon: Quote },
   { kind: "link", label: "Link", icon: Link2 },
 ];
@@ -226,7 +226,7 @@ export function RichTextField({
           <Markdown
             source={value}
             tone={tone}
-            emptyHint="Nothing to preview yet — switch to Write and add some content."
+            emptyHint="Nothing to preview yet. Switch to Write and add some content."
           />
         </div>
       )}

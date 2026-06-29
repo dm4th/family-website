@@ -21,7 +21,7 @@ export function Markdown({
   source,
   tone = "ledger",
   className,
-  emptyHint = "Nothing here yet — edit to add details.",
+  emptyHint = "Nothing here yet. Edit to add details.",
 }: {
   source: string | null | undefined;
   tone?: MarkdownTone;

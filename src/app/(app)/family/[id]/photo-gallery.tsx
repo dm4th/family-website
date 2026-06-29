@@ -40,7 +40,7 @@ export function PhotoGallery({
   if (photos.length === 0) {
     return (
       <p className="text-sm italic text-foreground-subtle">
-        No photos yet — be the first to add one above.
+        No photos yet. Be the first to add one above.
       </p>
     );
   }
@@ -156,7 +156,7 @@ function Tile({
               disabled={busyId === photo.id}
               onClick={() => onPromote(photo.id)}
             >
-              {busyId === photo.id ? "Setting…" : "Use as my avatar"}
+              {busyId === photo.id ? "Setting…" : "Use as My Avatar"}
             </Button>
           )}
           <RemovePhotoButton photoId={photo.id} canRemove={canRemove} />

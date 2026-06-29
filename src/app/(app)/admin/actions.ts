@@ -187,7 +187,7 @@ export async function sendInviteMagicLink(invitationId: string) {
     .single();
   if (error || !invitation) throw new Error("Invitation not found");
   if (invitation.status !== "pending") {
-    throw new Error(`Cannot send — invitation is ${invitation.status}`);
+    throw new Error(`Cannot send: invitation is ${invitation.status}`);
   }
 
   const headerList = await headers();

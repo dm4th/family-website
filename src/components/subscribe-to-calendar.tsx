@@ -53,7 +53,7 @@ export function SubscribeToCalendar({
     <div className="flex flex-col gap-4">
       <p className="text-xs text-foreground-subtle">
         {blurb ??
-          "Subscribe once and approved bookings keep flowing into your calendar. Calendar apps refresh every few hours — new bookings aren't instant."}
+          "Subscribe once and approved bookings keep flowing into your calendar. Calendar apps refresh every few hours, so new bookings aren't instant."}
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -82,7 +82,7 @@ export function SubscribeToCalendar({
         </div>
         <p className="text-xs text-foreground-subtle">
           Paste into any calendar app&apos;s &ldquo;subscribe from URL&rdquo;
-          field. Treat it like a password — anyone with the link can see these
+          field. Treat it like a password. Anyone with the link can see these
           bookings.
         </p>
       </div>
@@ -100,7 +100,7 @@ export function SubscribeToCalendar({
               disabled={resetting}
               type="button"
             >
-              {resetting ? "Resetting…" : "Reset link"}
+              {resetting ? "Resetting…" : "Reset Link"}
             </Button>
             <Button
               variant="ghost"
@@ -118,7 +118,7 @@ export function SubscribeToCalendar({
             onClick={() => setConfirmingReset(true)}
             className="text-xs text-foreground-subtle underline-offset-4 hover:text-foreground hover:underline"
           >
-            Reset my calendar link
+            Reset My Calendar Link
           </button>
         )}
       </div>

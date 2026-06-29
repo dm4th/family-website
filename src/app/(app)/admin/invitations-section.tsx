@@ -81,7 +81,7 @@ export function InvitationsSection({
           </div>
           <div>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating…" : "Create invitation"}
+              {isPending ? "Creating…" : "Create Invitation"}
             </Button>
           </div>
         </div>
@@ -162,7 +162,7 @@ function InvitationRowItem({ invitation }: { invitation: InvitationRow }) {
               });
             }}
           >
-            {sendPending ? "Sending…" : "Email magic link"}
+            {sendPending ? "Sending…" : "Email Magic Link"}
           </Button>
           <Button
             type="button"

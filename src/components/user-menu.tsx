@@ -71,10 +71,10 @@ export function UserMenu({
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href={`/family/${userId}`}>View my profile</Link>
+          <Link href={`/family/${userId}`}>View My Profile</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/profile/edit">Edit profile</Link>
+          <Link href="/profile/edit">Edit Profile</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
@@ -95,7 +95,7 @@ export function UserMenu({
         <form action={signOut}>
           <DropdownMenuItem asChild>
             <button type="submit" className="w-full text-left">
-              Sign out
+              Sign Out
             </button>
           </DropdownMenuItem>
         </form>

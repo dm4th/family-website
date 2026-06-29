@@ -74,7 +74,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
           className="w-full"
           disabled={isPending}
         >
-          {isPending ? "Sending…" : "Send sign-in link"}
+          {isPending ? "Sending…" : "Send Sign-In Link"}
         </Button>
         {(state.status === "error" || initialError) && (
           <p className="text-sm text-destructive">

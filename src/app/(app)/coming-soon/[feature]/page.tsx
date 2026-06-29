@@ -20,12 +20,12 @@ type FeatureInfo = {
 
 const FEATURES: Record<string, FeatureInfo> = {
   documents: {
-    title: "Trust documents & AI",
+    title: "Trust Documents & AI",
     tagline: "Ask plain-language questions about trust documents.",
     description:
-      "Upload trust and estate documents, then ask things like \"When can I access my trust funds?\" and get cited answers — without paging a lawyer for routine questions.",
+      "Upload trust and estate documents, then ask things like \"When can I access my trust funds?\" and get cited answers without paging a lawyer for routine questions.",
     rationale:
-      "Trust documents are sensitive, so we want to settle how they're protected before anything goes online — how they're encrypted, what an AI assistant is allowed to keep, and where the search runs. That conversation comes first.",
+      "Trust documents are sensitive, so we want to settle how they're protected before anything goes online: how they're encrypted, what an AI assistant is allowed to keep, and where the search runs. That conversation comes first.",
     mode: "advisory",
   },
   finances: {
@@ -38,16 +38,16 @@ const FEATURES: Record<string, FeatureInfo> = {
     mode: "advisory",
   },
   messaging: {
-    title: "Family messaging",
+    title: "Family Messaging",
     tagline: "In-context comments and a what's-new feed.",
     description:
       "Comments on property pages and profiles, plus a daily/weekly digest email summarizing what's been added or changed.",
     rationale:
-      "Worth building once the family is using the site day-to-day — otherwise it's an empty room. We'll revisit once everyone's settled in.",
+      "Worth building once the family is using the site day-to-day; otherwise it's an empty room. We'll revisit once everyone's settled in.",
     mode: "family",
   },
   timeline: {
-    title: "Family timeline",
+    title: "Family Timeline",
     tagline: "A digital family history with stories and photos.",
     description:
       "Browsable chronological timeline of family events. AI-assisted photo tagging by year and people. Record short stories from the older generation.",
@@ -96,7 +96,7 @@ export default async function ComingSoonPage({
 
           <div className="border-t border-border pt-5 text-xs text-foreground-subtle">
             Want this one sooner, or have ideas for how it should work? Let us
-            know — the family&apos;s priorities shape what gets built next.
+            know. The family&apos;s priorities shape what gets built next.
           </div>
         </div>
       </BriefingPanel>
@@ -106,7 +106,7 @@ export default async function ComingSoonPage({
           href="/"
           className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
         >
-          ← Back to dashboard
+          ← Back to Dashboard
         </Link>
       </div>
     </div>

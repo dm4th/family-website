@@ -156,7 +156,7 @@ export default async function PropertyCalendarPage({
         }
         action={
           <Button asChild variant="outline" size="sm">
-            <Link href={`/properties/${property.slug}`}>Back to property</Link>
+            <Link href={`/properties/${property.slug}`}>Back to Property</Link>
           </Button>
         }
       />
@@ -167,7 +167,7 @@ export default async function PropertyCalendarPage({
             <div>
               <Eyebrow>Pending requests</Eyebrow>
               <h2 className="font-display text-xl leading-tight text-foreground">
-                Awaiting your call
+                Awaiting Your Call
               </h2>
             </div>
             <span className="text-xs text-foreground-subtle">
@@ -217,7 +217,7 @@ export default async function PropertyCalendarPage({
             <div className="border-b border-border px-5 py-4 sm:px-6">
               <Eyebrow>Your bookings</Eyebrow>
               <h3 className="font-display text-lg leading-tight text-foreground">
-                Your stays
+                Your Stays
               </h3>
             </div>
             {myBookings.length === 0 ? (
@@ -251,7 +251,7 @@ export default async function PropertyCalendarPage({
               <Eyebrow className="mb-3">Subscribe</Eyebrow>
               <SubscribeToCalendar
                 links={feedLinks}
-                blurb={`Add ${property.name}'s approved bookings to your calendar. Apps refresh every few hours — new bookings aren't instant.`}
+                blurb={`Add ${property.name}'s approved bookings to your calendar. Apps refresh every few hours, so new bookings aren't instant.`}
               />
             </LedgerPanel>
           )}
@@ -279,7 +279,7 @@ export default async function PropertyCalendarPage({
       <section className="flex flex-col gap-4">
         <header className="flex items-baseline justify-between gap-4">
           <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
-            Upcoming approved bookings
+            Upcoming Approved Bookings
           </h2>
           <p className="text-xs text-foreground-subtle">
             Window: ±6 months from today
