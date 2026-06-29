@@ -262,7 +262,7 @@ Set up **three identities**: a site **admin**, a plain **member**, and a **guest
 
 ### Migration
 
-- **`supabase/migrations/20260629000001_guest_access.sql`** — single migration, the whole security surface. Contents:
+- **`supabase/migrations/20260629000002_guest_access.sql`** — single migration, the whole security surface. (Renumbered from `…001` to avoid a version collision with PR #7's `20260629000001_onboarding.sql`; the two are independent, so ordering is cosmetic.) Contents:
   - **`property_guests` table** (`property_id`, `profile_id`, `booking_id` nullable provenance, `granted_by`, `expires_at`, `created_at`; PK `(property_id, profile_id)`; `property_guests_profile_idx`). Mirrors `property_admins`.
   - **Helper functions** (all `security definer`, `stable`, `set search_path = ''`, `execute` granted to `authenticated`): `is_guest()`, `is_property_guest(uuid)`, `can_view_property(uuid)`. `is_guest()` **deliberately ignores `deactivated_at`** (see the in-file warning + Deactivation below).
   - **Deferred grant — Option A chosen.** Added `invitations.grant_property_id`; `handle_new_user()` re-created to materialize the `property_guests` row on first sign-in when it adopts a `role='guest'` invitation carrying a grant. No staging table.
