@@ -76,6 +76,10 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/profile/edit">Edit profile</Link>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/help">How this works</Link>
+        </DropdownMenuItem>
         {isAdmin && (
           <>
             <DropdownMenuSeparator />

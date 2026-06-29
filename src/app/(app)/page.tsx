@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { Eyebrow, SectionRule } from "@/components/shell";
+import { WelcomePanel } from "@/components/welcome-panel";
 
 type Mode = "family" | "operations" | "advisory";
 
@@ -30,17 +31,28 @@ export default async function Dashboard() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Two cheap counts so the gateways show signal instead of static copy.
-  const [{ count: memberCount }, { count: propertyCount }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .is("deactivated_at", null),
-    supabase
-      .from("properties")
-      .select("id", { count: "exact", head: true })
-      .neq("status", "inactive"),
-  ]);
+  // Two cheap counts so the gateways show signal instead of static copy, plus
+  // the caller's onboarding flag (null = show the first-login welcome panel).
+  const [{ count: memberCount }, { count: propertyCount }, ownProfile] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .is("deactivated_at", null),
+      supabase
+        .from("properties")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "inactive"),
+      user
+        ? supabase
+            .from("profiles")
+            .select("onboarded_at")
+            .eq("id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+  const showWelcome = Boolean(user) && !ownProfile?.data?.onboarded_at;
 
   const firstName =
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
@@ -121,6 +133,9 @@ export default async function Dashboard() {
 
   return (
     <div className="flex flex-col gap-16">
+      {/* First-login orientation — only for members who haven't dismissed it. */}
+      {showWelcome && <WelcomePanel firstName={firstName} />}
+
       {/* Opening statement — date, greeting, mood. Not a KPI wall. */}
       <header className="flex flex-col gap-3">
         <p className="eyebrow text-foreground-subtle">{today}</p>

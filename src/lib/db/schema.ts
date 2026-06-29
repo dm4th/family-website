@@ -49,6 +49,8 @@ export const profiles = pgTable(
     bio: text("bio"),
     // Rotatable secret that authorizes cookieless ICS calendar-feed reads.
     icsToken: uuid("ics_token").notNull().default(sql`gen_random_uuid()`),
+    // First-login welcome panel: null = not yet welcomed (show it).
+    onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
     deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
