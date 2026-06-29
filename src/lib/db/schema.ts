@@ -297,6 +297,11 @@ export const invitations = pgTable(
     token: text("token").notNull().unique(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    // Guest invites carry a property to grant on accept; handle_new_user()
+    // materializes the property_guests row on first sign-in. (PRD 15)
+    grantPropertyId: uuid("grant_property_id").references(() => properties.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -384,3 +389,37 @@ export const bookings = pgTable(
 
 export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// property_guests — per-property read grant for guest-role profiles (PRD 15).
+// Mirrors property_admins. The join is the single authority RLS checks for
+// "can this guest see this property"; booking_id is provenance only.
+// ----------------------------------------------------------------------------
+export const propertyGuests = pgTable(
+  "property_guests",
+  {
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, {
+      onDelete: "set null",
+    }),
+    grantedBy: uuid("granted_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.propertyId, table.profileId] }),
+    index("property_guests_profile_idx").on(table.profileId),
+  ],
+);
+
+export type PropertyGuest = typeof propertyGuests.$inferSelect;
+export type NewPropertyGuest = typeof propertyGuests.$inferInsert;

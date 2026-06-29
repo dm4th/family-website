@@ -10,16 +10,19 @@ type SiteHeaderProps = {
   avatarUrl?: string | null;
   displayName?: string | null;
   isAdmin?: boolean;
+  isGuest?: boolean;
 };
 
-export function SiteHeader(props: SiteHeaderProps) {
+export function SiteHeader({ isGuest, ...props }: SiteHeaderProps) {
+  // A guest's "home" is their granted properties, not the family dashboard.
+  const homeHref = isGuest ? "/properties" : "/";
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-5 sm:px-8">
         <div className="flex items-center gap-3 lg:gap-12">
-          <SiteNavMobile />
+          {!isGuest && <SiteNavMobile />}
           <Link
-            href="/"
+            href={homeHref}
             aria-label="Home"
             className="group flex cursor-pointer items-baseline gap-2 transition-opacity hover:opacity-80"
           >
@@ -30,11 +33,11 @@ export function SiteHeader(props: SiteHeaderProps) {
               Family
             </span>
           </Link>
-          <SiteNavDesktop />
+          {!isGuest && <SiteNavDesktop />}
         </div>
         <div className="flex items-center gap-1.5">
           <ThemeToggle />
-          <UserMenu {...props} />
+          <UserMenu {...props} isGuest={isGuest} />
         </div>
       </div>
     </header>

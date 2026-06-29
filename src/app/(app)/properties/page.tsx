@@ -1,13 +1,27 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { loadPropertyCards } from "@/lib/properties";
+import { resolveViewer } from "@/lib/guest";
 import { Badge } from "@/components/ui/badge";
 import { Eyebrow, PageIntro } from "@/components/shell";
 
 export const dynamic = "force-dynamic";
 
 export default async function PropertiesPage() {
+  // RLS already scopes this list: a guest only sees properties they've been
+  // granted. We additionally branch the UX for guests (PRD 15 §5).
+  const viewer = await resolveViewer();
+  const isGuest = viewer?.isGuest ?? false;
   const properties = await loadPropertyCards();
+
+  if (isGuest) {
+    // 0 → empty state; 1 → drop them straight onto it; 2+ → scoped list.
+    if (properties.length === 1) {
+      redirect(`/properties/${properties[0]!.slug}`);
+    }
+    return <GuestPropertiesView properties={properties} />;
+  }
 
   // First active property anchors the page; the rest form a supporting strip.
   const [anchor, ...rest] = properties;
@@ -129,6 +143,44 @@ function EmptyState() {
         </Link>
         .
       </p>
+    </div>
+  );
+}
+
+// Guest-scoped properties view. RLS guarantees `properties` already contains
+// only the guest's granted properties; this just frames them (2+ case) or
+// shows a "no access yet" message (0 case — shouldn't happen if invites always
+// carry a grant, but handled).
+function GuestPropertiesView({
+  properties,
+}: {
+  properties: PropertyCardData[];
+}) {
+  return (
+    <div className="flex flex-col gap-12">
+      <PageIntro
+        mode="operations"
+        eyebrow="Your stays"
+        title="Your properties"
+        context="The places you've been given access to. Tap one for details, contacts, and availability."
+      />
+      {properties.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border bg-surface/60 px-10 py-14 text-center">
+          <p className="eyebrow text-accent-bronze">No access yet</p>
+          <p className="mt-3 text-sm text-foreground-muted">
+            You don&apos;t have access to any properties yet. Ask your host to
+            add you to a stay.
+          </p>
+        </div>
+      ) : (
+        <ul className="grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+          {properties.map((p) => (
+            <li key={p.id}>
+              <PropertyCard property={p} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

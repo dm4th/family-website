@@ -100,6 +100,15 @@ export async function setMemberActivation(
     .update({ deactivated_at: deactivate ? new Date().toISOString() : null })
     .eq("id", profileId);
   if (error) throw new Error(error.message);
+
+  // Deactivation must fully lock a user out. is_guest() is activation-agnostic
+  // by design (it can't widen access), so a deactivated guest would still see
+  // their granted property until the grant is gone — revoke all their grants
+  // here. (PRD 15: enforce deactivation separately and bluntly.)
+  if (deactivate) {
+    await supabase.from("property_guests").delete().eq("profile_id", profileId);
+  }
+
   revalidatePath("/admin");
   revalidatePath("/family");
 }
@@ -129,6 +138,16 @@ export async function createInvitation(
       return { status: "error", message: "Pick a role." };
     }
 
+    // Guest invites must carry the property to grant on accept (PRD 15). The
+    // grant is materialized by handle_new_user() on first sign-in.
+    const grantPropertyId = readText(formData, "grant_property_id");
+    if (role === "guest" && !grantPropertyId) {
+      return {
+        status: "error",
+        message: "Pick a property to grant the guest access to.",
+      };
+    }
+
     // 30-day expiry default.
     const expiresAt = new Date(
       Date.now() + 30 * 24 * 60 * 60 * 1000,
@@ -141,6 +160,7 @@ export async function createInvitation(
       status: "pending",
       token: randomUUID(),
       expires_at: expiresAt,
+      grant_property_id: role === "guest" ? grantPropertyId : null,
     });
     if (error) {
       // Surface the unique-pending-per-email collision nicely.
