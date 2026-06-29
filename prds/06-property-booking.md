@@ -141,9 +141,9 @@ End-to-end, on either local dev or prod:
 
 - **Open follow-ups**:
   - ~~**Real Google Calendar integration**~~ — ✅ **shipped 2026-06-23** (token-authenticated feed + subscribe affordances). See [Google Calendar integration — status & plan](#google-calendar-integration--status--plan).
-  - **Real email notifications** (Resend) — the in-app pending panel is fine for tight family use; add transactional emails when there are more than a handful of pending bookings or if family members aren't checking the portal frequently.
+  - ~~**Real email notifications** (Resend)~~ — ✅ **shipped** as [14 — Booking Notifications](14-booking-notifications.md): transactional emails on request / approve / decline / admin-cancel, best-effort and gated on `RESEND_API_KEY`. The in-app pending panel remains as the in-app surface.
   - **Recurring bookings** ("the family always goes the week before Labor Day") — explicitly out of scope for this slice.
-  - **Booking-cancellation visibility for the original requester** — currently they have to revisit the calendar to see the cancellation notes. Surfacing this in-app would benefit from the notifications work above.
+  - **Booking-cancellation visibility for the original requester** — ✅ largely addressed by [14](14-booking-notifications.md): an admin cancelling a member's booking now emails them the cancellation reason. (An in-app surface is still nice-to-have.)
   - **Property access scoping** — gated on the master-plan open decision. If we ever scope properties to family branches, the calendar visibility logic + ICS feed scope checks need to be revisited.
   - **Two-way Google Calendar sync** (Google → us, write-back) — still Phase 2.5+ and out of scope. Note this is distinct from the one-way *live subscription* below, which is the realistic near-term goal.
 

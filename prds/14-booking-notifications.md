@@ -1,7 +1,7 @@
 # 14 — Booking Notifications
 
 **Phase**: 2 (booking polish) · **Depends on**: 06 (booking + calendar shipped)
-**Status**: 🟢 ready
+**Status**: ✅ shipped — transactional **email** (Resend) on all four booking events, best-effort and gated on `RESEND_API_KEY` (no key → log-and-skip, booking still succeeds). Shipped via PR #6. The design context below is retained; see [Implementation](#implementation) for what was actually built and where it deviates from the plan.
 
 > Forces the long-deferred email decision. PRD 06 shipped bookings with **in-app panels only** ("Notifications deferred — Resend never installed"); the master plan's Email row reads "Resend deferred (no current need)." The testing playbook (Session C) surfaced the need: _"send an email to me and to whomever is listed as the admin of a property when a place is booked (auto-approve) and a more urgent email when a place needs approval."_ This PRD wires the first real transactional-email provider and hangs booking notifications off it.
 
@@ -118,4 +118,33 @@ Local dev or prod (set `RESEND_API_KEY` + `BOOKING_EMAIL_FROM` + `NEXT_PUBLIC_SI
 
 ## Implementation
 
-Not started.
+Shipped via PR #6. The recipient *intent* matches the plan; the build deviates from the suggested file layout and the recipient read-path (both flagged below and accepted in review).
+
+- **Dependency**: added `resend` (`^6.x`).
+
+- **Email layer** ([src/lib/email/resend.ts](../src/lib/email/resend.ts)): `sendEmail({ to, subject, html, text, replyTo? })` — lazily memoizes a `Resend` client; returns a discriminated `SendEmailResult` (`ok` / `skipped` (no key or no recipients) / `error`). **Never throws.** `from` comes from `RESEND_FROM_EMAIL`, falling back to Resend's `onboarding@resend.dev` sandbox sender so first-run testing works before the domain is verified.
+
+- **Email shell** ([src/lib/email/layout.ts](../src/lib/email/layout.ts)): one restrained, table-based, inline-styled HTML shell (ivory/ink, single forest CTA — Operations mode) + a matching plaintext renderer. `escapeHtml()` on every interpolated value. Reusable by future emails (invitations).
+
+- **Templates** ([src/lib/email/booking-emails.ts](../src/lib/email/booking-emails.ts)): five pure builders returning `{ subject, html, text }` — `bookingRequestedEmail` (urgent, to admins on pending), `bookingAutoApprovedAdminEmail` (**calm FYI, to admins on auto-approve**), `bookingApprovedEmail` (booker; `autoApproved` flag tweaks the lead), `bookingDeclinedEmail`, `bookingCancelledEmail`. `formatStayRange()` renders the half-open `[start, end)` range honoring PRD 06's **exclusive** `end_date`.
+
+- **Orchestration** ([src/lib/notifications/bookings.ts](../src/lib/notifications/bookings.ts)): `notifyBookingRequested` / `notifyBookingAutoApprovedAdmins` / `notifyBookingApproved` / `notifyBookingDeclined` / `notifyBookingCancelled`. Each takes the request-scoped supabase client + booking facts, self-fetches property + requester, resolves recipients, sends. Every one is try/catch-wrapped and logs on failure — **best-effort by construction**. Admin recipients = `profiles WHERE role='admin'` ∪ `property_admins(profile_id→profiles.email)`, deduped case-insensitively, requester removed (so an admin booking their own dates doesn't email themselves; site admin Dan is included via the `role='admin'` arm).
+
+- **Call sites** ([…/calendar/actions.ts](../src/app/(app)/properties/[slug]/calendar/actions.ts)): fired after `recordRevision()` / before `revalidatePath()`. `createBookingRequest` branches on `initialStatus`: **`approved` → booker confirmation _and_ a calm admin FYI**; `pending` → urgent admin alert. `setBookingDecision` → booker on approve/decline. `cancelBooking` → booker only when `!isOwner && canAdmin`.
+
+### Deviations from the plan (accepted in review)
+
+- **Recipient read path — session reads, not a `SECURITY DEFINER` fn.** The plan recommended a `booking_notification_recipients()` definer function. We instead read recipients under the acting user's session, which works because `profiles` and `property_admins` are both `authenticated read all` — so **no migration and no new secret**. The dependency on that RLS posture (and the definer fn as the escape hatch if it's ever tightened, e.g. by PRD 15) is documented in a header comment in `notifications/bookings.ts`. Reviewer accepted this for now.
+- **File layout** differs from the plan's suggested `src/lib/email.ts` / `src/lib/email-templates/` / `src/lib/booking-emails.ts` — built as `src/lib/email/{resend,layout,booking-emails}.ts` + `src/lib/notifications/bookings.ts`. Functionally equivalent; the plan explicitly allowed adjusting to taste.
+- **Env var naming**: used `RESEND_FROM_EMAIL` (already reserved in `.env.local.example`) rather than the plan's `BOOKING_EMAIL_FROM`.
+- **Reply-To**: admin-facing emails set `reply-to` = the booker (so an admin can reply straight to them); booker-facing emails set none. The plan suggested reply-to = Dan's address; revisit if a single human reply target is wanted (would need a `BOOKING_REPLY_TO` env).
+- **Booker "received, pending" email**: the plan marked this **optional**; not implemented. On the pending path only the admins are emailed. Easy to add later.
+
+- **Verification**: `npm run lint` clean; `npx tsc --noEmit` clean; full `next build` compiles + generates all routes. Email-delivery steps (1–8) require `RESEND_API_KEY` + a verified `mathiesonfamily.app` domain in prod — **not yet provisioned** (the gated layer no-ops until then).
+
+- **Open follow-ups**:
+  - **Provision Resend in prod** — set `RESEND_API_KEY` + `RESEND_FROM_EMAIL`, verify the `mathiesonfamily.app` domain (SPF/DKIM). Until then only the Resend account owner receives mail.
+  - **Pre-trip reminders** ("your stay starts in N days") — needs a Vercel cron + a `notifications_sent` dedup log. Out of scope here; the natural next slice.
+  - **Member-cancels-own → admin FYI** — currently emails no one (admins see it in-app). Could notify admins a slot freed.
+  - **Per-member notification preferences** (`profiles.notify_*`) — none today; add if volume grows.
+  - **`SECURITY DEFINER booking_notification_recipients()`** — the planned read path; adopt if member profile/email visibility is ever restricted.
