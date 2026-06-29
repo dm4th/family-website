@@ -1,7 +1,7 @@
 # 13 — Onboarding & Profile (first-run experience)
 
 **Phase**: 2.5 (adoption) · **Depends on**: 02 (profiles), 05 (photo upload). Image-size work pairs with [17 — Image Performance](17-image-performance.md).
-**Status**: 🟢 ready — **top priority before the family readout.** Came out of the testing pass ([docs/testing-playbook.md](../docs/testing-playbook.md) Session A) as the highest-value cluster: new members currently land as "Unnamed" with no guidance, so the directory is a wall of initials and nobody fills in their profile.
+**Status**: ✅ shipped (2026-06-29) — all four slices: guided `/welcome` first-run flow (gated on `profiles.onboarded_at`), Family Branch dropdown, inline profile photo, and the welcome panel + `/help` guide. New members are routed through onboarding before the app and never see "Unnamed". Migration `20260629000001_onboarding.sql` is additive (column + backfill) but **not yet pushed to prod**.
 
 ---
 
@@ -90,4 +90,48 @@ src/proxy.ts (or the (app) layout)  # redirect incomplete profiles to /welcome
 
 ## Implementation
 
-_Not started. Build first of the post-testing slices. Fill in here when shipped._
+Shipped 2026-06-29 (PR #7). All four slices landed together. No new infrastructure — reuses `PhotoUpload`/`AddPhotosModal`/`PhotoGallery`, `RichTextField`, `setAvatarFromPhoto`, `resolveAvatarUrls`, `SalonPanel`/`PageIntro`, and the existing self-update RLS path.
+
+**Gate + data**
+
+- `supabase/migrations/20260629000001_onboarding.sql` — adds `profiles.onboarded_at timestamptz` (null = not onboarded). **Backfills** `onboarded_at` for existing rows that already have a `full_name`, so established members skip the flow; genuinely blank ("Unnamed") rows stay null and get guided. No new RLS/trigger: `profiles: self update` already permits the write and `guard_profile_privileged_columns()` only blocks `role`/`deactivated_at`.
+- `src/lib/db/schema.ts` — Drizzle mirror (`onboardedAt`).
+- `src/lib/family-branches.ts` — `FAMILY_BRANCHES` constant (`Peter's / Andy's / Peggy's Family`), the single source for the dropdown.
+- `src/lib/display-name.ts` — `displayName()` / `firstNameFromEmail()`; the "never render Unnamed" fallback.
+- `src/lib/profile-photos.ts` — `getProfilePhotos()` (mirrors the profile-detail query) + `avatarStoragePath()`, shared by the inline section.
+
+**Slice 1 — guided first-run flow**
+
+- `src/app/welcome/{page.tsx,welcome-flow.tsx,actions.ts}` — a focused, nav-less `/welcome` (outside the `(app)` group). Name + family **required**, photo + bio optional. `completeOnboarding()` stamps `onboarded_at` and redirects to `/?welcome=1`; `skipOnboarding()` ("Finish later") stamps `onboarded_at` only so the member isn't trapped.
+- `src/app/(app)/layout.tsx` — the redirect gate: `onboarded_at is null` → `/welcome`. Lives in the layout (not `proxy.ts`) so it's a single indexed read on an already-DB-touching path; `/welcome` sits outside `(app)` so it can't loop.
+
+**Slice 2 — Family Branch dropdown**
+
+- `src/components/family-branch-select.tsx` — native `<select>` styled like `Input` (iPad-friendly, zero extra JS); surfaces an unknown legacy value as a selectable option so a save never silently drops it. Used on profile-edit and in `/welcome`.
+
+**Slice 3 — inline profile photo**
+
+- `src/components/profile-photos-section.tsx` — server component pairing `AddPhotosModal` + `PhotoGallery` (with `canSetAvatar`). Embedded on `src/app/(app)/profile/edit/page.tsx` (and reused as the `/welcome` photo step), so photos are managed without leaving the page. The "Manage your photos →" link was replaced with "View your profile →".
+- "Unnamed" replaced via `displayName()` in `src/app/(app)/family/page.tsx` and `family/[id]/page.tsx` (own blank profile shows an "Add your name" CTA).
+
+**Slice 4 — welcome panel + `/help`**
+
+- `src/components/welcome-panel.tsx` — now gated on `?welcome=1` (the post-onboarding landing), not on `onboarded_at` (the flow sets that). Dismiss strips the query param client-side; no DB write.
+- `src/components/profile-nudge.tsx` — soft, session-dismissible banner on the dashboard for "Finish later" members with no name yet.
+- `src/app/(app)/help/{page.tsx,help-content.ts}` — plain-language guide via `Markdown` (salon tone); linked from the user menu and the welcome panel; honest about the no-booking-notifications gap (see [14 — Booking Notifications](14-booking-notifications.md)).
+
+**Decisions made during build**
+
+- **Redirect gate in the layout, `/welcome` outside `(app)`** — avoids a loop without special-casing paths in middleware, and keeps the flow nav-less/focused.
+- **Backfill instead of a runtime "has a name?" check** — one-time migration write means the gate is a clean `onboarded_at is null`, and existing members aren't dragged through onboarding.
+- **"Finish later" is honored** — it stamps `onboarded_at` so the gate doesn't re-trap them; the dashboard nudge (name-only trigger, so established members aren't nagged) keeps it visible.
+- **No `Select` primitive added** — a styled native `<select>` is enough for 3 values and is the better touch control.
+
+**Verification** — `tsc --noEmit`, `eslint`, and `npm run build` all clean; `/welcome` and `/help` register as dynamic routes. Recipe items 1–6 covered in code; live walk-through pending the prod migration.
+
+**Follow-ups**
+
+- **Migration not yet applied to prod** — `supabase db push` still needs to run (additive: column + backfill).
+- Title Case sweep of older copy is [16 — UI Polish & Copy](16-ui-polish-copy.md); new copy here is already Title Case.
+- Real image downscaling on upload is [17 — Image Performance](17-image-performance.md); this slice surfaces the inline uploader but doesn't downscale.
+- `displayName()` fallback is name-or-"Member" (directory/profile don't select email); wire email through if first-name-from-email is wanted there too. Admin tables still show "Unnamed" (out of family-facing scope).

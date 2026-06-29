@@ -3,6 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { Eyebrow, SectionRule } from "@/components/shell";
+import { WelcomePanel } from "@/components/welcome-panel";
+import { ProfileNudge } from "@/components/profile-nudge";
 
 type Mode = "family" | "operations" | "advisory";
 
@@ -24,23 +26,44 @@ type ComingSoon = {
 
 export const dynamic = "force-dynamic";
 
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Two cheap counts so the gateways show signal instead of static copy.
-  const [{ count: memberCount }, { count: propertyCount }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .is("deactivated_at", null),
-    supabase
-      .from("properties")
-      .select("id", { count: "exact", head: true })
-      .neq("status", "inactive"),
-  ]);
+  // Two cheap counts so the gateways show signal instead of static copy, plus
+  // the caller's name/branch so we can nudge an incomplete profile.
+  const [{ count: memberCount }, { count: propertyCount }, ownProfile] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .is("deactivated_at", null),
+      supabase
+        .from("properties")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "inactive"),
+      user
+        ? supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+  // The welcome panel is the celebratory landing right after finishing the
+  // guided flow (?welcome=1). The nudge is the gentle follow-up for someone who
+  // chose "finish later" and still has no name — the real "Unnamed" case. We
+  // gate on name only (not branch) so established members who were backfilled as
+  // onboarded but never set a branch aren't nagged.
+  const justOnboarded = (await searchParams)?.welcome === "1";
+  const needsProfile = Boolean(user) && !ownProfile?.data?.full_name?.trim();
 
   const firstName =
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
@@ -121,6 +144,12 @@ export default async function Dashboard() {
 
   return (
     <div className="flex flex-col gap-16">
+      {/* Just finished onboarding → celebratory orientation panel. */}
+      {justOnboarded && <WelcomePanel firstName={firstName} />}
+
+      {/* Skipped onboarding with a blank profile → soft, dismissible nudge. */}
+      {!justOnboarded && needsProfile && <ProfileNudge />}
+
       {/* Opening statement — date, greeting, mood. Not a KPI wall. */}
       <header className="flex flex-col gap-3">
         <p className="eyebrow text-foreground-subtle">{today}</p>

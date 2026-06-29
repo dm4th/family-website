@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
+import { displayName } from "@/lib/display-name";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { PageIntro, SectionRule } from "@/components/shell";
 
@@ -89,14 +90,14 @@ export default async function FamilyDirectoryPage() {
                       className="group flex items-center gap-4 rounded-md py-2 transition-colors hover:bg-surface/60"
                     >
                       <ProfileAvatar
-                        name={p.full_name}
+                        name={displayName(p.full_name)}
                         src={avatarUrls.get(p.id) ?? null}
                         size="lg"
                         variant="ring"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="font-display text-lg leading-tight text-foreground transition-colors group-hover:text-accent-family">
-                          {p.full_name ?? "Unnamed"}
+                          {displayName(p.full_name)}
                         </div>
                         <div className="mt-1 truncate text-xs text-foreground-subtle">
                           {[p.family_branch, p.relationship_notes]
