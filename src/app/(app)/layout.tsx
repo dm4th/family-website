@@ -18,6 +18,19 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  // First-run gate (PRD 13): members who haven't been through the guided flow
+  // (onboarded_at is null) are routed to /welcome before they see the app. That
+  // route lives outside this (app) layout, so this can't loop. Existing named
+  // members were backfilled as onboarded by the migration, so they skip it.
+  const { data: onboarding } = await supabase
+    .from("profiles")
+    .select("onboarded_at")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (onboarding && !onboarding.onboarded_at) {
+    redirect("/welcome");
+  }
+
   const displayName =
     (user.user_metadata?.full_name as string | undefined) ??
     (user.user_metadata?.name as string | undefined) ??

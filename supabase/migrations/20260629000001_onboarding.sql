@@ -22,4 +22,14 @@ alter table public.profiles
   add column if not exists onboarded_at timestamptz;
 
 comment on column public.profiles.onboarded_at is
-  'When the member dismissed the first-login welcome panel. Null = not yet welcomed (show it).';
+  'When the member finished (or skipped) the guided first-run flow. Null = not yet onboarded → route them to /welcome.';
+
+-- Backfill: existing members who already have a name are effectively onboarded,
+-- so they skip the guided flow and the welcome panel. Genuinely blank profiles
+-- (full_name null — the "Unnamed" rows the testing pass flagged) keep
+-- onboarded_at null and get guided through /welcome on their next login.
+update public.profiles
+   set onboarded_at = coalesce(updated_at, created_at, now())
+ where full_name is not null
+   and btrim(full_name) <> ''
+   and onboarded_at is null;

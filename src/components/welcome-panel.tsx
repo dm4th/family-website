@@ -2,22 +2,22 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SalonPanel, PanelEyebrow } from "@/components/shell";
-import { dismissWelcome } from "@/app/(app)/actions";
 
 /**
- * First-login welcome — the one-screen orientation a family member sees the
- * first time they land on the dashboard (gated on profiles.onboarded_at being
- * null; see PRD 13). Family-mode SalonPanel: warm, short, image of restraint.
+ * Post-onboarding welcome — the celebratory landing a family member sees right
+ * after finishing the guided /welcome flow (the dashboard renders it when
+ * ?welcome=1; see PRD 13, slice 4). Family-mode SalonPanel: warm, short.
  *
  * It points at the four things that matter — find people, look after a place,
- * book a stay, add a photo — plus the always-available /help guide. Dismissing
- * stamps onboarded_at server-side so it stays gone everywhere; we also hide it
- * optimistically so the tap feels instant.
+ * book a stay, add a photo — plus the always-available /help guide. onboarded_at
+ * is already stamped by the flow, so dismissing is purely cosmetic: hide it and
+ * strip the ?welcome=1 marker so a refresh doesn't bring it back.
  */
 
 type Starter = {
@@ -51,15 +51,14 @@ const STARTERS: Starter[] = [
 
 export function WelcomePanel({ firstName }: { firstName: string }) {
   const [dismissed, setDismissed] = React.useState(false);
-  const [, startTransition] = React.useTransition();
+  const router = useRouter();
 
   if (dismissed) return null;
 
   function dismiss() {
     setDismissed(true);
-    startTransition(() => {
-      void dismissWelcome();
-    });
+    // Drop the ?welcome=1 marker so reloading the dashboard doesn't re-show it.
+    router.replace("/", { scroll: false });
   }
 
   return (
