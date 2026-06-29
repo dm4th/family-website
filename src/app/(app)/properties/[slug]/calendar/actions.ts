@@ -13,6 +13,7 @@ import {
 } from "@/lib/bookings";
 import {
   notifyBookingApproved,
+  notifyBookingAutoApprovedAdmins,
   notifyBookingCancelled,
   notifyBookingDeclined,
   notifyBookingRequested,
@@ -161,8 +162,10 @@ export async function createBookingRequest(
     },
   });
 
-  // Best-effort notifications (never block the booking): a pending request
-  // alerts the property's admins; an auto-approved one confirms the requester.
+  // Best-effort notifications (never block the booking):
+  //  - auto-approved → confirm the booker AND send a calm FYI to the property
+  //    admins + site admin (the family's explicit ask).
+  //  - pending → urgently alert the property admins + site admin to act.
   const notifyInput = {
     bookingId: inserted.id,
     propertyId,
@@ -174,6 +177,7 @@ export async function createBookingRequest(
   };
   if (initialStatus === "approved") {
     await notifyBookingApproved(supabase, notifyInput, { autoApproved: true });
+    await notifyBookingAutoApprovedAdmins(supabase, notifyInput);
   } else {
     await notifyBookingRequested(supabase, notifyInput);
   }

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email/resend";
 import {
   bookingApprovedEmail,
+  bookingAutoApprovedAdminEmail,
   bookingCancelledEmail,
   bookingDeclinedEmail,
   bookingRequestedEmail,
@@ -22,6 +23,18 @@ import { getSiteOrigin } from "@/lib/ics";
  * passed in), which is sufficient because `profiles` and `property_admins` are
  * both "authenticated read all" — so no service-role key is required, matching
  * this project's no-secret-key constraint.
+ *
+ * DEPENDENCY — read before tightening RLS: this layer assumes a booking action's
+ * session can read every recipient's `profiles.email` and the `property_admins`
+ * rows for the property. If a future change restricts member visibility of other
+ * members' profiles/emails (e.g. PRD 15 guest access, or per-branch profile
+ * scoping), these reads will silently return fewer rows and notifications will
+ * quietly stop reaching some recipients. The fix at that point is the
+ * `SECURITY DEFINER booking_notification_recipients(p_booking_id)` function
+ * PRD 14 specced (same pattern as `ics_bookings_for_token()`), which returns the
+ * exact recipient set regardless of the caller's RLS. We deferred it because the
+ * session read works today and survives PRD 15 (guests don't book; members keep
+ * full profile read) — but it is the designated escape hatch.
  */
 
 // Minimal client shape — we only ever call `.from(...).select(...)`.
@@ -171,6 +184,49 @@ export async function notifyBookingRequested(
     });
   } catch (err) {
     console.error("[notify] booking-requested failed:", err);
+  }
+}
+
+/**
+ * A request auto-approved → send a CALM FYI to the property's admins + the site
+ * admin (the booker gets their own confirmation via `notifyBookingApproved`).
+ * The family's explicit ask: "email me and the property admin when a place is
+ * booked." `loadPropertyAdminEmails` already returns site-admins ∪ property-
+ * admins, so Dan (a site admin) is included.
+ */
+export async function notifyBookingAutoApprovedAdmins(
+  supabase: Client,
+  input: BookingNotificationInput,
+): Promise<void> {
+  try {
+    const [property, requester] = await Promise.all([
+      loadProperty(supabase, input.propertyId),
+      loadProfile(supabase, input.requestedBy),
+    ]);
+    if (!property) return;
+    const admins = await loadPropertyAdminEmails(
+      supabase,
+      input.propertyId,
+      input.requestedBy,
+    );
+    if (admins.length === 0) return;
+
+    const ctx = buildContext(
+      property,
+      requester?.name ?? "A family member",
+      await calendarUrl(property.slug),
+      input,
+    );
+    const email = bookingAutoApprovedAdminEmail(ctx);
+    await sendEmail({
+      to: admins,
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+      replyTo: requester?.email ?? undefined,
+    });
+  } catch (err) {
+    console.error("[notify] booking-auto-approved-admins failed:", err);
   }
 }
 

@@ -119,6 +119,33 @@ export function bookingApprovedEmail(
   };
 }
 
+/**
+ * To property admins + the site admin: a booking auto-approved (open, off-peak
+ * dates, no conflict) so no one had to act. Deliberately CALM — distinct from
+ * the urgent `bookingRequestedEmail` — because it's an FYI, not a task.
+ */
+export function bookingAutoApprovedAdminEmail(
+  ctx: BookingEmailContext,
+): RenderedEmail {
+  const stay = formatStayRange(ctx.startDate, ctx.endDate);
+  const heading = `Booked — ${ctx.propertyName}`;
+  const content = {
+    preview: `${ctx.requesterName} booked ${ctx.propertyName} (${stay})`,
+    heading,
+    paragraphs: [
+      `${ctx.requesterName} booked ${ctx.propertyName}. These dates were open and outside any peak period, so it was confirmed automatically.`,
+      "No action needed — just so you know. Open the calendar if you'd like to see the details.",
+    ],
+    details: baseDetails(ctx),
+    cta: { label: "View on the calendar", url: ctx.calendarUrl },
+  };
+  return {
+    subject: heading,
+    html: renderEmailHtml(content),
+    text: renderEmailText(content),
+  };
+}
+
 /** To the requester: their request was declined by an admin. */
 export function bookingDeclinedEmail(
   ctx: BookingEmailContext,
