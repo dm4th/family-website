@@ -71,6 +71,7 @@ function AnchorCard({ property }: { property: PropertyCardData }) {
             alt={property.name}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.015]"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-foreground-subtle">
@@ -107,6 +108,7 @@ function PropertyCard({ property }: { property: PropertyCardData }) {
             alt={property.name}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.02]"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-foreground-subtle">

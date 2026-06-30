@@ -49,6 +49,8 @@ export default async function PropertyDetailPage({
     .eq("property_id", property.id)
     .order("created_at", { ascending: false });
 
+  // Thumb rendition: the gallery strip uses the small `signedUrl`; the hero
+  // (below) reads `fallbackUrl` (the full object) for the large 21:9 frame.
   const signedPhotos = await withSignedUrls(
     (photoRows ?? []).map((p) => ({
       id: p.id,
@@ -56,6 +58,7 @@ export default async function PropertyDetailPage({
       caption: p.caption,
       uploadedBy: p.uploaded_by,
     })),
+    "thumb",
   );
 
   // Contacts in display order.
@@ -135,9 +138,10 @@ export default async function PropertyDetailPage({
         <figure className="group relative aspect-[21/9] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={heroPhoto.signedUrl}
+            src={heroPhoto.fallbackUrl ?? heroPhoto.signedUrl}
             alt={heroPhoto.caption ?? property.name}
             className="absolute inset-0 h-full w-full object-cover"
+            decoding="async"
           />
           {property.status !== "active" && (
             <Badge variant="status" className="absolute right-4 top-4">

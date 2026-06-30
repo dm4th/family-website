@@ -12,6 +12,8 @@ export type GalleryPhoto = {
   storagePath: string;
   caption: string | null;
   signedUrl: string;
+  /** Full-size object; featured tile renders this, grid tiles fall back to it. */
+  fallbackUrl?: string;
   uploadedBy: string | null;
 };
 
@@ -94,6 +96,46 @@ export function PhotoGallery({
   );
 }
 
+/**
+ * A gallery <img> that swaps to a full-size fallback if its (thumbnail) source
+ * fails to load. Plain <img> on purpose — signed URLs rotate per request, which
+ * is incompatible with next/image's URL-keyed optimizer (see PRD 17).
+ */
+function TileImg({
+  src,
+  fallbackSrc,
+  alt,
+  eager,
+}: {
+  src: string;
+  fallbackSrc: string | null;
+  alt: string;
+  eager: boolean;
+}) {
+  // Reset to the (new) src when it changes — signed URLs rotate per request, so
+  // a remount-less prop change should drop any prior onError fallback. Adjusting
+  // state during render is the React-blessed alternative to a setState effect.
+  const [current, setCurrent] = useState(src);
+  const [seenSrc, setSeenSrc] = useState(src);
+  if (src !== seenSrc) {
+    setSeenSrc(src);
+    setCurrent(src);
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={current}
+      alt={alt}
+      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+      loading={eager ? "eager" : "lazy"}
+      decoding="async"
+      onError={() => {
+        if (fallbackSrc && current !== fallbackSrc) setCurrent(fallbackSrc);
+      }}
+    />
+  );
+}
+
 function Tile({
   photo,
   isAvatar,
@@ -121,12 +163,14 @@ function Tile({
             : "aspect-square")
         }
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.signedUrl}
+        <TileImg
+          // Featured tile anchors the gallery — render the full object. Grid
+          // tiles use the small thumb and fall back to the full object on error
+          // (e.g. a photo without a generated thumbnail).
+          src={featured ? photo.fallbackUrl ?? photo.signedUrl : photo.signedUrl}
+          fallbackSrc={featured ? null : photo.fallbackUrl ?? null}
           alt={photo.caption ?? "Family photo"}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-          loading="lazy"
+          eager={featured}
         />
         {isAvatar && (
           <Badge variant="status" className="absolute left-3 top-3">

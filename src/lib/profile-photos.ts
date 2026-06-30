@@ -11,6 +11,7 @@ export type ProfilePhoto = {
   storagePath: string;
   caption: string | null;
   signedUrl: string;
+  fallbackUrl?: string;
   uploadedBy: string | null;
 };
 
@@ -54,6 +55,7 @@ export async function getProfilePhotos(
       caption: p.caption,
       uploadedBy: p.uploaded_by,
     })),
+    "thumb",
   );
 }
 
