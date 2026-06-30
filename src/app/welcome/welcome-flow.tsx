@@ -5,6 +5,8 @@ import { useActionState } from "react";
 
 import { RichTextField } from "@/components/authoring";
 import { FamilyBranchSelect } from "@/components/family-branch-select";
+import { GenerationSelect } from "@/components/generation-select";
+import { GENERATION_HINT } from "@/lib/generations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,12 +29,18 @@ export function WelcomeFlow({
   greetingName,
   defaultFullName,
   defaultFamilyBranch,
+  defaultGeneration,
+  defaultPhone,
+  defaultRelationshipNotes,
   defaultBio,
   photoSlot,
 }: {
   greetingName: string;
   defaultFullName: string | null;
   defaultFamilyBranch: string | null;
+  defaultGeneration: number | null;
+  defaultPhone: string | null;
+  defaultRelationshipNotes: string | null;
   defaultBio: string | null;
   photoSlot: React.ReactNode;
 }) {
@@ -53,7 +61,7 @@ export function WelcomeFlow({
           </h1>
           <p className="max-w-prose text-sm leading-relaxed text-foreground-muted">
             This is the family&apos;s private site, a place to keep up with
-            each other and our shared homes. Just two quick things and
+            each other and our shared homes. A few quick details and
             you&apos;re in. You can change any of it later.
           </p>
         </header>
@@ -82,6 +90,41 @@ export function WelcomeFlow({
             <FamilyBranchSelect
               defaultValue={defaultFamilyBranch}
               required
+            />
+          </Field>
+
+          <Field
+            label="Your generation"
+            htmlFor="generation"
+            hint={GENERATION_HINT}
+          >
+            <GenerationSelect defaultValue={defaultGeneration} required />
+          </Field>
+
+          <Field
+            label="Phone"
+            htmlFor="phone"
+            hint="Optional: so the family can reach you."
+          >
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              defaultValue={defaultPhone ?? ""}
+              placeholder="e.g., (555) 123-4567"
+            />
+          </Field>
+
+          <Field
+            label="Relationship notes"
+            htmlFor="relationship_notes"
+            hint='Optional: e.g., "spouse of Sarah", "son of Peter & Mary".'
+          >
+            <Input
+              id="relationship_notes"
+              name="relationship_notes"
+              defaultValue={defaultRelationshipNotes ?? ""}
             />
           </Field>
 

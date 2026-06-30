@@ -19,7 +19,9 @@ export default async function WelcomePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, family_branch, bio, avatar_url, onboarded_at")
+    .select(
+      "id, full_name, family_branch, generation, phone, relationship_notes, bio, avatar_url, onboarded_at",
+    )
     .eq("id", user.id)
     .single();
 
@@ -42,6 +44,9 @@ export default async function WelcomePage() {
         greetingName={greetingName}
         defaultFullName={profile.full_name}
         defaultFamilyBranch={profile.family_branch}
+        defaultGeneration={profile.generation}
+        defaultPhone={profile.phone}
+        defaultRelationshipNotes={profile.relationship_notes}
         defaultBio={profile.bio}
         photoSlot={
           <ProfilePhotosSection

@@ -5,6 +5,8 @@ import { useActionState } from "react";
 
 import { RichTextField } from "@/components/authoring";
 import { FamilyBranchSelect } from "@/components/family-branch-select";
+import { GenerationSelect } from "@/components/generation-select";
+import { GENERATION_HINT } from "@/lib/generations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,20 +52,8 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
         <FamilyBranchSelect defaultValue={profile.familyBranch} />
       </Field>
 
-      <Field
-        label="Generation"
-        htmlFor="generation"
-        hint="1 = siblings, 2 = grandchildren + spouses, 3 = great-grandchildren."
-      >
-        <Input
-          id="generation"
-          name="generation"
-          type="number"
-          min={1}
-          max={5}
-          defaultValue={profile.generation ?? ""}
-          className="max-w-[6rem]"
-        />
+      <Field label="Generation" htmlFor="generation" hint={GENERATION_HINT}>
+        <GenerationSelect defaultValue={profile.generation} />
       </Field>
 
       <Field

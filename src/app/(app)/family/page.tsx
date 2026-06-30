@@ -3,6 +3,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
 import { displayName } from "@/lib/display-name";
+import {
+  generationLabel,
+  GENERATION_UNSET_LABEL,
+} from "@/lib/generations";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { PageIntro, SectionRule } from "@/components/shell";
 
@@ -16,14 +20,6 @@ type DirectoryProfile = {
   generation: number | null;
   relationship_notes: string | null;
   bio: string | null;
-};
-
-const GENERATION_LABEL: Record<number, string> = {
-  1: "First Generation",
-  2: "Second Generation",
-  3: "Third Generation",
-  4: "Fourth Generation",
-  5: "Fifth Generation",
 };
 
 export default async function FamilyDirectoryPage() {
@@ -77,8 +73,8 @@ export default async function FamilyDirectoryPage() {
               <header className="flex items-baseline justify-between gap-4">
                 <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
                   {generation
-                    ? GENERATION_LABEL[generation] ?? `Generation ${generation}`
-                    : "Generation Not Set"}
+                    ? generationLabel(generation)
+                    : GENERATION_UNSET_LABEL}
                 </h2>
                 <span className="eyebrow text-foreground-subtle">
                   {members.length} {members.length === 1 ? "Member" : "Members"}
