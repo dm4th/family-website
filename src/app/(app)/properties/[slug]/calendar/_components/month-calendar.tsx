@@ -20,15 +20,26 @@ export type CalendarBand = {
   label?: string;
 };
 
+/**
+ * A range selection in progress or complete. Both bounds are INCLUSIVE stay
+ * nights (start = arrive, end = last night). `end` is null after the first tap
+ * (Arrive chosen) and stays null until the second tap sets the last night — so
+ * the parent can render "Last night" blank until the stay is fully picked.
+ */
+export type DateSelection = { start: string; end: string | null };
+
 type Props = {
   initialMonth?: Date;
   bands: CalendarBand[];
   /**
-   * When provided, the calendar supports click-and-drag range selection
-   * and reports the selection back via this callback.
+   * When provided, the calendar becomes a two-tap range picker (touch-first):
+   * the first tap sets Arrive (`{start, end: null}`), the second tap on or
+   * after Arrive completes the stay (`{start, end}`). A tap before Arrive
+   * restarts the selection. The component is controlled — it reports each step
+   * via this callback and renders from the `selection` prop.
    */
-  onSelect?: (range: { start: string; end: string } | null) => void;
-  selection?: { start: string; end: string } | null;
+  onSelect?: (range: DateSelection | null) => void;
+  selection?: DateSelection | null;
   /**
    * Treat each cell as a button that navigates to the booking detail when
    * clicked. Used on the unified calendar where there's no form.
@@ -54,9 +65,8 @@ function fromIso(iso: string): Date {
 }
 
 function eachDayInclusive(start: Date, end: Date): Date[] {
-  // Inclusive [start, end] — used for the visible month grid and the
-  // user's drag-selection paint (paint every cell from drag-start to
-  // drag-end). NOT used for booking bands; see eachStayNight.
+  // Inclusive [start, end] — used to lay out the visible month grid. NOT used
+  // for booking bands; see eachStayNight.
   const days: Date[] = [];
   const cur = new Date(start);
   cur.setHours(0, 0, 0, 0);
@@ -98,8 +108,6 @@ export function MonthCalendar({
   const [viewMonth, setViewMonth] = useState<Date>(
     () => startOfMonth(initialMonth ?? new Date()),
   );
-  const [dragStart, setDragStart] = useState<string | null>(null);
-  const [dragEnd, setDragEnd] = useState<string | null>(null);
 
   const gridStart = startOfWeek(viewMonth, { weekStartsOn: 0 });
   const gridEnd = endOfWeek(endOfMonth(viewMonth), { weekStartsOn: 0 });
@@ -123,29 +131,30 @@ export function MonthCalendar({
     return map;
   }, [bands]);
 
-  const activeSelection = useMemo(() => {
-    if (dragStart && dragEnd) {
-      const [a, b] = [dragStart, dragEnd].sort();
-      return { start: a, end: b };
-    }
-    return selection ?? null;
-  }, [dragStart, dragEnd, selection]);
+  // The picker is fully controlled by `selection`. `awaitingLastNight` is true
+  // between the first and second tap, so we can prompt for the last night.
+  const awaitingLastNight = !!selection && selection.end === null;
 
-  function onCellMouseDown(iso: string) {
+  // Tap-to-select (works on touch and desktop). One tap never commits a stay
+  // on its own — it only sets Arrive — so an accidental tap can't silently
+  // book a one-night stay. The second tap completes the range.
+  function onCellClick(iso: string) {
     if (!onSelect) return;
-    setDragStart(iso);
-    setDragEnd(iso);
+    if (!selection || selection.end !== null) {
+      // Nothing pending, or a complete stay already exists → start fresh.
+      onSelect({ start: iso, end: null });
+    } else if (iso < selection.start) {
+      // Tapped before Arrive → treat as a new, earlier Arrive (restart).
+      onSelect({ start: iso, end: null });
+    } else {
+      // Second tap on/after Arrive → commit the stay. Tapping the same day
+      // twice is the deliberate one-night stay (arrive == last night).
+      onSelect({ start: selection.start, end: iso });
+    }
   }
-  function onCellMouseEnter(iso: string) {
-    if (!onSelect || !dragStart) return;
-    setDragEnd(iso);
-  }
-  function onCellMouseUp() {
-    if (!onSelect || !dragStart || !dragEnd) return;
-    const [a, b] = [dragStart, dragEnd].sort();
-    onSelect({ start: a, end: b });
-    setDragStart(null);
-    setDragEnd(null);
+
+  function clearSelection() {
+    onSelect?.(null);
   }
 
   function jumpMonths(delta: number) {
@@ -153,21 +162,14 @@ export function MonthCalendar({
   }
 
   function inSelection(iso: string): boolean {
-    if (!activeSelection) return false;
-    return iso >= activeSelection.start && iso <= activeSelection.end;
+    if (!selection) return false;
+    // While awaiting the last night, only the Arrive cell is highlighted.
+    const end = selection.end ?? selection.start;
+    return iso >= selection.start && iso <= end;
   }
 
   return (
-    <div
-      className="flex flex-col gap-4 select-none"
-      onMouseLeave={() => {
-        if (dragStart) {
-          // Cancel an in-flight drag if the cursor exits the grid.
-          setDragStart(null);
-          setDragEnd(null);
-        }
-      }}
-    >
+    <div className="flex flex-col gap-4 select-none">
       <header className="flex items-center justify-between">
         <button
           type="button"
@@ -263,9 +265,7 @@ export function MonthCalendar({
             <button
               key={iso}
               type="button"
-              onMouseDown={() => onCellMouseDown(iso)}
-              onMouseEnter={() => onCellMouseEnter(iso)}
-              onMouseUp={onCellMouseUp}
+              onClick={() => onCellClick(iso)}
               className={className}
               disabled={!onSelect}
             >
@@ -274,6 +274,25 @@ export function MonthCalendar({
           );
         })}
       </div>
+
+      {onSelect && (
+        <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-foreground-subtle">
+            {awaitingLastNight
+              ? `Arrive ${format(fromIso(selection!.start), "MMM d")} selected. Now tap your last night.`
+              : "Tap your arrival day, then tap your last night."}
+          </p>
+          {selection && (
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="text-xs text-foreground-muted underline-offset-4 hover:underline"
+            >
+              Start Over
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

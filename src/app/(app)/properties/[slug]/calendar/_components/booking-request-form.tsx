@@ -12,7 +12,11 @@ import {
   createBookingRequest,
   type BookingActionState,
 } from "../actions";
-import { MonthCalendar, type CalendarBand } from "./month-calendar";
+import {
+  MonthCalendar,
+  type CalendarBand,
+  type DateSelection,
+} from "./month-calendar";
 
 const initial: BookingActionState = { status: "idle" };
 
@@ -27,11 +31,11 @@ type Props = {
   pendingBands: { startIso: string; endIso: string }[];
 };
 
-// The form's internal `range` state holds the user's nights INCLUSIVE
-// (start = first stay night, end = last stay night). That matches how the
-// calendar drag feels: you paint every cell you'll be there. At submit
-// time we convert end to the EXCLUSIVE checkout day to match the storage
-// model (end_date = checkout).
+// `selection` mirrors the calendar's two-tap state: `start` (arrive) is set on
+// the first tap, `end` (last stay night, INCLUSIVE) stays null until the second
+// tap. We only treat the dates as a submittable `range` once both are set. At
+// submit time we convert end to the EXCLUSIVE checkout day to match the storage
+// model (end_date = checkout) — this keeps the btree_gist overlap guard intact.
 
 function parseMonthDay(s: string): { month: number; day: number } | null {
   const m = /^(\d{2})-(\d{2})$/.exec(s);
@@ -113,10 +117,22 @@ export function BookingRequestForm({
 }: Props) {
   const action = createBookingRequest.bind(null, propertyId);
   const [state, formAction, isPending] = useActionState(action, initial);
-  // `range` is INCLUSIVE — end is the last stay night, not checkout.
-  const [range, setRange] = useState<{ start: string; end: string } | null>(
-    null,
+  // Two-tap selection from the calendar. `end` is null until the last night
+  // is picked (first tap sets Arrive only).
+  const [selection, setSelection] = useState<DateSelection | null>(null);
+
+  // A complete, submittable stay — both arrive and last night chosen. All the
+  // downstream math (nights, peak gating, conflicts, hidden inputs) runs off
+  // this so a half-finished selection can never submit. Memoized so the
+  // dependent useMemos below keep a stable reference between renders.
+  const range = useMemo(
+    () =>
+      selection && selection.end !== null
+        ? { start: selection.start, end: selection.end }
+        : null,
+    [selection],
   );
+  const awaitingLastNight = !!selection && selection.end === null;
 
   // Exclusive checkout = last stay night + 1 day. This is what we submit.
   const exclusiveEnd = range ? addDaysIso(range.end, 1) : "";
@@ -154,8 +170,8 @@ export function BookingRequestForm({
     <div className="flex flex-col gap-6">
       <MonthCalendar
         bands={bands}
-        selection={range}
-        onSelect={(r) => setRange(r)}
+        selection={selection}
+        onSelect={(r) => setSelection(r)}
       />
 
       <form action={formAction} className="flex flex-col gap-4">
@@ -174,11 +190,11 @@ export function BookingRequestForm({
             <Input
               id="bk-start"
               type="date"
-              value={range?.start ?? ""}
+              value={selection?.start ?? ""}
               onChange={(e) =>
-                setRange((r) => ({
+                setSelection((s) => ({
                   start: e.target.value,
-                  end: r?.end ?? e.target.value,
+                  end: s?.end ?? null,
                 }))
               }
               required
@@ -194,10 +210,10 @@ export function BookingRequestForm({
             <Input
               id="bk-end"
               type="date"
-              value={range?.end ?? ""}
+              value={selection?.end ?? ""}
               onChange={(e) =>
-                setRange((r) => ({
-                  start: r?.start ?? e.target.value,
+                setSelection((s) => ({
+                  start: s?.start ?? e.target.value,
                   end: e.target.value,
                 }))
               }
@@ -211,6 +227,12 @@ export function BookingRequestForm({
             {nights} night{nights === 1 ? "" : "s"} · arrive{" "}
             {formatHumanDate(range.start)}, depart{" "}
             {formatHumanDate(exclusiveEnd)}
+          </p>
+        )}
+        {awaitingLastNight && (
+          <p className="text-xs text-foreground-subtle">
+            Arrive {formatHumanDate(selection!.start)} selected. Pick your last
+            night to finish.
           </p>
         )}
 

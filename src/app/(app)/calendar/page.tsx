@@ -106,6 +106,18 @@ export default async function UnifiedCalendarPage() {
         context="Color-coded across every family property."
       />
 
+      {feedLinks && (
+        <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
+          <Eyebrow className="mb-3">Subscribe to your bookings</Eyebrow>
+          <SubscribeToCalendar
+            links={feedLinks}
+            blurb="Add all your approved bookings, across every property, to your personal calendar. Apps refresh every few hours, so new bookings aren't instant."
+          />
+        </LedgerPanel>
+      )}
+
+      <MonthCalendar bands={bands} />
+
       <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
         <div className="flex flex-wrap items-center gap-4">
           <Eyebrow>Legend</Eyebrow>
@@ -129,18 +141,6 @@ export default async function UnifiedCalendarPage() {
           </ul>
         </div>
       </LedgerPanel>
-
-      {feedLinks && (
-        <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
-          <Eyebrow className="mb-3">Subscribe to your bookings</Eyebrow>
-          <SubscribeToCalendar
-            links={feedLinks}
-            blurb="Add all your approved bookings, across every property, to your personal calendar. Apps refresh every few hours, so new bookings aren't instant."
-          />
-        </LedgerPanel>
-      )}
-
-      <MonthCalendar bands={bands} />
 
       <section className="flex flex-col gap-4">
         <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
