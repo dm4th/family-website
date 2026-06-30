@@ -220,3 +220,52 @@ End-to-end, on either local dev or prod:
   - **Set `NEXT_PUBLIC_SITE_URL` in prod.** `getSiteOrigin()` falls back to the (spoofable) `x-forwarded-host` header when it's unset; this only affects the feed link shown to the owner, but pin it to be safe.
   - **Reset link is per-page only via `router.refresh()`** — a member subscribed on multiple devices must re-add the feed after a reset (expected for a secret rotation).
   - **No rate-limiting on the token feed** — a leaked URL grants read until rotated. Fine for family scale; revisit if the portal opens wider.
+
+---
+
+## Round 2 — testing feedback (2026-06-30)
+
+The round-2 walk-through ([docs/testing-playbook-round-2.md](../docs/testing-playbook-round-2.md), Session C) flagged two booking-calendar UX issues. Auto-approve / pending gating, the legend content, and ICS titles all passed.
+
+### Follow-up slice 06-R2 — touch-first two-tap date selection + legend placement · ✅ shipped · own PR
+
+**Problem 1 (the jarring one).** The month picker uses **click-and-drag** range selection ([_components/month-calendar.tsx](../src/app/(app)/properties/[slug]/calendar/_components/month-calendar.tsx) — `onCellMouseDown` sets `dragStart = dragEnd = iso`). A single **tap** (no drag) therefore commits a one-day range where **Arrive == Last Night**. On iPad/phone (the primary audience, and where drag is awkward) every tap silently books a single night. Tester ask: _"first click should set Arrive, the second click should set Last Night."_
+
+**Problem 2 (trivial).** On the unified `/calendar`, the legend sits **above** the calendar ([calendar/page.tsx:111](../src/app/(app)/calendar/page.tsx) `<Eyebrow>Legend</Eyebrow>`). Tester ask: move it **beneath** the calendar grid.
+
+**Scope:**
+1. **Two-tap range model in `month-calendar.tsx`** (touch-first; keep drag as a desktop nicety only if it stays clean):
+   - **First tap** on a free day → sets **Arrive** (`start`), leaves **Last Night** empty, shows an affordance like "Arrive: {date} — now pick your last night."
+   - **Second tap** after `start` → sets **Last Night**, commits the range via `onSelect`.
+   - Second tap **before** `start` → treat as a new Arrive (restart, don't error).
+   - Provide a visible **Clear/Start over** control.
+   - **Preserve the half-open `[start, end)` invariant** — `end_date` is the EXCLUSIVE checkout (`lastNight + 1`). This is load-bearing for the `btree_gist` double-booking exclusion constraint; do not regress it. The grid's inclusive last-night day must still map to the exclusive `end_date` exactly as today.
+   - Update the booking form ([_components/booking-request-form.tsx](../src/app/(app)/properties/[slug]/calendar/_components/booking-request-form.tsx)) so the **Arrive** and **Last Night** read-outs reflect the new two-step state (Last Night blank until the second tap), and a request can't submit with only an Arrive.
+2. **Move the `/calendar` legend** to render below the month grid (pure JSX reorder in `calendar/page.tsx`).
+
+**Files likely touched:** `month-calendar.tsx`, `booking-request-form.tsx`, possibly `properties/[slug]/calendar/page.tsx` (range display helper), `app/(app)/calendar/page.tsx` (legend reorder).
+
+**Acceptance criteria (what I'll review against):**
+- [x] On **touch and desktop**: the first tap sets Arrive only; Last Night stays empty until a second tap. Two taps define the stay; tapping earlier than Arrive restarts the selection.
+- [x] A single accidental tap no longer creates a silent 1-night `Arrive == Last Night` booking.
+- [x] A 1-night stay is still reachable deliberately (tap your arrival day, then tap that same day again — arrive == last night = one night).
+- [x] `end_date` stays EXCLUSIVE; the double-booking guard and existing approved bookings render unchanged.
+- [x] `/calendar` legend renders **beneath** the calendar; legend content (color → property, `Property · Person (N guests)` bands) unchanged.
+- [x] `tsc --noEmit` + `eslint` + `npm run build` clean; verify the flow on a narrow (iPad/phone) viewport.
+
+**Out of scope:** changing peak-period gating, approval flow, or ICS output.
+
+### Implementation (shipped 2026-06-30)
+
+Branch `feat/booking-two-tap-dates`. Three files, no migration, no schema change.
+
+- **`month-calendar.tsx` — controlled two-tap picker.** Replaced the click-and-drag state (`dragStart`/`dragEnd` + `onCellMouseDown`/`Enter`/`Up` + the `onMouseLeave` drag-cancel) with a single `onClick` per cell. The component is now fully controlled by the `selection` prop: the new exported `DateSelection = { start: string; end: string | null }` type carries the in-progress state, where `end: null` means "Arrive picked, awaiting last night." Tap logic: no selection (or a complete one) → `{start: iso, end: null}`; tap before Arrive → restart as the earlier Arrive; tap on/after Arrive → commit `{start, end: iso}`. One tap can never commit a stay. Added an affordance line ("Arrive {date} selected. Now tap your last night." / "Tap your arrival day, then tap your last night.") and a **Start Over** control that calls `onSelect(null)`. The reported range stays INCLUSIVE (start = arrive, end = last night), so the form's existing exclusive-checkout conversion — and the `btree_gist` overlap guard behind it — is untouched.
+- **`booking-request-form.tsx` — partial-selection state.** Holds the `DateSelection` directly (`end` blank until the second tap) and derives a memoized, submittable `range` only when both bounds are set; everything downstream (nights, peak gating, conflict count, hidden `start_date`/`end_date` inputs, submit-enabled) keys off `range`, so a half-finished selection can't submit. The Arrive / Last Night `<input type="date">` read-outs now reflect the two-step state (Last Night stays blank after the first tap), and a "Pick your last night to finish." hint shows while awaiting it.
+- **`calendar/page.tsx` — legend moved.** Pure JSX reorder: the Legend `LedgerPanel` now renders beneath `<MonthCalendar>` (the Subscribe panel stays above the grid). Content unchanged.
+
+**Decisions / notes:**
+- **Drag dropped entirely**, not kept as a desktop extra — a controlled tap model is simpler and behaves identically on mouse and touch, and mixing drag back in reintroduces the accidental-1-night failure mode on trackpads.
+- **One-night stay = tap the same day twice** (arrive == last night). Deliberate (two taps), so it doesn't regress the "accidental tap" fix.
+- The two read-only `MonthCalendar bands={...}` usages (unified `/calendar`, per-property availability strip) pass no `onSelect`, so they're unaffected by the selection-shape change.
+
+**Out of scope:** changing peak-period gating, approval flow, or ICS output.
