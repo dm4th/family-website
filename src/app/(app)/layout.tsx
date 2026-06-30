@@ -19,17 +19,25 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  const viewer = await resolveViewer();
+  const isAdmin = viewer?.isAdmin ?? false;
+  const isGuest = viewer?.isGuest ?? false;
+
   // First-run gate (PRD 13): members who haven't been through the guided flow
-  // (onboarded_at is null) are routed to /welcome before they see the app. That
-  // route lives outside this (app) layout, so this can't loop. Existing named
-  // members were backfilled as onboarded by the migration, so they skip it.
-  const { data: onboarding } = await supabase
-    .from("profiles")
-    .select("onboarded_at")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (onboarding && !onboarding.onboarded_at) {
-    redirect("/welcome");
+  // (onboarded_at is null) are routed to /welcome before they see the app.
+  // GUESTS are exempt — they don't create a family profile, and /welcome isn't
+  // in their allowed routes, so sending a not-yet-onboarded guest there bounces
+  // off the guest route gate (middleware) and loops (ERR_TOO_MANY_REDIRECTS).
+  // Existing named members were backfilled as onboarded by the migration.
+  if (!isGuest) {
+    const { data: onboarding } = await supabase
+      .from("profiles")
+      .select("onboarded_at")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (onboarding && !onboarding.onboarded_at) {
+      redirect("/welcome");
+    }
   }
 
   const displayName =
@@ -38,10 +46,6 @@ export default async function AppLayout({
     null;
   const avatarUrl =
     (user.user_metadata?.avatar_url as string | undefined) ?? null;
-
-  const viewer = await resolveViewer();
-  const isAdmin = viewer?.isAdmin ?? false;
-  const isGuest = viewer?.isGuest ?? false;
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
