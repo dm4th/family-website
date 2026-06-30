@@ -113,7 +113,7 @@ Plus during chunk 8: photo-upload-payload-size fix — see [05-file-uploads.md](
 | Database + Auth + Storage | Supabase (managed Postgres + Auth + Storage, pgvector available for future RAG) |
 | ORM | Drizzle (types only — SQL migrations are the source of truth) |
 | Image handling | Plain `<img>` with batch-signed URLs from Supabase Storage |
-| Email | Supabase Auth handles magic links built-in; Resend deferred (no current need) |
+| Email | Supabase Auth handles magic links built-in; **Resend** wired for transactional booking notifications ([14](14-booking-notifications.md)) — best-effort, gated on `RESEND_API_KEY` (no key → log-and-skip) |
 | Hosting | Vercel (free tier) |
 | AI / RAG (Phase 3) | Vercel AI SDK + Anthropic Claude + pgvector in Supabase |
 
