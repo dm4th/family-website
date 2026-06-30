@@ -324,7 +324,7 @@ A brand-new guest (`onboarded_at = null`) hit **`ERR_TOO_MANY_REDIRECTS`** and w
 
 Live round-2 guest testing went well ("the guest page process looks great"), and the magic-link/invite emails now route through Resend (see [14 — Booking Notifications](14-booking-notifications.md) §14-R2-OPS — Supabase Auth custom SMTP, done). One real gap surfaced.
 
-### Follow-up slice 15-R2 — guest-appropriate profile editor · 🟢 ready · own PR
+### Follow-up slice 15-R2 — guest-appropriate profile editor · 🔍 in-review · own PR
 
 **Problem.** `/profile/edit` ([src/app/(app)/profile/edit/page.tsx](../src/app/(app)/profile/edit/page.tsx)) has **no role check**, and `/profile/*` is in the guest middleware allow-list, so a signed-in **guest sees the full member editor**: Family mode, titled **"What the Family Sees,"** asking for **Family Branch, Generation, Relationship notes,** and a family-facing **Bio**. None of that applies to a property renter (a guest isn't in the family tree, and members can't look them up). After [13](13-onboarding-welcome-help.md)-R2 merged, the page even shows a Generation picker. PRD 15's own implementation notes claim guests have "no Edit affordances" — the profile editor slipped through that.
 
@@ -341,11 +341,21 @@ Live round-2 guest testing went well ("the guest page process looks great"), and
 **Files likely touched:** `src/app/(app)/profile/edit/page.tsx` (role branch), a new `guest-profile-form.tsx` (or a conditional in `profile-edit-form.tsx`), `src/app/(app)/profile/actions.ts` (guest-safe write), reusing `resolveViewer()` from [src/lib/...](../src/lib) and `ProfilePhotosSection`.
 
 **Acceptance criteria (what I'll review against):**
-- [ ] A signed-in **guest** at `/profile/edit` sees only name + photo + phone, in Operations framing — **no** Family Branch / Generation / Relationship notes / family Bio, and not the "What the Family Sees" copy.
-- [ ] A guest can set name, phone, and photo, and saving persists them.
-- [ ] A guest save never writes (or is silently dropped for) family-only fields; RLS escalation guards remain intact.
-- [ ] A **member's** profile editor is unchanged (still has all fields incl. the Generation select).
-- [ ] The user-menu "Edit Profile" link works for both roles (it already shows for guests).
-- [ ] `tsc --noEmit` + `eslint` + `npm run build` clean; check on a narrow (phone) viewport — guests are often mobile.
+- [x] A signed-in **guest** at `/profile/edit` sees only name + photo + phone, in Operations framing — **no** Family Branch / Generation / Relationship notes / family Bio, and not the "What the Family Sees" copy.
+- [x] A guest can set name, phone, and photo, and saving persists them.
+- [x] A guest save never writes (or is silently dropped for) family-only fields; RLS escalation guards remain intact.
+- [x] A **member's** profile editor is unchanged (still has all fields incl. the Generation select).
+- [x] The user-menu "Edit Profile" link works for both roles (it already shows for guests).
+- [x] `tsc --noEmit` + `eslint` + `npm run build` clean; check on a narrow (phone) viewport — guests are often mobile.
 
 **Out of scope:** the guest **property view** itself (it tested well, leave it); guest booking; redesigning the member profile.
+
+#### Implementation (PR open · branch `worktree-prd-15-r2-guest-profile-editor`)
+
+No migration — every column already exists. The change is a role branch in the profile editor.
+
+- **`src/app/(app)/profile/edit/page.tsx`** — now resolves the viewer via `resolveViewer()` (the same `is_admin()`/`is_guest()` RPCs the layout + middleware use). When `viewer.isGuest`, it renders a guest variant: **Operations** mode `PageIntro` (eyebrow "Your details", title "Your Details", context "So your host can reach you during your stay."), the existing `ProfilePhotosSection` wrapped in a `LedgerPanel`, and the new `GuestProfileForm`. Members/admins get the unchanged Family-mode editor (`SalonPanel`, full `ProfileEditForm` incl. the 13-R2 Generation select). `viewer.userId` replaces the old inline `getUser()`; `viewer.isAdmin` feeds the member photo section.
+- **`src/app/(app)/profile/edit/guest-profile-form.tsx`** (new) — a focused client form, **name + phone only** (photo writes itself via `ProfilePhotosSection`). No Family Branch / Generation / relationship notes / Bio fields are rendered or submitted. Posts to `updateGuestProfile`.
+- **`src/app/(app)/profile/actions.ts`** — added `updateGuestProfile` (persists only `full_name` + `phone` via a shared `saveContactBasics` helper). Belt-and-braces: `updateOwnProfile` now does an `is_guest()` check up front and, for a guest, routes through `saveContactBasics` too — so even a guest POSTing to the member action can never write family-only columns. (RLS already blocks role/`deactivated_at` escalation via `guard_profile_privileged_columns`; this closes the family-field gap the trigger doesn't cover.)
+
+`tsc --noEmit`, `eslint`, and `npm run build` all pass. The guest-only render path is deterministic on `viewer.isGuest`; live guest-session spot-check still recommended at merge time.
