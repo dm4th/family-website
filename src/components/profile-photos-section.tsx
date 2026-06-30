@@ -46,7 +46,7 @@ export async function ProfilePhotosSection({
           </p>
           <AddPhotosModal
             attachment={{ kind: "profile", profileId }}
-            triggerLabel={avatarSrc ? "Add another photo" : "Add a photo"}
+            triggerLabel={avatarSrc ? "Add Another Photo" : "Add a Photo"}
           />
         </div>
       </div>

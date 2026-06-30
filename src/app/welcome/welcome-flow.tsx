@@ -52,7 +52,7 @@ export function WelcomeFlow({
             Let&apos;s set up your profile.
           </h1>
           <p className="max-w-prose text-sm leading-relaxed text-foreground-muted">
-            This is the family&apos;s private site — a place to keep up with
+            This is the family&apos;s private site, a place to keep up with
             each other and our shared homes. Just two quick things and
             you&apos;re in. You can change any of it later.
           </p>
@@ -88,7 +88,7 @@ export function WelcomeFlow({
           <Field
             label="A little about you"
             htmlFor="bio"
-            hint="Optional — a sentence or two the family would enjoy."
+            hint="Optional: a sentence or two the family would enjoy."
           >
             <RichTextField
               id="bio"
@@ -123,7 +123,7 @@ export function WelcomeFlow({
               <span className="text-foreground-subtle">(optional)</span>
             </p>
             <p className="text-xs text-foreground-subtle">
-              Saves on its own — you don&apos;t need to press Enter for this.
+              Saves on its own. You don&apos;t need to press Enter for this.
             </p>
           </div>
           {photoSlot}
@@ -141,7 +141,7 @@ function SkipButton() {
         variant="ghost"
         className="text-foreground-muted hover:text-foreground"
       >
-        Finish later
+        Finish Later
       </Button>
     </form>
   );

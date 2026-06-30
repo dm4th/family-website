@@ -102,7 +102,7 @@ export function InvitationsSection({
             </Label>
             {properties.length === 0 ? (
               <p className="text-sm text-destructive">
-                No properties exist yet — create one before inviting a guest.
+                No properties exist yet. Create one before inviting a guest.
               </p>
             ) : (
               <select

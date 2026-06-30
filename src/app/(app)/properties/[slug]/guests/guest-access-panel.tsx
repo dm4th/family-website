@@ -40,7 +40,7 @@ export function GuestAccessPanel({
   return (
     <div className="flex flex-col gap-5">
       <p className="text-sm text-foreground-muted">
-        Guests can sign in and see only this property — its details, contacts,
+        Guests can sign in and see only this property: its details, contacts,
         photos, and availability. They can&apos;t see the family directory,
         other properties, or who else is staying.
       </p>
@@ -160,13 +160,13 @@ function AddGuestForm({
           {state.status === "granted" &&
             `${state.email} now has access to ${propertyName}.`}
           {state.status === "invited" &&
-            `Invited ${state.email} — they'll appear here once they sign in.`}
+            `Invited ${state.email}. They'll appear here once they sign in.`}
           {state.status === "error" && (
             <span className="text-destructive">{state.message}</span>
           )}
         </p>
         <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Adding…" : "Add guest"}
+          {isPending ? "Adding…" : "Add Guest"}
         </Button>
       </div>
     </form>

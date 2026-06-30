@@ -163,7 +163,7 @@ function GuestPropertiesView({
       <PageIntro
         mode="operations"
         eyebrow="Your stays"
-        title="Your properties"
+        title="Your Properties"
         context="The places you've been given access to. Tap one for details, contacts, and availability."
       />
       {properties.length === 0 ? (

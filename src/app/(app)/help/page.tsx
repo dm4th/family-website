@@ -7,7 +7,7 @@ import { HELP_MARKDOWN } from "./help-content";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "How this works",
+  title: "How This Works",
 };
 
 export default function HelpPage() {
@@ -16,7 +16,7 @@ export default function HelpPage() {
       <PageIntro
         mode="family"
         eyebrow="Welcome"
-        title="How this works"
+        title="How This Works"
         context="A short, plain-language guide to everything on the site. Come back any time."
       />
       <SalonPanel>
