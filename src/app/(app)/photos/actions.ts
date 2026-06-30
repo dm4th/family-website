@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { PHOTOS_BUCKET, isValidPhotoStoragePath } from "@/lib/photo-utils";
+import {
+  PHOTOS_BUCKET,
+  isValidPhotoStoragePath,
+  thumbPathFor,
+} from "@/lib/photo-utils";
 
 export type RecordUploadResult =
   | { ok: true; photoId: string }
@@ -76,8 +80,10 @@ export async function recordUploadedPhoto(opts: {
 
   if (insertError || !photoRow) {
     // Best-effort cleanup so we don't orphan the storage object the
-    // client just uploaded.
-    await supabase.storage.from(PHOTOS_BUCKET).remove([opts.storagePath]);
+    // client just uploaded (plus its thumbnail companion, if any).
+    await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .remove([opts.storagePath, thumbPathFor(opts.storagePath)]);
     return {
       ok: false,
       message: `Could not save photo: ${insertError?.message ?? "unknown"}`,
@@ -139,9 +145,11 @@ export async function deletePhoto(
   // photos row by path, so the row must be present for that check to pass.
   // (owner == uploaded_by for every photo we create, so the storage and
   // table delete policies authorize the same callers.)
+  // Remove the display object and its thumbnail companion (PRD 17). Removing a
+  // thumb path that was never generated (old/HEIC/GIF photos) is a harmless no-op.
   const { error: storageErr } = await supabase.storage
     .from(PHOTOS_BUCKET)
-    .remove([photo.storage_path]);
+    .remove([photo.storage_path, thumbPathFor(photo.storage_path)]);
 
   // Delete the metadata row and confirm a row was actually removed. A silent
   // empty delete means RLS filtered it out — i.e. the caller isn't the

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
+import { displayName } from "@/lib/display-name";
 import { withSignedUrls } from "@/lib/photos";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { AddPhotosModal } from "@/components/add-photos-modal";
@@ -38,7 +39,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
   const avatarUrls = await resolveAvatarUrls([
     { id: profile.id, avatarUrl: profile.avatar_url },
   ]);
-  const avatarSrc = avatarUrls.get(profile.id) ?? null;
+  // Hero avatar — keep the full-size object for a crisp portrait.
+  const avatarSrc = avatarUrls.get(profile.id)?.url ?? null;
 
   const { data: subjectRows } = await supabase
     .from("photo_subjects")
@@ -70,6 +72,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
     return true;
   });
 
+  // Thumb rendition: grid tiles use the small `signedUrl`; the featured tile
+  // reads `fallbackUrl` (the full object) for a larger anchor image.
   const signedPhotos = await withSignedUrls(
     uniquePhotos.map((p) => ({
       id: p.id,
@@ -77,6 +81,7 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
       caption: p.caption,
       uploadedBy: p.uploaded_by,
     })),
+    "thumb",
   );
 
   const isOwnProfile = user?.id === profile.id;
@@ -101,7 +106,7 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
         <div className="flex flex-col items-start gap-8 sm:flex-row sm:items-end">
           <div className="shrink-0">
             <ProfileAvatar
-              name={profile.full_name}
+              name={displayName(profile.full_name)}
               src={avatarSrc}
               size="hero"
               variant="portrait"
@@ -110,7 +115,13 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
           <div className="flex min-w-0 flex-1 flex-col gap-3 pb-2">
             <Eyebrow>Profile</Eyebrow>
             <h1 className="font-display text-[2.25rem] leading-[1.05] text-foreground sm:text-[2.75rem]">
-              {profile.full_name ?? "Unnamed"}
+              {isOwnProfile && !profile.full_name?.trim() ? (
+                <Link href="/profile/edit" className="text-accent-family underline-offset-4 hover:underline">
+                  Add your name
+                </Link>
+              ) : (
+                displayName(profile.full_name)
+              )}
             </h1>
             {contextLine && (
               <p className="text-sm text-foreground-muted">{contextLine}</p>

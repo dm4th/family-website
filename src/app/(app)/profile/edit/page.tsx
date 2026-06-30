@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import { PageIntro, SalonPanel } from "@/components/shell";
+import { resolveAvatarUrls } from "@/lib/avatars";
+import { Eyebrow, PageIntro, SalonPanel } from "@/components/shell";
+import { ProfilePhotosSection } from "@/components/profile-photos-section";
 import { ProfileEditForm } from "./profile-edit-form";
 
 export const dynamic = "force-dynamic";
@@ -16,21 +18,45 @@ export default async function ProfileEditPage() {
   const { data: profile, error } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, family_branch, generation, relationship_notes, phone, bio",
+      "id, full_name, avatar_url, family_branch, generation, relationship_notes, phone, bio",
     )
     .eq("id", user.id)
     .single();
 
   if (error || !profile) notFound();
 
+  const avatarUrls = await resolveAvatarUrls([
+    { id: profile.id, avatarUrl: profile.avatar_url },
+  ]);
+  const avatarSrc = avatarUrls.get(profile.id)?.url ?? null;
+
+  const { data: adminCheck } = await supabase.rpc("is_admin");
+  const isAdmin = adminCheck === true;
+
   return (
     <div className="flex flex-col gap-10">
       <PageIntro
         mode="family"
         eyebrow="Your profile"
-        title="What the family sees"
+        title="What the Family Sees"
         context="Update what other members see when they look you up. Saved revisions are kept for transparency."
       />
+
+      {/* Slice 3: photo lives right here — no clicking through to another page. */}
+      <SalonPanel className="max-w-2xl">
+        <div className="flex flex-col gap-5">
+          <Eyebrow>Your photo</Eyebrow>
+          <ProfilePhotosSection
+            profileId={profile.id}
+            userId={user.id}
+            avatarSrc={avatarSrc}
+            avatarUrl={profile.avatar_url}
+            fullName={profile.full_name}
+            isAdmin={isAdmin}
+          />
+        </div>
+      </SalonPanel>
+
       <SalonPanel className="max-w-2xl">
         <ProfileEditForm
           profile={{

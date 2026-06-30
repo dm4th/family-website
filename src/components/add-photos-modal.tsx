@@ -33,7 +33,7 @@ function readLastTab(): Source {
 
 export function AddPhotosModal({
   attachment,
-  triggerLabel = "Add photos",
+  triggerLabel = "Add Photos",
 }: {
   attachment: Attachment;
   triggerLabel?: string;
@@ -58,7 +58,7 @@ export function AddPhotosModal({
       </SheetTrigger>
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Add photos</SheetTitle>
+          <SheetTitle>Add Photos</SheetTitle>
           <SheetDescription>
             Bring photos in from your device or your Google Photos library.
           </SheetDescription>
@@ -67,7 +67,7 @@ export function AddPhotosModal({
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           <Tabs value={tab} onValueChange={onTabChange} className="gap-5">
             <TabsList>
-              <TabsTrigger value="device">From device</TabsTrigger>
+              <TabsTrigger value="device">From Device</TabsTrigger>
               <TabsTrigger value="google">Google Photos</TabsTrigger>
             </TabsList>
 

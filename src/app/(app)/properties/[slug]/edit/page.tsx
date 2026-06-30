@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { canManageProperty } from "@/lib/property-auth";
+import { resolveViewer } from "@/lib/guest";
 import { LedgerPanel, PageIntro } from "@/components/shell";
 import { PropertyEditForm } from "./property-edit-form";
 import { ContactsEditor } from "./contacts-editor";
@@ -19,6 +20,12 @@ export default async function PropertyEditPage({
 }) {
   const { slug } = await params;
   const supabase = await createClient();
+
+  // Editing is members/admins only. A granted guest can READ this property, so
+  // RLS alone wouldn't 404 them here — block explicitly. (Writes are also
+  // RLS-guarded, but a guest should never see the edit shell.)
+  const viewer = await resolveViewer();
+  if (viewer?.isGuest) notFound();
 
   const { data: property, error } = await supabase
     .from("properties")

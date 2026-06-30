@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
 import { canManageProperty } from "@/lib/property-auth";
+import { resolveViewer } from "@/lib/guest";
 import { buildIcsFeedLinks, getSiteOrigin } from "@/lib/ics";
 import {
   Eyebrow,
@@ -17,7 +18,7 @@ import type { PeakPeriodRange } from "@/lib/db/schema";
 import { BookingRequestForm } from "./_components/booking-request-form";
 import { AdminBookingRow } from "./_components/admin-booking-row";
 import { OwnBookingCancel } from "./_components/own-booking-cancel";
-import type { CalendarBand } from "./_components/month-calendar";
+import { MonthCalendar, type CalendarBand } from "./_components/month-calendar";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,52 @@ export default async function PropertyCalendarPage({
     .eq("slug", slug)
     .single();
   if (error || !property) notFound();
+
+  // Guests get a redacted busy/free calendar: which dates are taken, but no
+  // names, guest counts, notes, booking form, or agenda. Member identities are
+  // never exposed (PRD 15). property_busy_ranges() re-checks can_view_property,
+  // so a guest can't probe a non-granted property's schedule.
+  const viewer = await resolveViewer();
+  if (viewer?.isGuest) {
+    const { data: busy } = await supabase.rpc("property_busy_ranges", {
+      p_property_id: property.id,
+    });
+    const busyBands: CalendarBand[] = (
+      (busy ?? []) as { start_date: string; end_date: string }[]
+    ).map((r, i) => ({
+      bookingId: `busy-${i}`,
+      startIso: r.start_date,
+      endIso: r.end_date,
+      status: "approved" as const,
+      label: "Booked",
+    }));
+
+    return (
+      <div className="flex flex-col gap-14">
+        <PageIntro
+          mode="operations"
+          eyebrow="Calendar"
+          title={property.name}
+          context={
+            property.location ? `Availability · ${property.location}` : "Availability"
+          }
+          action={
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/properties/${property.slug}`}>Back to Property</Link>
+            </Button>
+          }
+        />
+        <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
+          <Eyebrow className="mb-1">Availability</Eyebrow>
+          <p className="mb-5 text-sm text-foreground-muted">
+            Shaded dates are already booked. Reach out to your host to plan your
+            stay.
+          </p>
+          <MonthCalendar bands={busyBands} />
+        </LedgerPanel>
+      </div>
+    );
+  }
 
   const { ok: canAdmin } = await canManageProperty(property.id);
 
@@ -156,7 +203,7 @@ export default async function PropertyCalendarPage({
         }
         action={
           <Button asChild variant="outline" size="sm">
-            <Link href={`/properties/${property.slug}`}>Back to property</Link>
+            <Link href={`/properties/${property.slug}`}>Back to Property</Link>
           </Button>
         }
       />
@@ -167,7 +214,7 @@ export default async function PropertyCalendarPage({
             <div>
               <Eyebrow>Pending requests</Eyebrow>
               <h2 className="font-display text-xl leading-tight text-foreground">
-                Awaiting your call
+                Awaiting Your Call
               </h2>
             </div>
             <span className="text-xs text-foreground-subtle">
@@ -217,7 +264,7 @@ export default async function PropertyCalendarPage({
             <div className="border-b border-border px-5 py-4 sm:px-6">
               <Eyebrow>Your bookings</Eyebrow>
               <h3 className="font-display text-lg leading-tight text-foreground">
-                Your stays
+                Your Stays
               </h3>
             </div>
             {myBookings.length === 0 ? (
@@ -251,7 +298,7 @@ export default async function PropertyCalendarPage({
               <Eyebrow className="mb-3">Subscribe</Eyebrow>
               <SubscribeToCalendar
                 links={feedLinks}
-                blurb={`Add ${property.name}'s approved bookings to your calendar. Apps refresh every few hours — new bookings aren't instant.`}
+                blurb={`Add ${property.name}'s approved bookings to your calendar. Apps refresh every few hours, so new bookings aren't instant.`}
               />
             </LedgerPanel>
           )}
@@ -279,7 +326,7 @@ export default async function PropertyCalendarPage({
       <section className="flex flex-col gap-4">
         <header className="flex items-baseline justify-between gap-4">
           <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
-            Upcoming approved bookings
+            Upcoming Approved Bookings
           </h2>
           <p className="text-xs text-foreground-subtle">
             Window: ±6 months from today

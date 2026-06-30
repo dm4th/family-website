@@ -29,6 +29,7 @@ type BookingRow = {
   start_date: string;
   end_date: string;
   status: "pending" | "approved" | "declined" | "cancelled";
+  guest_count: number;
   profiles: { full_name: string | null; email: string } | null;
 };
 
@@ -72,7 +73,7 @@ export default async function UnifiedCalendarPage() {
   const { data: bookingsRaw } = await supabase
     .from("bookings")
     .select(
-      `id, property_id, start_date, end_date, status,
+      `id, property_id, start_date, end_date, status, guest_count,
        profiles:requested_by ( full_name, email )`,
     )
     .in("status", ["approved", "pending"])
@@ -82,21 +83,26 @@ export default async function UnifiedCalendarPage() {
 
   const bookings = (bookingsRaw ?? []) as unknown as BookingRow[];
 
-  const bands: CalendarBand[] = bookings.map((b) => ({
-    bookingId: b.id,
-    startIso: b.start_date,
-    endIso: b.end_date,
-    status: b.status as "approved" | "pending",
-    tone: propertyTone.get(b.property_id),
-    label: propertyName.get(b.property_id) ?? "—",
-  }));
+  const bands: CalendarBand[] = bookings.map((b) => {
+    const name = propertyName.get(b.property_id) ?? "—";
+    const person = b.profiles?.full_name ?? b.profiles?.email ?? "—";
+    const guests = `${b.guest_count} guest${b.guest_count === 1 ? "" : "s"}`;
+    return {
+      bookingId: b.id,
+      startIso: b.start_date,
+      endIso: b.end_date,
+      status: b.status as "approved" | "pending",
+      tone: propertyTone.get(b.property_id),
+      label: `${name} · ${person} (${guests})`,
+    };
+  });
 
   return (
     <div className="flex flex-col gap-14">
       <PageIntro
         mode="operations"
         eyebrow="Calendar"
-        title="All properties"
+        title="All Properties"
         context="Color-coded across every family property."
       />
 
@@ -129,7 +135,7 @@ export default async function UnifiedCalendarPage() {
           <Eyebrow className="mb-3">Subscribe to your bookings</Eyebrow>
           <SubscribeToCalendar
             links={feedLinks}
-            blurb="Add all your approved bookings — across every property — to your personal calendar. Apps refresh every few hours, so new bookings aren't instant."
+            blurb="Add all your approved bookings, across every property, to your personal calendar. Apps refresh every few hours, so new bookings aren't instant."
           />
         </LedgerPanel>
       )}

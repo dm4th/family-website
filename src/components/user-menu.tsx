@@ -30,12 +30,14 @@ export function UserMenu({
   avatarUrl,
   displayName,
   isAdmin,
+  isGuest,
 }: {
   userId: string;
   email: string | null | undefined;
   avatarUrl?: string | null;
   displayName?: string | null;
   isAdmin?: boolean;
+  isGuest?: boolean;
 }) {
   const label = displayName ?? email ?? "Account";
 
@@ -70,11 +72,19 @@ export function UserMenu({
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {/* A guest can't reach /family/[id] (the directory is family-only);
+            their self-service surface is the profile editor. */}
+        {!isGuest && (
+          <DropdownMenuItem asChild>
+            <Link href={`/family/${userId}`}>View My Profile</Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
-          <Link href={`/family/${userId}`}>View my profile</Link>
+          <Link href="/profile/edit">Edit Profile</Link>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/profile/edit">Edit profile</Link>
+          <Link href="/help">How This Works</Link>
         </DropdownMenuItem>
         {isAdmin && (
           <>
@@ -91,7 +101,7 @@ export function UserMenu({
         <form action={signOut}>
           <DropdownMenuItem asChild>
             <button type="submit" className="w-full text-left">
-              Sign out
+              Sign Out
             </button>
           </DropdownMenuItem>
         </form>

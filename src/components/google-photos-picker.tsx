@@ -11,7 +11,9 @@ import {
   MAX_PHOTO_BYTES,
   generateGooglePhotoPath,
   isAllowedMime,
+  thumbPathFor,
 } from "@/lib/photo-utils";
+import { makeThumbnailFromBlob } from "@/lib/image-resize";
 import { recordUploadedPhoto } from "@/app/(app)/photos/actions";
 import { requestAccessToken } from "@/lib/google/identity";
 import {
@@ -81,7 +83,7 @@ async function transferOne(opts: {
   }
 
   if (blob.size > MAX_PHOTO_BYTES) {
-    return `A photo exceeded ${Math.round(MAX_PHOTO_BYTES / 1024 / 1024)}MB even after downsize — skipped.`;
+    return `A photo exceeded ${Math.round(MAX_PHOTO_BYTES / 1024 / 1024)}MB even after downsize. Skipped.`;
   }
 
   // Prefer the bytes' actual Content-Type over mediaFile.mimeType: Google's
@@ -104,6 +106,19 @@ async function transferOne(opts: {
     .from(PHOTOS_BUCKET)
     .upload(storagePath, blob, { contentType: mime, upsert: false });
   if (uploadError) return uploadError.message;
+
+  // Best-effort thumbnail companion so Google-imported photos get the small
+  // rendition too (the bytes are already ≤2048px). Failure is non-fatal —
+  // small contexts fall back to the full object.
+  const thumb = await makeThumbnailFromBlob(blob);
+  if (thumb) {
+    await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .upload(thumbPathFor(storagePath), thumb, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+  }
 
   const result = await recordUploadedPhoto({
     storagePath,
@@ -297,7 +312,7 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
                 );
               }}
             >
-              Open picker
+              Open Picker
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={cancel}>
               Cancel
@@ -324,7 +339,7 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
                 pickerWindowRef.current = w;
               }}
             >
-              Reopen picker
+              Reopen Picker
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={cancel}>
               Cancel
@@ -348,12 +363,12 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
           {status.failed > 0 && (
             <p className="text-xs text-destructive">
               {status.failed} couldn&rsquo;t be saved
-              {status.lastError ? ` — last error: ${status.lastError}` : "."}
+              {status.lastError ? `. Last error: ${status.lastError}` : "."}
             </p>
           )}
           {status.failed > 0 && (
             <Button type="button" variant="outline" size="sm" onClick={run}>
-              Try the failed ones again
+              Try the Failed Ones Again
             </Button>
           )}
         </>
@@ -363,13 +378,13 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
         <>
           <p className="text-xs text-destructive">{status.message}</p>
           <Button type="button" variant="outline" size="sm" onClick={run}>
-            Try again
+            Try Again
           </Button>
         </>
       )}
 
       <p className="text-[0.6875rem] text-foreground-subtle">
-        Per-pick consent — we never read your wider library.
+        Per-pick consent: we never read your wider library.
       </p>
 
       {isBusy && status.phase !== "awaiting" && (

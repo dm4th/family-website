@@ -99,6 +99,9 @@ export default async function AdminPage() {
               expires_at: i.expires_at,
               created_at: i.created_at,
             }))}
+            properties={(properties ?? [])
+              .filter((p) => p.status !== "inactive")
+              .map((p) => ({ id: p.id, name: p.name }))}
           />
         </Section>
       </BriefingPanel>
@@ -122,8 +125,8 @@ export default async function AdminPage() {
 
       <BriefingPanel>
         <Section
-          title="Pending bookings"
-          description="Approve or decline from each property's calendar — links below open the request in context."
+          title="Pending Bookings"
+          description="Approve or decline from each property's calendar. Links below open the request in context."
         >
           {!pendingBookings || pendingBookings.length === 0 ? (
             <p className="text-sm italic text-foreground-subtle">

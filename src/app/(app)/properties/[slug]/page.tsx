@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { withSignedUrls } from "@/lib/photos";
 import { canManageProperty } from "@/lib/property-auth";
+import { resolveViewer } from "@/lib/guest";
 import { Markdown } from "@/components/markdown";
 import { AddPhotosModal } from "@/components/add-photos-modal";
 import { RemovePhotoButton } from "@/components/remove-photo-button";
@@ -18,6 +19,7 @@ import {
   StatRow,
 } from "@/components/shell";
 import { PropertyGallery } from "./property-gallery";
+import { GuestAccessPanel, type GuestGrantRow } from "./guests/guest-access-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +49,8 @@ export default async function PropertyDetailPage({
     .eq("property_id", property.id)
     .order("created_at", { ascending: false });
 
+  // Thumb rendition: the gallery strip uses the small `signedUrl`; the hero
+  // (below) reads `fallbackUrl` (the full object) for the large 21:9 frame.
   const signedPhotos = await withSignedUrls(
     (photoRows ?? []).map((p) => ({
       id: p.id,
@@ -54,6 +58,7 @@ export default async function PropertyDetailPage({
       caption: p.caption,
       uploadedBy: p.uploaded_by,
     })),
+    "thumb",
   );
 
   // Contacts in display order.
@@ -72,7 +77,33 @@ export default async function PropertyDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
   const currentUserId = user?.id ?? null;
+  const viewer = await resolveViewer();
+  const isGuest = viewer?.isGuest ?? false;
+  // For a guest who reached a non-granted property, RLS already returned no row
+  // above (→ notFound). A guest who got here is therefore granted; we still
+  // gate member-only affordances below on isGuest.
   const { ok: canManage } = await canManageProperty(property.id);
+
+  // Guest grants for this property — members/admins only (RLS hides this list
+  // from guests anyway, and we don't render the panel for them).
+  let guestGrants: GuestGrantRow[] = [];
+  if (!isGuest) {
+    const { data: grantRows } = await supabase
+      .from("property_guests")
+      .select("profile_id, profiles:profile_id ( full_name, email )")
+      .eq("property_id", property.id);
+    guestGrants = (grantRows ?? []).map((r) => {
+      const p = r.profiles as unknown as
+        | { full_name: string | null; email: string }
+        | null;
+      return {
+        profileId: r.profile_id as string,
+        fullName: p?.full_name ?? null,
+        email: p?.email ?? "—",
+      };
+    });
+  }
+
   const heroCanRemove =
     !!heroPhoto &&
     (canManage ||
@@ -93,9 +124,11 @@ export default async function PropertyDetailPage({
             <Button asChild variant="outline" size="sm">
               <Link href={`/properties/${property.slug}/calendar`}>Calendar</Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/properties/${property.slug}/edit`}>Edit details</Link>
-            </Button>
+            {!isGuest && (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/properties/${property.slug}/edit`}>Edit Details</Link>
+              </Button>
+            )}
           </div>
         }
       />
@@ -105,9 +138,10 @@ export default async function PropertyDetailPage({
         <figure className="group relative aspect-[21/9] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={heroPhoto.signedUrl}
+            src={heroPhoto.fallbackUrl ?? heroPhoto.signedUrl}
             alt={heroPhoto.caption ?? property.name}
             className="absolute inset-0 h-full w-full object-cover"
+            decoding="async"
           />
           {property.status !== "active" && (
             <Badge variant="status" className="absolute right-4 top-4">
@@ -124,7 +158,7 @@ export default async function PropertyDetailPage({
         </figure>
       ) : (
         <div className="relative flex aspect-[21/9] items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-surface/60 text-foreground-subtle">
-          <span className="eyebrow">No photo yet — drop one in below</span>
+          <span className="eyebrow">No photo yet. Drop one in below</span>
         </div>
       )}
 
@@ -161,7 +195,7 @@ export default async function PropertyDetailPage({
           <section className="flex flex-col gap-4">
             <Eyebrow>About</Eyebrow>
             <h2 className="font-display text-2xl leading-tight text-foreground">
-              The place
+              The Place
             </h2>
             <Markdown source={property.description} tone="salon" />
           </section>
@@ -171,7 +205,7 @@ export default async function PropertyDetailPage({
           <section className="flex flex-col gap-4">
             <Eyebrow>How it works</Eyebrow>
             <h2 className="font-display text-2xl leading-tight text-foreground">
-              Living here
+              Living Here
             </h2>
             <Markdown source={property.how_to} tone="ledger" />
           </section>
@@ -181,7 +215,7 @@ export default async function PropertyDetailPage({
           <section className="flex flex-col gap-4">
             <Eyebrow>House rules</Eyebrow>
             <h2 className="font-display text-2xl leading-tight text-foreground">
-              What we ask
+              What We Ask
             </h2>
             <Markdown source={property.guidelines} tone="briefing" />
           </section>
@@ -206,20 +240,25 @@ export default async function PropertyDetailPage({
             <div className="border-b border-border px-5 py-4 sm:px-6">
               <Eyebrow>Contacts</Eyebrow>
               <h3 className="font-display text-lg leading-tight text-foreground">
-                On the ground
+                On the Ground
               </h3>
             </div>
             {!contacts || contacts.length === 0 ? (
               <p className="px-5 py-6 text-sm italic text-foreground-subtle sm:px-6">
-                No contacts on file. Add caretakers, plumbers, emergency
-                numbers from the{" "}
-                <Link
-                  href={`/properties/${property.slug}/edit`}
-                  className="text-foreground underline-offset-4 hover:underline"
-                >
-                  edit page
-                </Link>
-                .
+                No contacts on file.
+                {!isGuest && (
+                  <>
+                    {" "}
+                    Add caretakers, plumbers, emergency numbers from the{" "}
+                    <Link
+                      href={`/properties/${property.slug}/edit`}
+                      className="text-foreground underline-offset-4 hover:underline"
+                    >
+                      edit page
+                    </Link>
+                    .
+                  </>
+                )}
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -276,13 +315,17 @@ export default async function PropertyDetailPage({
             Photos
           </h2>
           <p className="text-xs text-foreground-subtle">
-            Anyone in the family can add to this gallery.
+            {isGuest
+              ? "Photos shared by the family."
+              : "Anyone in the family can add to this gallery."}
           </p>
         </header>
 
-        <AddPhotosModal
-          attachment={{ kind: "property", propertyId: property.id }}
-        />
+        {!isGuest && (
+          <AddPhotosModal
+            attachment={{ kind: "property", propertyId: property.id }}
+          />
+        )}
 
         <PropertyGallery
           photos={restPhotos}
@@ -290,6 +333,33 @@ export default async function PropertyDetailPage({
           canManage={canManage}
         />
       </section>
+
+      {/* Guest access — members/admins only. Lets a host link a guest to this
+          property without exposing the rest of the site. (PRD 15) */}
+      {!isGuest && (
+        <>
+          <SectionRule label="Guest access" />
+          <section className="grid gap-8 lg:grid-cols-[1fr_1.4fr] lg:gap-16">
+            <div className="flex flex-col gap-2">
+              <Eyebrow>Hosting someone?</Eyebrow>
+              <h2 className="font-display text-2xl leading-tight text-foreground">
+                Add a guest
+              </h2>
+              <p className="text-sm text-foreground-muted">
+                Give a friend or renter sign-in access to just this property.
+              </p>
+            </div>
+            <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
+              <GuestAccessPanel
+                propertyId={property.id}
+                propertySlug={property.slug}
+                propertyName={property.name}
+                guests={guestGrants}
+              />
+            </LedgerPanel>
+          </section>
+        </>
+      )}
     </div>
   );
 }

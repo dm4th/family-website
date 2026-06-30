@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
+import { displayName } from "@/lib/display-name";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { PageIntro, SectionRule } from "@/components/shell";
 
@@ -18,11 +19,11 @@ type DirectoryProfile = {
 };
 
 const GENERATION_LABEL: Record<number, string> = {
-  1: "First generation",
-  2: "Second generation",
-  3: "Third generation",
-  4: "Fourth generation",
-  5: "Fifth generation",
+  1: "First Generation",
+  2: "Second Generation",
+  3: "Third Generation",
+  4: "Fourth Generation",
+  5: "Fifth Generation",
 };
 
 export default async function FamilyDirectoryPage() {
@@ -45,8 +46,10 @@ export default async function FamilyDirectoryPage() {
   }
 
   const list = (profiles ?? []) as DirectoryProfile[];
+  // The directory paints many small avatars — request the thumb rendition.
   const avatarUrls = await resolveAvatarUrls(
     list.map((p) => ({ id: p.id, avatarUrl: p.avatar_url })),
+    "thumb",
   );
 
   const grouped = groupByGeneration(list);
@@ -75,7 +78,7 @@ export default async function FamilyDirectoryPage() {
                 <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
                   {generation
                     ? GENERATION_LABEL[generation] ?? `Generation ${generation}`
-                    : "Generation not set"}
+                    : "Generation Not Set"}
                 </h2>
                 <span className="eyebrow text-foreground-subtle">
                   {members.length} {members.length === 1 ? "Member" : "Members"}
@@ -89,14 +92,15 @@ export default async function FamilyDirectoryPage() {
                       className="group flex items-center gap-4 rounded-md py-2 transition-colors hover:bg-surface/60"
                     >
                       <ProfileAvatar
-                        name={p.full_name}
-                        src={avatarUrls.get(p.id) ?? null}
+                        name={displayName(p.full_name)}
+                        src={avatarUrls.get(p.id)?.url ?? null}
+                        fallbackSrc={avatarUrls.get(p.id)?.fallbackUrl ?? null}
                         size="lg"
                         variant="ring"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="font-display text-lg leading-tight text-foreground transition-colors group-hover:text-accent-family">
-                          {p.full_name ?? "Unnamed"}
+                          {displayName(p.full_name)}
                         </div>
                         <div className="mt-1 truncate text-xs text-foreground-subtle">
                           {[p.family_branch, p.relationship_notes]

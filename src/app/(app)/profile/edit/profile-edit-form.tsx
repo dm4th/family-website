@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import { RichTextField } from "@/components/authoring";
+import { FamilyBranchSelect } from "@/components/family-branch-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,12 +47,7 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
         htmlFor="family_branch"
         hint="Which of the three sibling families you belong to."
       >
-        <Input
-          id="family_branch"
-          name="family_branch"
-          defaultValue={profile.familyBranch ?? ""}
-          placeholder="e.g., Peter's family"
-        />
+        <FamilyBranchSelect defaultValue={profile.familyBranch} />
       </Field>
 
       <Field
@@ -107,10 +103,10 @@ export function ProfileEditForm({ profile }: { profile: ProfileFormValues }) {
           href={`/family/${profile.id}`}
           className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
         >
-          Manage your photos →
+          View Your Profile →
         </Link>
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving…" : "Save changes"}
+          {isPending ? "Saving…" : "Save Changes"}
         </Button>
       </div>
 

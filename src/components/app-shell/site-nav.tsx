@@ -69,6 +69,18 @@ export function SiteNavDesktop() {
       aria-label="Primary"
       className="hidden items-center gap-10 lg:flex"
     >
+      <Link
+        href="/"
+        aria-current={isActive(pathname, "/") ? "page" : undefined}
+        className={cn(
+          "text-sm transition-colors",
+          isActive(pathname, "/")
+            ? "text-foreground"
+            : "text-foreground-muted hover:text-foreground"
+        )}
+      >
+        Home
+      </Link>
       {NAV_GROUPS.map((group) => (
         <div key={group.label} className="flex items-center gap-5">
           <span className="flex items-center gap-2">
@@ -123,6 +135,20 @@ export function SiteNavMobile() {
           <SheetTitle className="text-base">Mathieson Family</SheetTitle>
         </SheetHeader>
         <div className="flex flex-col gap-8 px-6 pb-6">
+          <SheetClose asChild>
+            <Link
+              href="/"
+              aria-current={isActive(pathname, "/") ? "page" : undefined}
+              className={cn(
+                "block text-base transition-colors",
+                isActive(pathname, "/")
+                  ? "text-foreground"
+                  : "text-foreground-muted hover:text-foreground"
+              )}
+            >
+              Home
+            </Link>
+          </SheetClose>
           {NAV_GROUPS.map((group) => (
             <div key={group.label} className="flex flex-col gap-3">
               <div className="flex items-center gap-2">

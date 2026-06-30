@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -26,15 +26,20 @@ export type InvitationRow = {
   created_at: string;
 };
 
+export type InvitePropertyOption = { id: string; name: string };
+
 export function InvitationsSection({
   invitations,
+  properties,
 }: {
   invitations: InvitationRow[];
+  properties: InvitePropertyOption[];
 }) {
   const [state, formAction, isPending] = useActionState(
     createInvitation,
     initial,
   );
+  const [role, setRole] = useState("member");
 
   return (
     <div className="flex flex-col gap-6">
@@ -71,7 +76,8 @@ export function InvitationsSection({
             <select
               id="invite-role"
               name="role"
-              defaultValue="member"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
               className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <option value="member">member</option>
@@ -81,10 +87,43 @@ export function InvitationsSection({
           </div>
           <div>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating…" : "Create invitation"}
+              {isPending ? "Creating…" : "Create Invitation"}
             </Button>
           </div>
         </div>
+        {/* Guests are scoped to a single property — pick which one. */}
+        {role === "guest" && (
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="invite-grant-property"
+              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            >
+              Guest of which property?
+            </Label>
+            {properties.length === 0 ? (
+              <p className="text-sm text-destructive">
+                No properties exist yet. Create one before inviting a guest.
+              </p>
+            ) : (
+              <select
+                id="invite-grant-property"
+                name="grant_property_id"
+                defaultValue=""
+                required
+                className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 sm:max-w-xs"
+              >
+                <option value="" disabled>
+                  Pick a property…
+                </option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
         {state.status === "created" && (
           <p className="text-sm text-accent-operations">
             Invitation created for {state.email}. When they sign in (Google or
@@ -162,7 +201,7 @@ function InvitationRowItem({ invitation }: { invitation: InvitationRow }) {
               });
             }}
           >
-            {sendPending ? "Sending…" : "Email magic link"}
+            {sendPending ? "Sending…" : "Email Magic Link"}
           </Button>
           <Button
             type="button"

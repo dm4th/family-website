@@ -95,7 +95,7 @@ function CancelAction({ bookingId }: { bookingId: string }) {
           />
         </label>
         <Button type="submit" size="sm" variant="outline" disabled={isPending}>
-          {isPending ? "…" : "Cancel booking"}
+          {isPending ? "…" : "Cancel Booking"}
         </Button>
       </div>
       {state.status === "error" && (

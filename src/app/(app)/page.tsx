@@ -3,6 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { Eyebrow, SectionRule } from "@/components/shell";
+import { WelcomePanel } from "@/components/welcome-panel";
+import { ProfileNudge } from "@/components/profile-nudge";
 
 type Mode = "family" | "operations" | "advisory";
 
@@ -24,23 +26,44 @@ type ComingSoon = {
 
 export const dynamic = "force-dynamic";
 
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ welcome?: string }>;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Two cheap counts so the gateways show signal instead of static copy.
-  const [{ count: memberCount }, { count: propertyCount }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .is("deactivated_at", null),
-    supabase
-      .from("properties")
-      .select("id", { count: "exact", head: true })
-      .neq("status", "inactive"),
-  ]);
+  // Two cheap counts so the gateways show signal instead of static copy, plus
+  // the caller's name/branch so we can nudge an incomplete profile.
+  const [{ count: memberCount }, { count: propertyCount }, ownProfile] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .is("deactivated_at", null),
+      supabase
+        .from("properties")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "inactive"),
+      user
+        ? supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+  // The welcome panel is the celebratory landing right after finishing the
+  // guided flow (?welcome=1). The nudge is the gentle follow-up for someone who
+  // chose "finish later" and still has no name — the real "Unnamed" case. We
+  // gate on name only (not branch) so established members who were backfilled as
+  // onboarded but never set a branch aren't nagged.
+  const justOnboarded = (await searchParams)?.welcome === "1";
+  const needsProfile = Boolean(user) && !ownProfile?.data?.full_name?.trim();
 
   const firstName =
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
@@ -74,7 +97,7 @@ export default async function Dashboard() {
       eyebrow: "Operations",
       title: "Properties",
       blurb:
-        "Family-shared places — house rules, contacts, and photos. Anyone in the family can edit them.",
+        "Family-shared places: house rules, contacts, and photos. Anyone in the family can edit them.",
       href: "/properties",
       badge:
         propertyCount === null
@@ -106,8 +129,8 @@ export default async function Dashboard() {
       mode: "advisory",
     },
     {
-      title: "Family timeline",
-      blurb: "Stories, milestones, history — preserved.",
+      title: "Family Timeline",
+      blurb: "Stories, milestones, history. Preserved.",
       href: "/coming-soon/timeline",
       mode: "family",
     },
@@ -121,6 +144,12 @@ export default async function Dashboard() {
 
   return (
     <div className="flex flex-col gap-16">
+      {/* Just finished onboarding → celebratory orientation panel. */}
+      {justOnboarded && <WelcomePanel firstName={firstName} />}
+
+      {/* Skipped onboarding with a blank profile → soft, dismissible nudge. */}
+      {!justOnboarded && needsProfile && <ProfileNudge />}
+
       {/* Opening statement — date, greeting, mood. Not a KPI wall. */}
       <header className="flex flex-col gap-3">
         <p className="eyebrow text-foreground-subtle">{today}</p>
@@ -128,7 +157,7 @@ export default async function Dashboard() {
           Welcome back, {firstName}.
         </h1>
         <p className="max-w-xl text-base leading-relaxed text-foreground-muted">
-          A quiet place for the family — to share what we love, look after what
+          A quiet place for the family, to share what we love, look after what
           we own, and steward what we&apos;ve inherited.
         </p>
       </header>
@@ -149,7 +178,7 @@ export default async function Dashboard() {
         <SectionRule label="In flight" />
         <p className="max-w-2xl text-sm text-foreground-muted">
           What we&apos;re planning next. Click through to read what each one
-          will do and why — and tell us what you&apos;d like sooner.
+          will do and why, and tell us what you&apos;d like sooner.
         </p>
         <ul className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
           {comingSoon.map((c) => (

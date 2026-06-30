@@ -69,7 +69,7 @@ function baseDetails(ctx: BookingEmailContext): EmailDetail[] {
 export function bookingRequestedEmail(
   ctx: BookingEmailContext,
 ): RenderedEmail {
-  const heading = `New booking request — ${ctx.propertyName}`;
+  const heading = `New booking request: ${ctx.propertyName}`;
   const content = {
     preview: `${ctx.requesterName} requested ${ctx.propertyName}`,
     heading,
@@ -78,7 +78,7 @@ export function bookingRequestedEmail(
       "Open the calendar to approve or decline the request.",
     ],
     details: baseDetails(ctx),
-    cta: { label: "Review request", url: ctx.calendarUrl },
+    cta: { label: "Review Request", url: ctx.calendarUrl },
   };
   return {
     subject: heading,
@@ -97,8 +97,8 @@ export function bookingApprovedEmail(
 ): RenderedEmail {
   const heading = `Your ${ctx.propertyName} booking is confirmed`;
   const lead = opts.autoApproved
-    ? `Your stay at ${ctx.propertyName} is confirmed — these dates were open, so it was booked automatically.`
-    : `Good news — your stay at ${ctx.propertyName} has been approved.`;
+    ? `Your stay at ${ctx.propertyName} is confirmed. These dates were open, so it was booked automatically.`
+    : `Good news: your stay at ${ctx.propertyName} has been approved.`;
   const content = {
     preview: `Confirmed: ${ctx.propertyName}, ${formatStayRange(
       ctx.startDate,
@@ -110,7 +110,7 @@ export function bookingApprovedEmail(
       "It's on the family calendar now. You can add it to your own calendar from the property page.",
     ],
     details: baseDetails(ctx),
-    cta: { label: "View on the calendar", url: ctx.calendarUrl },
+    cta: { label: "View on the Calendar", url: ctx.calendarUrl },
   };
   return {
     subject: heading,
@@ -128,16 +128,16 @@ export function bookingAutoApprovedAdminEmail(
   ctx: BookingEmailContext,
 ): RenderedEmail {
   const stay = formatStayRange(ctx.startDate, ctx.endDate);
-  const heading = `Booked — ${ctx.propertyName}`;
+  const heading = `Booked: ${ctx.propertyName}`;
   const content = {
     preview: `${ctx.requesterName} booked ${ctx.propertyName} (${stay})`,
     heading,
     paragraphs: [
       `${ctx.requesterName} booked ${ctx.propertyName}. These dates were open and outside any peak period, so it was confirmed automatically.`,
-      "No action needed — just so you know. Open the calendar if you'd like to see the details.",
+      "No action needed, just so you know. Open the calendar if you'd like to see the details.",
     ],
     details: baseDetails(ctx),
-    cta: { label: "View on the calendar", url: ctx.calendarUrl },
+    cta: { label: "View on the Calendar", url: ctx.calendarUrl },
   };
   return {
     subject: heading,
@@ -159,7 +159,7 @@ export function bookingDeclinedEmail(
       "Open the calendar to see what's available and request different dates.",
     ],
     details: baseDetails(ctx),
-    cta: { label: "Find open dates", url: ctx.calendarUrl },
+    cta: { label: "Find Open Dates", url: ctx.calendarUrl },
   };
   return {
     subject: heading,
@@ -191,7 +191,7 @@ export function bookingCancelledEmail(
         : "Reach out to a booking administrator if this was unexpected.",
     ],
     details,
-    cta: { label: "Open the calendar", url: ctx.calendarUrl },
+    cta: { label: "Open the Calendar", url: ctx.calendarUrl },
   };
   return {
     subject: heading,
