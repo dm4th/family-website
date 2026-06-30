@@ -112,12 +112,19 @@ async function transferOne(opts: {
   // small contexts fall back to the full object.
   const thumb = await makeThumbnailFromBlob(blob);
   if (thumb) {
-    await supabase.storage
-      .from(PHOTOS_BUCKET)
-      .upload(thumbPathFor(storagePath), thumb, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
+    // supabase-js surfaces errors in the result rather than throwing, but the
+    // try/catch keeps the "must never fail the photo" guarantee airtight
+    // against an unexpected reject.
+    try {
+      await supabase.storage
+        .from(PHOTOS_BUCKET)
+        .upload(thumbPathFor(storagePath), thumb, {
+          contentType: "image/jpeg",
+          upsert: false,
+        });
+    } catch {
+      // Swallow — the photo's display object is already stored.
+    }
   }
 
   const result = await recordUploadedPhoto({
@@ -127,8 +134,11 @@ async function transferOne(opts: {
     googleMediaId: item.id,
   });
   if (!result.ok) {
-    // Storage upload succeeded but DB row failed — clean up the orphan.
-    await supabase.storage.from(PHOTOS_BUCKET).remove([storagePath]);
+    // Storage upload succeeded but DB row failed — clean up the orphan and its
+    // thumbnail companion (harmless no-op when the thumb was never uploaded).
+    await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .remove([storagePath, thumbPathFor(storagePath)]);
     return result.message;
   }
   return null;
