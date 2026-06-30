@@ -1,7 +1,7 @@
 # 15 — Guest Access
 
 **Phase**: 3 · **Depends on**: 02 (members + profiles exist), 06 (properties + bookings exist)
-**Status**: 🟢 ready
+**Status**: 🔍 in-review — code complete on branch `claude/recursing-shannon-833815` (2026-06-29); typecheck + build green. **Gate before ✅: apply migration + run the §Verification recipe negative tests (live, 3 identities). Not pushed to prod yet.**
 
 > ⚠️ **This is the most architecturally significant PRD in the queue.** Every RLS policy shipped so far is effectively `to authenticated using (true)` — *any* signed-in user can read *everything*. The `guest` role exists in the schema (`profiles.role`, `invitations.role`) but is **completely unenforced**: a guest today sees the entire site. This PRD introduces the first real **read differentiation between member and guest** across the whole database. Get the RLS wrong and you either lock members out or leak the family's private data to an outsider. **Build it carefully, behind a branch, with the negative tests in the [Verification recipe](#verification-recipe) treated as acceptance criteria — not optional.**
 
@@ -258,4 +258,53 @@ Set up **three identities**: a site **admin**, a plain **member**, and a **guest
 
 ## Implementation
 
-**Not started.** (When you ship: fill this with the migration filename(s), the final per-table policy decisions, the deferred-grant option chosen (A or B), where the role lookup landed in middleware and its perf approach, the redacted-calendar RPC shape, any storage-RLS fix, and open follow-ups. Then flip the status header here to `✅ shipped` and update the chunk-status table in [prds/00-master-plan.md](00-master-plan.md).)
+**Built on branch `claude/recursing-shannon-833815` (2026-06-29). Code complete; typecheck + lint + `next build` all green. NOT yet applied to prod and NOT yet live-verified — the negative tests below are the remaining gate (see "Verification status").**
+
+### Migration
+
+- **`supabase/migrations/20260629000002_guest_access.sql`** — single migration, the whole security surface. (Renumbered from `…001` to avoid a version collision with PR #7's `20260629000001_onboarding.sql`; the two are independent, so ordering is cosmetic.) Contents:
+  - **`property_guests` table** (`property_id`, `profile_id`, `booking_id` nullable provenance, `granted_by`, `expires_at`, `created_at`; PK `(property_id, profile_id)`; `property_guests_profile_idx`). Mirrors `property_admins`.
+  - **Helper functions** (all `security definer`, `stable`, `set search_path = ''`, `execute` granted to `authenticated`): `is_guest()`, `is_property_guest(uuid)`, `can_view_property(uuid)`. `is_guest()` **deliberately ignores `deactivated_at`** (see the in-file warning + Deactivation below).
+  - **Deferred grant — Option A chosen.** Added `invitations.grant_property_id`; `handle_new_user()` re-created to materialize the `property_guests` row on first sign-in when it adopts a `role='guest'` invitation carrying a grant. No staging table.
+  - **Rewrote every guest-relevant SELECT policy** (drop + recreate, names kept identical):
+    - `profiles` → `not is_guest() or id = auth.uid()` (guest reads only own row).
+    - `properties` / `property_contacts` / `photos` → grant-scoped for guests (`is_property_guest(...)`); photos additionally require `property_id is not null` so profile/legacy photos stay hidden.
+    - `photo_subjects` / `people` / `revisions` / `property_admins` → `not is_guest()` (hidden from guests entirely).
+    - `bookings` → `not is_guest() or requested_by = auth.uid()` (guest reads only their own rows; none in v1).
+  - **Write guards** — added `and not is_guest()` to every currently-open write policy so a guest can't mutate via direct API: `properties` update, `property_contacts` insert/update/delete, `photos` insert, `photo_subjects` insert, `people` insert/update, `revisions` insert, `bookings` insert.
+  - **`property_guests` RLS**: members/admins read all; guest reads only own grants; insert only by non-guests as themselves (`granted_by = auth.uid()` — this is what blocks guest self-grant); delete by any non-guest.
+  - **`property_busy_ranges(uuid)` RPC** — the redacted-calendar shape. `security definer`, returns only `(start_date, end_date)` of **approved** bookings, and re-checks `can_view_property()` so a guest can't probe a non-granted property's schedule. Member identities/notes/counts never leave RLS.
+- Drizzle mirror updated in `src/lib/db/schema.ts` (`propertyGuests` table + types, `invitations.grantPropertyId`).
+
+### App layer
+
+- **`src/lib/guest.ts`** (new) — `resolveViewer()` returns `{ userId, role, isAdmin, isGuest }` using the same `is_admin()`/`is_guest()` SQL the policies use; `guestGrantedPropertyIds()`.
+- **`src/lib/property-auth.ts`** — added `canViewProperty(id)` (RPC to `can_view_property`), the read-side analogue of `canManageProperty`.
+- **Middleware** (`src/lib/supabase/middleware.ts`) — after `getUser()` (never before, per the `@supabase/ssr` warning), one `is_guest()` RPC; guests are restricted to an **allow-list** (`/properties`, `/properties/*`, `/profile*`, `/sign-out`) and anything else (`/`, `/family`, `/admin`, `/calendar`, `/photos`, `/coming-soon`) redirects to `/properties`. **Perf note: this adds one RPC per authenticated request for all roles** — acceptable at this family's scale; a JWT/`app_metadata` role claim is the optimization if it ever matters (logged as a follow-up).
+- **Layout / shell** — `(app)/layout.tsx` resolves the viewer and passes `isGuest` to `SiteHeader` → `SiteNav*` (stripped: no nav for guests), `UserMenu` (guest's "profile" points to `/profile/edit`, not `/family/[id]`; logo home → `/properties`).
+- **`/properties`** — guest branch: RLS scopes the list; 0 → "ask your host" empty state, **1 → redirect** to that property, 2+ → scoped list.
+- **`/properties/[slug]`** — granted guests reach it (RLS 404s non-granted); Edit button, photo upload, and the contacts "edit page" link are hidden for guests. New **member-only "Add a guest"** panel (`guests/guest-access-panel.tsx` + `guests/actions.ts`): grant by email (existing profile → immediate `property_guests` row; no profile → guest invitation + magic link), list current guests, revoke. Gated by `requireMember()` (signed-in, non-guest).
+- **`/properties/[slug]/calendar`** — guest branch renders a read-only **busy/free** `MonthCalendar` from `property_busy_ranges()` (no names/form/agenda).
+- **`/properties/[slug]/edit`** — explicit `notFound()` for guests (a granted guest *can* read the property, so RLS alone wouldn't 404 them; plain members still edit).
+- **Admin invite** (`admin/actions.ts` + `invitations-section.tsx`) — `role='guest'` now requires a property; the form shows a property dropdown; `createInvitation` stores `grant_property_id`.
+
+### Decisions made during build
+
+- **Deferred grant: Option A** (invitation-carried grant) over the staging table — self-contained, less surface.
+- **Policy names kept identical** on drop/recreate so this migration is the single authority and leaves no orphan duplicates.
+- **Deactivation enforced bluntly + separately** (per the `is_guest()` warning): `setMemberActivation(deactivate=true)` now **revokes all of that profile's `property_guests` rows**. `is_guest()` stays activation-agnostic so deactivation can never *widen* a guest's access.
+- **Guest self-profile** surfaced via `/profile/edit` (there is no standalone `/profile` page; the directory `/family/[id]` is blocked for guests).
+
+### Verification status (the remaining gate)
+
+- ✅ `npx tsc --noEmit`, `eslint`, and `next build` all pass.
+- ⛔ **Live RLS verification NOT run** — Supabase here is **remote-only** (no local Docker), and the negative tests in the [Verification recipe](#verification-recipe) are the acceptance criteria. They require applying the migration and exercising three identities (admin / member / guest) including **direct PostgREST calls with the guest's JWT**. This must be done before shipping. The migration was **not** pushed to prod (that's a deliberate, user-gated step).
+- **To roll out:** `supabase db push` (review the diff first), then walk the positive path + every negative test in §Verification recipe, especially step 7 (direct API) and step 12 (deactivated guest doesn't escalate).
+
+### Open follow-ups
+
+- **Storage signed-URL hardening (PRD §Storage "Verify").** `storage.objects` read policy is still `bucket_id = 'photos'` for any authenticated user. The app never *discloses* a non-granted property's storage path to a guest (the `photos` row is RLS-hidden), so there's no exploitable leak via the UI — but a defense-in-depth tightening (scope the storage read policy to the photos-table linkage) is worth doing. Confirm during verification step 9.
+- **Middleware role lookup** is one RPC per request; move to a JWT/`app_metadata` claim if perf ever matters.
+- **Members can't see pending guest invites** for a property (invitations are admin-only RLS), so the "Add a guest" panel lists only *materialized* grants; a freshly-invited guest appears after first sign-in. Acceptable for v1.
+- **`expires_at`** exists and is honored by `is_property_guest()`, but there's no expiry-picker UI yet (manual revoke only) — matches the PRD's "optional in v1".
+- Guests can't request bookings in v1 (insert guard). Relax + add UI if wanted later.

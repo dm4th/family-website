@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { resolveViewer } from "@/lib/guest";
 import { SiteHeader } from "@/components/app-shell/site-header";
 import { SiteFooter } from "@/components/app-shell/site-footer";
 import { Toaster } from "@/components/ui/sonner";
@@ -38,8 +39,9 @@ export default async function AppLayout({
   const avatarUrl =
     (user.user_metadata?.avatar_url as string | undefined) ?? null;
 
-  const { data: adminCheck } = await supabase.rpc("is_admin");
-  const isAdmin = adminCheck === true;
+  const viewer = await resolveViewer();
+  const isAdmin = viewer?.isAdmin ?? false;
+  const isGuest = viewer?.isGuest ?? false;
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
@@ -49,6 +51,7 @@ export default async function AppLayout({
         avatarUrl={avatarUrl}
         displayName={displayName}
         isAdmin={isAdmin}
+        isGuest={isGuest}
       />
       <main className="mx-auto w-full max-w-7xl flex-1 px-5 py-10 sm:px-8 sm:py-14">
         {children}

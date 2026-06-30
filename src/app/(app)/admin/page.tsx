@@ -99,6 +99,9 @@ export default async function AdminPage() {
               expires_at: i.expires_at,
               created_at: i.created_at,
             }))}
+            properties={(properties ?? [])
+              .filter((p) => p.status !== "inactive")
+              .map((p) => ({ id: p.id, name: p.name }))}
           />
         </Section>
       </BriefingPanel>

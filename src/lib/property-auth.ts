@@ -24,3 +24,17 @@ export async function canManageProperty(propertyId: string): Promise<{
   const isPropertyAdmin = propAdminCheck === true;
   return { ok: isPropertyAdmin, isSiteAdmin: false, isPropertyAdmin };
 }
+
+/**
+ * "Can the current user READ this specific property?" — the read-side analogue
+ * of canManageProperty. True for any member/admin (they see all) and for a
+ * guest only if they hold a grant. Backed by the can_view_property() SQL
+ * function so the app check and the RLS predicate stay identical. (PRD 15)
+ */
+export async function canViewProperty(propertyId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("can_view_property", {
+    p_property_id: propertyId,
+  });
+  return data === true;
+}
