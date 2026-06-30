@@ -6,6 +6,7 @@ import {
   bookingAutoApprovedAdminEmail,
   bookingCancelledEmail,
   bookingDeclinedEmail,
+  bookingPendingRequesterEmail,
   bookingRequestedEmail,
   type BookingEmailContext,
 } from "@/lib/email/booking-emails";
@@ -184,6 +185,42 @@ export async function notifyBookingRequested(
     });
   } catch (err) {
     console.error("[notify] booking-requested failed:", err);
+  }
+}
+
+/**
+ * A request landed `pending` → acknowledge the BOOKER ("we've got it, an admin
+ * will review"). Pairs with `notifyBookingRequested` (which alerts the admins);
+ * together they cover both sides of the pending path. Auto-approved requests
+ * skip this and get the confirmation from `notifyBookingApproved` instead, so a
+ * booker never receives both for one request.
+ */
+export async function notifyBookingPendingRequester(
+  supabase: Client,
+  input: BookingNotificationInput,
+): Promise<void> {
+  try {
+    const [property, requester] = await Promise.all([
+      loadProperty(supabase, input.propertyId),
+      loadProfile(supabase, input.requestedBy),
+    ]);
+    if (!property || !requester?.email) return;
+
+    const ctx = buildContext(
+      property,
+      requester.name,
+      await calendarUrl(property.slug),
+      input,
+    );
+    const email = bookingPendingRequesterEmail(ctx);
+    await sendEmail({
+      to: [requester.email],
+      subject: email.subject,
+      html: email.html,
+      text: email.text,
+    });
+  } catch (err) {
+    console.error("[notify] booking-pending-requester failed:", err);
   }
 }
 

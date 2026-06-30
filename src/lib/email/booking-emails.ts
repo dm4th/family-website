@@ -146,6 +146,36 @@ export function bookingAutoApprovedAdminEmail(
   };
 }
 
+/**
+ * To the requester: their request landed `pending` (a peak period, or an
+ * overlap with another pending request) and is waiting for an admin to approve.
+ * A calm acknowledgement so the booker isn't left wondering, mirroring the
+ * reassurance the auto-approve confirmation already gives.
+ */
+export function bookingPendingRequesterEmail(
+  ctx: BookingEmailContext,
+): RenderedEmail {
+  const heading = `Your ${ctx.propertyName} request is in`;
+  const content = {
+    preview: `Request received: ${ctx.propertyName}, ${formatStayRange(
+      ctx.startDate,
+      ctx.endDate,
+    )}`,
+    heading,
+    paragraphs: [
+      `Thanks! Your request for ${ctx.propertyName} is in and waiting for an admin to approve it.`,
+      "You'll get an email as soon as there's a decision. Nothing to do in the meantime.",
+    ],
+    details: baseDetails(ctx),
+    cta: { label: "View on the Calendar", url: ctx.calendarUrl },
+  };
+  return {
+    subject: heading,
+    html: renderEmailHtml(content),
+    text: renderEmailText(content),
+  };
+}
+
 /** To the requester: their request was declined by an admin. */
 export function bookingDeclinedEmail(
   ctx: BookingEmailContext,

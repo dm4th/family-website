@@ -16,6 +16,7 @@ import {
   notifyBookingAutoApprovedAdmins,
   notifyBookingCancelled,
   notifyBookingDeclined,
+  notifyBookingPendingRequester,
   notifyBookingRequested,
 } from "@/lib/notifications/bookings";
 
@@ -165,7 +166,8 @@ export async function createBookingRequest(
   // Best-effort notifications (never block the booking):
   //  - auto-approved → confirm the booker AND send a calm FYI to the property
   //    admins + site admin (the family's explicit ask).
-  //  - pending → urgently alert the property admins + site admin to act.
+  //  - pending → urgently alert the property admins + site admin to act, AND
+  //    acknowledge the booker that their request is in and awaiting approval.
   const notifyInput = {
     bookingId: inserted.id,
     propertyId,
@@ -180,6 +182,7 @@ export async function createBookingRequest(
     await notifyBookingAutoApprovedAdmins(supabase, notifyInput);
   } else {
     await notifyBookingRequested(supabase, notifyInput);
+    await notifyBookingPendingRequester(supabase, notifyInput);
   }
 
   revalidatePath(`/properties/${property.slug}/calendar`);

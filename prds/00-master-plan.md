@@ -47,7 +47,7 @@ Small, scoped fixes from [docs/testing-playbook-round-2.md](../docs/testing-play
 |---|---|---|---|
 | **13-R2** | [13](13-onboarding-welcome-help.md#round-2--testing-feedback-2026-06-30) | Collect **Generation** (+ phone, relationship notes) in the `/welcome` flow so new members stop landing as "Generation Not Set"; de-dupe the generation labels into a shared helper. | 🟢 ready |
 | **06-R2** | [06](06-property-booking.md#round-2--testing-feedback-2026-06-30) | **Two-tap** date selection (1st tap = Arrive, 2nd = Last Night) instead of drag/single-tap booking a 1-night stay; move the `/calendar` legend **beneath** the grid. | 🟢 ready |
-| **14-R2** | [14](14-booking-notifications.md#round-2--testing-feedback-2026-06-30) | Booker **"request received, pending approval"** email on the pending path (today only admins are notified). | 🟢 ready |
+| **14-R2** | [14](14-booking-notifications.md#round-2--testing-feedback-2026-06-30) | Booker **"request received, pending approval"** email on the pending path (today only admins are notified). | ✅ shipped |
 | **14-R2-OPS** | [14](14-booking-notifications.md#round-2--testing-feedback-2026-06-30) | **Supabase Auth custom SMTP** (Resend) + raise auth email rate limits — clears the `email rate limit exceeded` wall that blocked guest testing. **Owner action (Dan), not a code PR.** | 🔴 blocker |
 | **17-R2** | [17](17-image-performance.md#round-2--testing-feedback-2026-06-30) | Full-res question **answered in-PRD** (decided: not building — 2048px display is by-design; archival-originals path sketched if ever wanted). | ✅ doc-only |
 
