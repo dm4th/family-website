@@ -39,6 +39,20 @@ The first-slice build was a single long session, deliberately. From here, every 
 
 **Parallel-safety legend**: features marked "parallel-safe with" can be developed simultaneously without merge conflicts (different tables, different routes, different components). The shared infrastructure (PhotoUpload, recordRevision, canManageProperty, etc.) is stable — adding to it is fine; reshaping it should be done in a dedicated session.
 
+## Round-2 follow-up queue (from the 2026-06-30 testing round)
+
+Small, scoped fixes from [docs/testing-playbook-round-2.md](../docs/testing-playbook-round-2.md). Each is **its own branch/PR** so it can be reviewed in isolation; full spec (problem, scope, files, acceptance criteria) lives in the linked PRD's "Round 2" section. No migrations required by any of these. Parallel-safe with each other (different surfaces).
+
+| Slice | PRD | What | Status |
+|---|---|---|---|
+| **13-R2** | [13](13-onboarding-welcome-help.md#round-2--testing-feedback-2026-06-30) | Collect **Generation** (+ phone, relationship notes) in the `/welcome` flow so new members stop landing as "Generation Not Set"; de-dupe the generation labels into a shared helper. | 🟢 ready |
+| **06-R2** | [06](06-property-booking.md#round-2--testing-feedback-2026-06-30) | **Two-tap** date selection (1st tap = Arrive, 2nd = Last Night) instead of drag/single-tap booking a 1-night stay; move the `/calendar` legend **beneath** the grid. | 🟢 ready |
+| **14-R2** | [14](14-booking-notifications.md#round-2--testing-feedback-2026-06-30) | Booker **"request received, pending approval"** email on the pending path (today only admins are notified). | 🟢 ready |
+| **14-R2-OPS** | [14](14-booking-notifications.md#round-2--testing-feedback-2026-06-30) | **Supabase Auth custom SMTP** (Resend) + raise auth email rate limits — clears the `email rate limit exceeded` wall that blocked guest testing. **Owner action (Dan), not a code PR.** | 🔴 blocker |
+| **17-R2** | [17](17-image-performance.md#round-2--testing-feedback-2026-06-30) | Full-res question **answered in-PRD** (decided: not building — 2048px display is by-design; archival-originals path sketched if ever wanted). | ✅ doc-only |
+
+**Verified healthy in round 2 (no action):** booking emails (all four delivered in prod, incl. both admin notifications — Resend send log confirmed; the "admin emails didn't arrive" report was a solo-tester visibility artifact, they went to Peter's inbox), image performance (9.2MB case resolved), UI polish sweep, light/dark, empty states, iPad onboarding.
+
 ## Open decisions blocking future work
 
 These need a real conversation (not just a one-person call) before the gated PRDs can start:

@@ -136,3 +136,34 @@ Shipped 2026-06-29 (PR #7). All four slices landed together. No new infrastructu
 - Title Case sweep of older copy is [16 — UI Polish & Copy](16-ui-polish-copy.md); new copy here is already Title Case.
 - Real image downscaling on upload is [17 — Image Performance](17-image-performance.md); this slice surfaces the inline uploader but doesn't downscale.
 - `displayName()` fallback is name-or-"Member" (directory/profile don't select email); wire email through if first-name-from-email is wanted there too. Admin tables still show "Unnamed" (out of family-facing scope).
+
+---
+
+## Round 2 — testing feedback (2026-06-30)
+
+The round-2 walk-through ([docs/testing-playbook-round-2.md](../docs/testing-playbook-round-2.md), Session A) marked onboarding ⚠️. iPad onboarding was praised ("even better than desktop"), but two gaps surfaced:
+1. A new member finishes `/welcome` with **no Generation set**, so the Directory (which sorts and groups by generation) files them under **"Generation Not Set"**.
+2. The tester wants **phone** and **relationship notes** collectable during setup too.
+
+### Follow-up slice 13-R2 — collect Generation (+ phone, relationship notes) at onboarding · 🟢 ready · own PR
+
+**Problem.** `/welcome` (`completeOnboarding` in [src/app/welcome/actions.ts](../src/app/welcome/actions.ts)) collects only `full_name`, `family_branch`, `bio`. The columns `generation`, `phone`, `relationship_notes` already exist on `profiles` **and are already collected on the profile-edit form** ([src/app/(app)/profile/edit/profile-edit-form.tsx](../src/app/(app)/profile/edit/profile-edit-form.tsx), written by [profile/actions.ts](../src/app/(app)/profile/actions.ts)). They're simply absent from first-run, so every new member lands as "Generation Not Set" in the Directory ([family/page.tsx:81](../src/app/(app)/family/page.tsx)).
+
+**Scope — UI only, NO migration (columns + edit-form fields already exist):**
+1. Add a **Generation** control to the `/welcome` flow, mirroring the edit form's field (number input 1–5 with the same hint, or a labelled `<select>`). This is the one that kills "Not Set" — make it **required** so the Directory always groups a new member correctly.
+2. Add **Phone** and **Relationship notes** as **optional** fields in the same step.
+3. Persist all three in `completeOnboarding` (extend the `.update({...})` payload; validate `generation` is an integer 1–5 when present, mirror the edit-form validation).
+4. **De-duplicate the generation labels.** `GENERATION_LABEL` lives inline in [family/page.tsx:21](../src/app/(app)/family/page.tsx), the edit-form hint is bespoke, and `admin/members-section.tsx` renders `Gen N` ad-hoc. Create `src/lib/generations.ts` (mirror the existing [family-branches.ts](../src/lib/family-branches.ts) pattern: label map + a small `GenerationSelect`/shared hint) and have `/welcome`, profile-edit, the directory, and admin all read from it so they never drift.
+
+**Files likely touched:** `src/app/welcome/welcome-flow.tsx`, `src/app/welcome/actions.ts`, NEW `src/lib/generations.ts`, `src/app/(app)/profile/edit/profile-edit-form.tsx` (consume helper), `src/app/(app)/family/page.tsx` (consume helper), optionally `src/app/(app)/admin/members-section.tsx`.
+
+**Acceptance criteria (what I'll review against):**
+- [ ] A brand-new member who completes `/welcome` appears under their real generation in the Directory — **never "Generation Not Set"**.
+- [ ] Phone + relationship notes entered at onboarding appear on the member's profile detail page.
+- [ ] Generation/phone/relationship remain editable later on profile-edit (parity preserved, no regression).
+- [ ] Generation labels resolve from ONE source (no inline duplicate map left behind).
+- [ ] "Finish later" still works (it skips these without trapping the member).
+- [ ] Copy follows the standing conventions: Title Case nothing that's a form field label (these stay sentence case), no em-dashes.
+- [ ] `tsc --noEmit` + `eslint` + `npm run build` clean; iPad layout still clean (don't regress the praised flow).
+
+**Out of scope:** changing the generation numbering scheme; backfilling existing members' generation (Daniel/Peter set theirs via profile-edit).

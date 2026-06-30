@@ -143,8 +143,42 @@ Shipped via PR #6. The recipient *intent* matches the plan; the build deviates f
 - **Verification**: `npm run lint` clean; `npx tsc --noEmit` clean; full `next build` compiles + generates all routes. Email-delivery steps (1–8) require `RESEND_API_KEY` + a verified `mathiesonfamily.app` domain in prod — **not yet provisioned** (the gated layer no-ops until then).
 
 - **Open follow-ups**:
-  - **Provision Resend in prod** — set `RESEND_API_KEY` + `RESEND_FROM_EMAIL`, verify the `mathiesonfamily.app` domain (SPF/DKIM). Until then only the Resend account owner receives mail.
+  - **Provision Resend in prod** — ✅ **done (2026-06-30, live-verified).** Domain `mathiesonfamily.app` is **verified** in Resend; `RESEND_API_KEY` + `RESEND_FROM_EMAIL` set in Vercel. Round-2 prod test delivered **all four** booking emails (booker confirmation + both admin notifications to a *separate* recipient) — confirmed via the Resend send log (`last_event: delivered`). **Gotcha captured:** Vercel stores env values **literally**, so `RESEND_FROM_EMAIL` must have **no surrounding quotes** — a quoted value (copied from a `.env` line) makes Resend reject the send with `Invalid 'from' field`. The `.env.local.example` shows the quoted form (correct for a dotenv file, misleading for the Vercel dashboard).
   - **Pre-trip reminders** ("your stay starts in N days") — needs a Vercel cron + a `notifications_sent` dedup log. Out of scope here; the natural next slice.
   - **Member-cancels-own → admin FYI** — currently emails no one (admins see it in-app). Could notify admins a slot freed.
   - **Per-member notification preferences** (`profiles.notify_*`) — none today; add if volume grows.
   - **`SECURITY DEFINER booking_notification_recipients()`** — the planned read path; adopt if member profile/email visibility is ever restricted.
+
+---
+
+## Round 2 — testing feedback (2026-06-30)
+
+The round-2 walk-through ([docs/testing-playbook-round-2.md](../docs/testing-playbook-round-2.md), Session C) at first read as "admin emails broken," but the Resend send log shows **all four transactional emails delivered**, including both admin notifications — they went to *Peter's* inbox, which the solo tester wasn't watching. The booking-email layer is healthy. Two real items came out of it:
+
+### Follow-up slice 14-R2 — booker "request received, pending approval" email · 🟢 ready · own PR
+
+**Problem.** When a booking lands `pending` (inside a peak period), only the **admins** are emailed (`notifyBookingRequested`). The **booker** gets no acknowledgement — round-2 logged _"Pending email as the booker did not work."_ It was never built; the deviation note above already marked it **optional / not implemented**. Round 2 promotes it to a real slice: a booker who submits a request that needs approval should get a calm "we've got it, an admin will review" note, matching the confidence the auto-approve path already gives.
+
+**Scope (no migration; mirrors the existing best-effort pattern):**
+1. New template `bookingPendingRequesterEmail(ctx)` in [src/lib/email/booking-emails.ts](../src/lib/email/booking-emails.ts) — calm/editorial, addressed to the booker: their request for `{property}`, `{dates}` is in and awaiting approval; they'll hear back. CTA → the property calendar. **Subject stays sentence case** (e.g. "Your {property} request is in") per the casing convention; **no em-dashes**.
+2. New orchestrator `notifyBookingPendingRequester(supabase, input)` in [src/lib/notifications/bookings.ts](../src/lib/notifications/bookings.ts) → `to: [requester.email]`, try/catch best-effort, shaped like `notifyBookingApproved` (returns early if no requester email).
+3. Call it in `createBookingRequest`'s **`pending`** branch in [.../calendar/actions.ts](../src/app/(app)/properties/[slug]/calendar/actions.ts) (line ~182), alongside the existing `notifyBookingRequested(...)` admin alert.
+
+**Acceptance criteria (what I'll review against):**
+- [ ] A booking that lands **pending** → the **booker** receives a "received, pending approval" email **and** admins still get the urgent alert.
+- [ ] The **auto-approve** path is unchanged (booker gets the confirmation, not this new one — no double email).
+- [ ] Best-effort: a send failure never breaks the booking write (try/catch + log, like its siblings).
+- [ ] Subject/body follow the email casing + no-em-dash conventions.
+- [ ] `tsc --noEmit` + `eslint` + `npm run build` clean. Prod spot-check via the Resend send log (`to:` = booker, subject matches).
+
+**Out of scope:** reminders, decision emails (approve/decline already exist), notification preferences.
+
+### Ops follow-up 14-R2-OPS — Supabase Auth custom SMTP (owner action, not a code PR) · 🔴 testing blocker
+
+Round-2 **Session B was blocked entirely**: signing in as a guest returned `email rate limit exceeded` from Supabase. That is **Supabase Auth's built-in email sender** (magic links, member invites, guest invites) — a *different* path from this PRD's Resend SDK transactional emails — and its built-in sender is capped at a few messages/hour ("for testing only"). It throttles every invite/sign-in flow once you test more than a couple of identities.
+
+**Fix (Supabase dashboard, owner action — Dan):**
+- **Authentication → Settings → SMTP Settings → Enable Custom SMTP:** host `smtp.resend.com`, port `587`, username `resend`, password = the Resend API key, sender `notifications@mathiesonfamily.app`, sender name `Mathieson Family`.
+- **Authentication → Rate Limits → raise "emails per hour"** off the tiny built-in default.
+
+This routes auth emails through the already-verified Resend domain and clears the wall that blocked guest + new-member testing. No application code changes. Track to completion before the next testing round (it gates Sessions A and B).

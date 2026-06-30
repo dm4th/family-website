@@ -154,3 +154,17 @@ Run in the owner's logged-in Chrome against the hosted Supabase project, driving
 
 - **Backfill** existing pre-PRD full-res objects (re-compress + generate thumbs) — currently they serve the full object via fallback, so an un-backfilled directory avatar loads a multi-MB original. Out of scope per the PRD; note as a one-off migration.
 - WebP/AVIF re-encode (v2); server-side HEIC→JPEG conversion (v2); storage-quota dashboard (PRD 05).
+
+---
+
+## Round 2 — testing feedback (2026-06-30)
+
+Session D passed with praise ("Really well done!!!"). One **question**, not a defect: _"Where can we see full res? Does it ever make sense to enable full res?"_
+
+**Decision — captured, not building now.** Uploads are re-encoded to a **2048px-max display JPEG** (q0.82) on the client; the **original is not retained separately** — that downscale is exactly what made the slow 9.2MB case fast, and 2048px is sharp on any screen the family uses and prints fine at typical sizes. So there is no "full res" to view today, by design.
+
+**If archival originals are ever wanted** (a deliberate future slice, not queued):
+- Keep the original object alongside the display rendition on upload (a `originalPathFor(storagePath)` companion, paid for in storage), and
+- Add an opt-in **"View / download original"** affordance on the photo detail (lazy — never loaded into galleries), signed on demand via `withSignedUrls()`.
+
+Trade-off to weigh then: storage cost + a slower, deliberate full-res fetch vs. archival fidelity. **Recommendation: not worth it for a family portal** unless someone specifically wants print-master originals. Logged here so the question is answered for the next round rather than re-litigated.
