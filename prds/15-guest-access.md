@@ -317,3 +317,35 @@ A brand-new guest (`onboarded_at = null`) hit **`ERR_TOO_MANY_REDIRECTS`** and w
 - **Members can't see pending guest invites** for a property (invitations are admin-only RLS), so the "Add a guest" panel lists only *materialized* grants; a freshly-invited guest appears after first sign-in. Acceptable for v1.
 - **`expires_at`** exists and is honored by `is_property_guest()`, but there's no expiry-picker UI yet (manual revoke only) — matches the PRD's "optional in v1".
 - Guests can't request bookings in v1 (insert guard). Relax + add UI if wanted later.
+
+---
+
+## Round 2 — testing feedback (2026-06-30)
+
+Live round-2 guest testing went well ("the guest page process looks great"), and the magic-link/invite emails now route through Resend (see [14 — Booking Notifications](14-booking-notifications.md) §14-R2-OPS — Supabase Auth custom SMTP, done). One real gap surfaced.
+
+### Follow-up slice 15-R2 — guest-appropriate profile editor · 🟢 ready · own PR
+
+**Problem.** `/profile/edit` ([src/app/(app)/profile/edit/page.tsx](../src/app/(app)/profile/edit/page.tsx)) has **no role check**, and `/profile/*` is in the guest middleware allow-list, so a signed-in **guest sees the full member editor**: Family mode, titled **"What the Family Sees,"** asking for **Family Branch, Generation, Relationship notes,** and a family-facing **Bio**. None of that applies to a property renter (a guest isn't in the family tree, and members can't look them up). After [13](13-onboarding-welcome-help.md)-R2 merged, the page even shows a Generation picker. PRD 15's own implementation notes claim guests have "no Edit affordances" — the profile editor slipped through that.
+
+**Decision (confirmed with the family):** a guest's profile is **contact basics only — name, photo, phone.** Drop Family Branch, Generation, Relationship notes, and the family-facing Bio.
+
+**Scope (no migration — all columns exist):**
+1. **Branch the editor on role.** In `profile/edit/page.tsx`, resolve the viewer (reuse `resolveViewer()` / the `is_guest()` RPC already used in the layout + middleware). For a guest, render a **guest variant**:
+   - **Operations** mode (LedgerPanel), not Family/Salon — a guest lives in the property/operations zone, not the family tree.
+   - Re-framed copy: not "What the Family Sees" / "what other members see when they look you up" — something like "Your details" + "So your host can reach you during your stay."
+   - Fields: **name**, **photo** (the existing `ProfilePhotosSection` works for any profile), **phone**. Nothing else.
+2. **Guest write path.** A guest save must persist **only** `full_name` + `phone` (+ photo, which writes itself). Either a small `GuestProfileForm` + focused action, or guard the existing `updateProfile` to ignore family fields when the actor is a guest. RLS already blocks a guest from escalating role/branch, but the form must not *present* or *submit* those fields.
+3. **Member editor unchanged** — members still get the full form including the 13-R2 Generation select.
+
+**Files likely touched:** `src/app/(app)/profile/edit/page.tsx` (role branch), a new `guest-profile-form.tsx` (or a conditional in `profile-edit-form.tsx`), `src/app/(app)/profile/actions.ts` (guest-safe write), reusing `resolveViewer()` from [src/lib/...](../src/lib) and `ProfilePhotosSection`.
+
+**Acceptance criteria (what I'll review against):**
+- [ ] A signed-in **guest** at `/profile/edit` sees only name + photo + phone, in Operations framing — **no** Family Branch / Generation / Relationship notes / family Bio, and not the "What the Family Sees" copy.
+- [ ] A guest can set name, phone, and photo, and saving persists them.
+- [ ] A guest save never writes (or is silently dropped for) family-only fields; RLS escalation guards remain intact.
+- [ ] A **member's** profile editor is unchanged (still has all fields incl. the Generation select).
+- [ ] The user-menu "Edit Profile" link works for both roles (it already shows for guests).
+- [ ] `tsc --noEmit` + `eslint` + `npm run build` clean; check on a narrow (phone) viewport — guests are often mobile.
+
+**Out of scope:** the guest **property view** itself (it tested well, leave it); guest booking; redesigning the member profile.
