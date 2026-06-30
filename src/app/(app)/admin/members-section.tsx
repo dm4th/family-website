@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { generationShort } from "@/lib/generations";
 import {
   changeMemberRole,
   setMemberActivation,
@@ -73,7 +74,10 @@ function MemberRowEditor({
           )}
         </div>
         <div className="mt-1 text-xs text-foreground-subtle">
-          {[row.family_branch, row.generation ? `Gen ${row.generation}` : null]
+          {[
+            row.family_branch,
+            row.generation ? generationShort(row.generation) : null,
+          ]
             .filter(Boolean)
             .join(" · ") || "—"}
         </div>

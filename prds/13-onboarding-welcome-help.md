@@ -145,7 +145,7 @@ The round-2 walk-through ([docs/testing-playbook-round-2.md](../docs/testing-pla
 1. A new member finishes `/welcome` with **no Generation set**, so the Directory (which sorts and groups by generation) files them under **"Generation Not Set"**.
 2. The tester wants **phone** and **relationship notes** collectable during setup too.
 
-### Follow-up slice 13-R2 — collect Generation (+ phone, relationship notes) at onboarding · 🟢 ready · own PR
+### Follow-up slice 13-R2 — collect Generation (+ phone, relationship notes) at onboarding · ✅ shipped (2026-06-30)
 
 **Problem.** `/welcome` (`completeOnboarding` in [src/app/welcome/actions.ts](../src/app/welcome/actions.ts)) collects only `full_name`, `family_branch`, `bio`. The columns `generation`, `phone`, `relationship_notes` already exist on `profiles` **and are already collected on the profile-edit form** ([src/app/(app)/profile/edit/profile-edit-form.tsx](../src/app/(app)/profile/edit/profile-edit-form.tsx), written by [profile/actions.ts](../src/app/(app)/profile/actions.ts)). They're simply absent from first-run, so every new member lands as "Generation Not Set" in the Directory ([family/page.tsx:81](../src/app/(app)/family/page.tsx)).
 
@@ -158,12 +158,19 @@ The round-2 walk-through ([docs/testing-playbook-round-2.md](../docs/testing-pla
 **Files likely touched:** `src/app/welcome/welcome-flow.tsx`, `src/app/welcome/actions.ts`, NEW `src/lib/generations.ts`, `src/app/(app)/profile/edit/profile-edit-form.tsx` (consume helper), `src/app/(app)/family/page.tsx` (consume helper), optionally `src/app/(app)/admin/members-section.tsx`.
 
 **Acceptance criteria (what I'll review against):**
-- [ ] A brand-new member who completes `/welcome` appears under their real generation in the Directory — **never "Generation Not Set"**.
-- [ ] Phone + relationship notes entered at onboarding appear on the member's profile detail page.
-- [ ] Generation/phone/relationship remain editable later on profile-edit (parity preserved, no regression).
-- [ ] Generation labels resolve from ONE source (no inline duplicate map left behind).
-- [ ] "Finish later" still works (it skips these without trapping the member).
-- [ ] Copy follows the standing conventions: Title Case nothing that's a form field label (these stay sentence case), no em-dashes.
-- [ ] `tsc --noEmit` + `eslint` + `npm run build` clean; iPad layout still clean (don't regress the praised flow).
+- [x] A brand-new member who completes `/welcome` appears under their real generation in the Directory — **never "Generation Not Set"** (generation is a **required** field in `completeOnboarding`).
+- [x] Phone + relationship notes entered at onboarding appear on the member's profile detail page (persisted to the same columns the detail page already reads).
+- [x] Generation/phone/relationship remain editable later on profile-edit (parity preserved; the edit form now shares the same `GenerationSelect` + validation).
+- [x] Generation labels resolve from ONE source — `src/lib/generations.ts`; the inline `GENERATION_LABEL` map, the bespoke edit-form hint, and admin's ad-hoc `Gen N` all read from it now.
+- [x] "Finish later" still works — `skipOnboarding()` reads no fields, so the new required generation doesn't trap a skipper.
+- [x] Copy follows the standing conventions: form field labels stay sentence case; no em-dashes added.
+- [x] `tsc --noEmit` + `eslint` + `npm run build` all clean.
 
 **Out of scope:** changing the generation numbering scheme; backfilling existing members' generation (Daniel/Peter set theirs via profile-edit).
+
+**Implementation (13-R2, shipped 2026-06-30 — UI only, no migration).**
+
+- **NEW `src/lib/generations.ts`** — the single source: `GENERATIONS` constant, `generationLabel()` (directory style, Title Case to match existing rendering), `generationShort()` (`Gen N`), `GENERATION_UNSET_LABEL`, `GENERATION_HINT`, and `parseGeneration()` (the shared 1–5 validator). Mirrors `family-branches.ts`.
+- **NEW `src/components/generation-select.tsx`** — `GenerationSelect`, a native `<select>` matching `FamilyBranchSelect` (iPad-friendly, legacy-value passthrough). Used **required** in `/welcome` and on profile-edit.
+- **`/welcome` flow** (`welcome-flow.tsx` + `actions.ts`) — added **Generation** (required, kills "Generation Not Set"), **Phone** and **Relationship notes** (optional). `completeOnboarding` validates generation via `parseGeneration` and persists all three. Intro copy relaxed from "Just two quick things" to "A few quick details."
+- **De-dupe** — `family/page.tsx`, `profile-edit-form.tsx` (now uses `GenerationSelect` instead of a bespoke number input), `profile/actions.ts` (uses `parseGeneration`), and `admin/members-section.tsx` (`generationShort`) all read from the helper. No inline generation map or duplicate validator left behind.

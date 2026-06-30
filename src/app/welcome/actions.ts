@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { parseGeneration } from "@/lib/generations";
 
 export type WelcomeFormState =
   | { status: "idle" }
@@ -32,6 +33,9 @@ export async function completeOnboarding(
 
   const fullName = readText(formData, "full_name");
   const familyBranch = readText(formData, "family_branch");
+  const generationRaw = readText(formData, "generation");
+  const phone = readText(formData, "phone");
+  const relationshipNotes = readText(formData, "relationship_notes");
   const bio = readText(formData, "bio");
 
   if (!fullName) {
@@ -40,12 +44,31 @@ export async function completeOnboarding(
   if (!familyBranch) {
     return { status: "error", message: "Please choose your family." };
   }
+  // Generation is required: it's what stops a new member landing under
+  // "Generation not set" in the Directory (PRD 13, slice 13-R2).
+  if (!generationRaw) {
+    return { status: "error", message: "Please choose your generation." };
+  }
+
+  let generation: number;
+  try {
+    // Required here, so the blank-returns-null branch can't fire.
+    generation = parseGeneration(generationRaw)!;
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Invalid generation.",
+    };
+  }
 
   const { error } = await supabase
     .from("profiles")
     .update({
       full_name: fullName,
       family_branch: familyBranch,
+      generation,
+      phone,
+      relationship_notes: relationshipNotes,
       bio,
       onboarded_at: new Date().toISOString(),
     })

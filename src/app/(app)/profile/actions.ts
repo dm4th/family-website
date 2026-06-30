@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { parseGeneration } from "@/lib/generations";
 
 export type ProfileFormState =
   | { status: "idle" }
@@ -28,16 +29,14 @@ export async function updateOwnProfile(
   const phone = readText(formData, "phone");
   const bio = readText(formData, "bio");
 
-  let generation: number | null = null;
-  if (generationRaw) {
-    const parsed = Number.parseInt(generationRaw, 10);
-    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 5) {
-      return {
-        status: "error",
-        message: "Generation must be a small whole number (1, 2, 3, …).",
-      };
-    }
-    generation = parsed;
+  let generation: number | null;
+  try {
+    generation = parseGeneration(generationRaw);
+  } catch (e) {
+    return {
+      status: "error",
+      message: e instanceof Error ? e.message : "Invalid generation.",
+    };
   }
 
   const { error } = await supabase
