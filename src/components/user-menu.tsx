@@ -84,7 +84,7 @@ export function UserMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/help">How this works</Link>
+          <Link href="/help">How This Works</Link>
         </DropdownMenuItem>
         {isAdmin && (
           <>

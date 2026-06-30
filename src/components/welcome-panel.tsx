@@ -28,22 +28,22 @@ type Starter = {
 
 const STARTERS: Starter[] = [
   {
-    label: "Find people",
+    label: "Find People",
     blurb: "Everyone in the family, with photos and how they're related.",
     href: "/family",
   },
   {
-    label: "Look after a place",
+    label: "Look After a Place",
     blurb: "House notes, contacts and to-knows for our shared homes.",
     href: "/properties",
   },
   {
-    label: "Book a stay",
-    blurb: "Reserve dates and see who's where — no double-bookings.",
+    label: "Book a Stay",
+    blurb: "Reserve dates and see who's where, no double-bookings.",
     href: "/calendar",
   },
   {
-    label: "Add a photo",
+    label: "Add a Photo",
     blurb: "Put a face to your name and share pictures.",
     href: "/profile/edit",
   },
@@ -90,7 +90,7 @@ export function WelcomePanel({ firstName }: { firstName: string }) {
           </h2>
           <p className="max-w-prose text-sm leading-relaxed text-foreground-muted">
             This is where we keep up with each other, look after the places we
-            share, and plan our time at them. Here&apos;s where to start — and
+            share, and plan our time at them. Here&apos;s where to start, and
             you can come back to the{" "}
             <Link
               href="/help"
@@ -128,13 +128,13 @@ export function WelcomePanel({ firstName }: { firstName: string }) {
               "bg-accent-family text-accent-family-foreground hover:bg-accent-family/90"
             )}
           >
-            Got it
+            Got It
           </Button>
           <Link
             href="/help"
             className="text-sm text-foreground-muted underline-offset-4 hover:text-foreground hover:underline"
           >
-            Read the quick guide
+            Read the Quick Guide
           </Link>
         </div>
       </div>

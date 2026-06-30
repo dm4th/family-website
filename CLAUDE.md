@@ -48,6 +48,8 @@ Tokens live in [src/app/globals.css](src/app/globals.css) — surface (ivory/par
 
 **Never default to**: three-column SaaS feature grids, icons in colored circles, giant rounded cards everywhere, centered everything, candy-colored status pills, marketing-hype copy.
 
+**Copy & casing conventions** (standing family decision — full rules in [.claude/skills/family-office-ui/resources/copy-style.md](.claude/skills/family-office-ui/resources/copy-style.md) → "Casing & punctuation"): **Title Case** nav/menu labels, page titles, button/CTA labels, and email CTA buttons; leave `Eyebrow`/`SectionRule`/`StatLine` labels ALL-CAPS (don't re-case the source); keep body copy, form field labels, sentence-style headings, and **email subjects** in sentence case; **never use em-dashes (—)** in user-facing copy — rendered JSX, `.ts` error/`state.message` strings, email templates, and the `/help` markdown — replacing them by sense (the `"—"` missing-value placeholder is the one exception). New pages and emails must not reintroduce sentence-case buttons or em-dashes.
+
 ## Conventions
 - **Supabase keys**: prefer the new **publishable key** (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`). The legacy anon key is supported as a fallback in [src/lib/supabase/env.ts](src/lib/supabase/env.ts). Never expose the service-role / secret key in client code.
 - **Next.js 16**: this version renamed `middleware.ts` → `proxy.ts` and the exported function to `proxy()`. See [src/proxy.ts](src/proxy.ts).

@@ -72,6 +72,7 @@ When changing UI, Claude should:
 - implement production-ready code, not vague suggestions
 - preserve accessibility and responsive behavior
 - avoid placeholder-heavy, symmetrical AI-looking layouts
+- **honor the standing copy conventions** (see `resources/copy-style.md` → "Casing & punctuation"): **Title Case** nav/menu/buttons/page-titles and email CTAs; leave `Eyebrow`/`SectionRule`/`StatLine` labels ALL-CAPS; keep body copy, form field labels, sentence-headings, and email subjects in sentence case; **no em-dashes (—)** in any user-facing copy (including `.ts` error strings, email templates, and the `/help` markdown) — except the `"—"` missing-value placeholder.
 
 ## Anti-pattern reminders
 

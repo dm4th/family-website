@@ -125,7 +125,7 @@ export function renderEmailText(content: EmailContent): string {
     lines.push(`${content.cta.label}: ${content.cta.url}`, "");
   }
   lines.push(
-    "—",
+    "--",
     "Mathieson family portal. Manage bookings from the family calendar.",
   );
   return lines.join("\n");

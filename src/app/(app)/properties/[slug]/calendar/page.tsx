@@ -118,7 +118,7 @@ export default async function PropertyCalendarPage({
           }
           action={
             <Button asChild variant="outline" size="sm">
-              <Link href={`/properties/${property.slug}`}>Back to property</Link>
+              <Link href={`/properties/${property.slug}`}>Back to Property</Link>
             </Button>
           }
         />
