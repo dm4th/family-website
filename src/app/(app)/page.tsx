@@ -97,7 +97,7 @@ export default async function Dashboard({
       eyebrow: "Operations",
       title: "Properties",
       blurb:
-        "Family-shared places — house rules, contacts, and photos. Anyone in the family can edit them.",
+        "Family-shared places: house rules, contacts, and photos. Anyone in the family can edit them.",
       href: "/properties",
       badge:
         propertyCount === null
@@ -129,8 +129,8 @@ export default async function Dashboard({
       mode: "advisory",
     },
     {
-      title: "Family timeline",
-      blurb: "Stories, milestones, history — preserved.",
+      title: "Family Timeline",
+      blurb: "Stories, milestones, history. Preserved.",
       href: "/coming-soon/timeline",
       mode: "family",
     },
@@ -157,7 +157,7 @@ export default async function Dashboard({
           Welcome back, {firstName}.
         </h1>
         <p className="max-w-xl text-base leading-relaxed text-foreground-muted">
-          A quiet place for the family — to share what we love, look after what
+          A quiet place for the family, to share what we love, look after what
           we own, and steward what we&apos;ve inherited.
         </p>
       </header>
@@ -178,7 +178,7 @@ export default async function Dashboard({
         <SectionRule label="In flight" />
         <p className="max-w-2xl text-sm text-foreground-muted">
           What we&apos;re planning next. Click through to read what each one
-          will do and why — and tell us what you&apos;d like sooner.
+          will do and why, and tell us what you&apos;d like sooner.
         </p>
         <ul className="grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
           {comingSoon.map((c) => (

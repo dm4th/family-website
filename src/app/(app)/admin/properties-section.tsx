@@ -103,7 +103,7 @@ export function PropertiesSection({
             <p className="text-sm text-destructive">{state.message}</p>
           )}
           <Button type="submit" disabled={isPending}>
-            {isPending ? "Creating…" : "Create property"}
+            {isPending ? "Creating…" : "Create Property"}
           </Button>
         </div>
       </form>

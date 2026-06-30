@@ -38,7 +38,7 @@ export default async function ProfileEditPage() {
       <PageIntro
         mode="family"
         eyebrow="Your profile"
-        title="What the family sees"
+        title="What the Family Sees"
         context="Update what other members see when they look you up. Saved revisions are kept for transparency."
       />
 

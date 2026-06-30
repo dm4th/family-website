@@ -82,7 +82,7 @@ function AddContactForm({
           <p className="text-sm text-destructive">{state.message}</p>
         )}
         <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Adding…" : "Add contact"}
+          {isPending ? "Adding…" : "Add Contact"}
         </Button>
       </div>
     </form>

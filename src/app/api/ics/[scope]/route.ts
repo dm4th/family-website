@@ -36,11 +36,11 @@ function toDateArray(iso: string): [number, number, number] {
 }
 
 function feedTitle(scope: string, bookings: FeedBooking[]): string {
-  if (scope === "me") return "Mathieson Family — My bookings";
-  if (scope === "all") return "Mathieson Family — All properties";
+  if (scope === "me") return "Mathieson Family: My Bookings";
+  if (scope === "all") return "Mathieson Family: All Properties";
   // Property scope: prefer the real name (from the first row) over the slug.
   const name = bookings[0]?.propertyName ?? scope;
-  return `Mathieson Family — ${name}`;
+  return `Mathieson Family: ${name}`;
 }
 
 const UUID_RE =
@@ -175,7 +175,7 @@ export async function GET(
 
   const title = feedTitle(scope, bookings);
   const events: EventAttributes[] = bookings.map((b) => ({
-    title: scope === "me" ? b.propertyName : b.guestName,
+    title: `${b.propertyName} | ${b.guestName}`,
     start: toDateArray(b.start_date),
     end: toDateArray(b.end_date),
     uid: `booking-${b.id}@mathiesonfamily.app`,

@@ -1,7 +1,7 @@
 # 16 — UI Polish & Copy
 
 **Phase**: 3 (polish) · **Depends on**: —
-**Status**: 🟢 ready
+**Status**: ✅ shipped
 
 ---
 
@@ -159,4 +159,58 @@ src/app/api/ics/[scope]/route.ts               # unify event title to "[PROPERTY
 
 ## Implementation
 
-Not started.
+✅ Shipped. All four items landed in one session/branch. No DB, route, or dependency changes. Build gates green: `npx tsc --noEmit` clean, `eslint` clean on all changed files, `npm run build` succeeds.
+
+### Item 1 — Title Case
+
+**Rule applied** (Chicago-ish, per Pre-flight): capitalize first/last + major words; keep articles, short conjunctions, and short prepositions lowercase (a, an, the, and, or, to, of, in, on, for, with, by, at, as). Hyphenated compounds capitalize both elements ("Sign-In").
+
+**Casing line that resolved the PRD's ambiguity:** the PRD's button inventory listed "Request these dates" and "Subscribe to your bookings" as buttons to Title-Case, but the live grep showed both are `<Eyebrow>` devices. The Pre-flight "leave eyebrows as-is" decision wins (re-casing them is invisible anyway — they render ALL-CAPS via CSS), so they were **left untouched**. Same for all other `<Eyebrow>`, `eyebrow`-classed, and `PageIntro eyebrow=` strings.
+
+**Heading-vs-sentence rule (judgment call, applied consistently):** Title-Cased Fraunces heading *labels* (no terminal punctuation, function as titles) — e.g. "The Place", "Living Here", "What We Ask", "On the Ground", "Awaiting Your Call", "Your Stays", "Upcoming Approved Bookings". **Left** greeting/sentence headings that carry terminal punctuation and read conversationally — "Welcome back, {firstName}." and "Check your inbox." (consistent with treating them as body voice, not titles).
+
+**Form field labels left as-is** (`<Field label=…>`, `<Label>`, `<select>` `<option>` values) — out of the PRD's explicit scope (nav / page titles / buttons) and sentence-case form labels are a valid internal style.
+
+Changed strings (titles/headings): `calendar` "All Properties"; `profile/edit` "What the Family Sees"; `admin` "Pending Bookings"; `properties/[slug]` "The Place" / "Living Here" / "What We Ask" / "On the Ground"; `properties/[slug]/calendar` "Awaiting Your Call" / "Your Stays" / "Upcoming Approved Bookings"; `family` GENERATION_LABEL "First Generation"…"Fifth Generation" + "Generation Not Set"; dashboard + coming-soon data titles "Family Timeline", "Trust Documents & AI", "Family Messaging".
+
+Changed strings (buttons / menu / CTA links): "Edit Details", "Save Changes" (×2), "Manage Your Photos →", "Create Property", "Create Invitation", "Email Magic Link", "Add Contact", "Cancel Booking", "Use as My Avatar", "Add Amenity", "Add Peak Period", "Submit Request", "Back to Property", "Reset Link", "Reset My Calendar Link", "Add Photos" (×2), "From Device", "Open Picker", "Reopen Picker", "Try the Failed Ones Again", "Try Again", "View My Profile", "Edit Profile", "Sign Out", "Send Sign-In Link", "Add Photo" (PhotoUpload default), "Bulleted List" / "Numbered List" (rich-text toolbar tooltips). Single-word labels (Save, Delete, Remove, Add, Cancel, Approve, Decline, Revoke, Copy, Write, Preview, Admin, Calendar, Continue with Google, Apple / Outlook) were already correct.
+
+### Item 2 — Em-dash scrub (reviewer-checked)
+
+Per-string by hand: clauses → period/semicolon; elaboration/list → colon; aside → commas. **Comments and `prds/`/`docs/` left untouched.** Scope extended beyond the `.tsx` grep to two user-facing error strings in `.ts` action files (they surface via `alert()`/`state.message`).
+
+Every changed user-facing string:
+- `page.tsx` (dashboard): "Family-shared places: house rules…"; "Stories, milestones, history. Preserved."; "A quiet place for the family, to share…"; "…what each one will do and why, and tell us…"
+- `calendar/page.tsx`: subscribe blurb "…every few hours, so new bookings aren't instant."
+- `properties/[slug]/page.tsx`: empty-state "No photo yet. Drop one in below" (eyebrow-styled but prose — em-dash scrubbed, source casing left)
+- `properties/[slug]/calendar/page.tsx`: subscribe blurb "…every few hours, so new bookings aren't instant."
+- `booking-request-form.tsx`: "…peak window, so the request will sit pending…"; "Approved. These dates are yours."; "Submitted. A property admin will review."
+- `coming-soon/[feature]/page.tsx`: description "…cited answers without paging a lawyer…"; rationale "…before anything goes online: how they're encrypted…"; rationale "…day-to-day; otherwise it's an empty room."; footer "Let us know. The family's priorities…"; "← Back to Dashboard"
+- `admin/page.tsx`: section description "…each property's calendar. Links below open the request in context."
+- `property-edit-form.tsx`: hint "Add what the place has, one per chip."
+- `subscribe-to-calendar.tsx`: default blurb "…every few hours, so new bookings aren't instant."; "Treat it like a password. Anyone with the link…"
+- `markdown.tsx`: emptyHint "Nothing here yet. Edit to add details."
+- `rich-text-field.tsx`: preview emptyHint "Nothing to preview yet. Switch to Write and add some content."
+- `google-photos-picker.tsx`: oversize msg "…even after downsize. Skipped."; "…couldn't be saved. Last error: …"; "Per-pick consent: we never read your wider library."
+- `photo-gallery.tsx`: "No photos yet. Be the first to add one above."
+- `admin/actions.ts`: thrown "Cannot send: invitation is {status}"
+- `properties/[slug]/calendar/actions.ts`: "Another approved booking now conflicts with these dates. Refresh the queue."
+- `api/ics/[scope]/route.ts`: feed names → colon (see Item 4)
+
+**Intentionally left:** the `?? "—"` / `|| "—"` missing-name **placeholder glyphs** (calendar, family, admin, property calendar) — typographic stand-ins, not prose, per Pre-flight; blanking them would break the fallback. Also left the technical error-format em-dash in `src/lib/google/photos-picker.ts` (diagnostic string, not UI copy).
+
+### Item 3 — Home affordance
+
+- Added a standalone **"Home"** link (`href="/"`) before the nav groups in **both** `SiteNavDesktop` and `SiteNavMobile` (`site-nav.tsx`). `isActive` already exact-matches `/`, so active highlighting on the dashboard works with no extra logic. Chose a standalone link over "first link in Family group" — semantically cleaner than nesting Home under the Family rail.
+- `site-header.tsx`: wordmark link gets `cursor-pointer`, `group` + `group-hover:text-foreground-muted` on the "Family" sub-label, and `aria-label="Home"` so the affordance is felt and labeled. No breadcrumbs / per-page back button (out of scope).
+
+### Item 4 — Calendar display polish
+
+- **4a band label** (`calendar/page.tsx`): added `guest_count` to the unified `bookings.select(...)` and to the `BookingRow` type; band label is now `` `${name} · ${person} (${n} guest[s])` `` using the middot separator and correct singular/plural. `guest_count` is `NOT NULL DEFAULT 1` in schema, so no null-guard needed. `month-calendar.tsx` unchanged — it already renders `CalendarBand.label` truncated with `title=` hover.
+- **Legend** (`calendar/page.tsx`): **verified, not changed.** The existing `LedgerPanel` + `<Eyebrow>Legend</Eyebrow>` maps `propertyTone` swatches to property-name links; bands use the same `propertyTone` map, so swatch colors and band colors stay in sync by construction. Reads well; no functional change needed.
+- **4b ICS title** (`api/ics/[scope]/route.ts`): unified the per-event SUMMARY to `` `${b.propertyName} | ${b.guestName}` `` for **all** scopes (was `propertyName` for "me", `guestName` otherwise). Feed/calendar names switched em-dash → colon and Title-Cased: "Mathieson Family: My Bookings", "Mathieson Family: All Properties", "Mathieson Family: {name}".
+
+### Follow-ups / notes for downstream sessions
+
+- **PRD 13 (Onboarding) & 14 (Notifications)** also touch nav/copy and the ICS/email surfaces — the Title-Case convention and the `[Property] | [Person]` ICS format are now the established patterns; match them.
+- The heading-vs-sentence and form-field-label decisions above are conventions, not one-offs — apply them to any new chrome so casing stays consistent.

@@ -254,8 +254,8 @@ export function BookingRequestForm({
 
         {needsApproval && (
           <p className="text-sm text-foreground-muted">
-            These dates fall in a peak window — request will sit pending until
-            a property admin approves.
+            These dates fall in a peak window, so the request will sit pending
+            until a property admin approves.
           </p>
         )}
         {pendingConflicts > 0 && (
@@ -274,14 +274,14 @@ export function BookingRequestForm({
         {state.status === "saved" && (
           <p className="text-sm text-accent-operations">
             {state.bookingStatus === "approved"
-              ? "Approved — these dates are yours."
-              : "Submitted — a property admin will review."}
+              ? "Approved. These dates are yours."
+              : "Submitted. A property admin will review."}
           </p>
         )}
 
         <div className="flex justify-end">
           <Button type="submit" disabled={isPending || !range}>
-            {isPending ? "Submitting…" : "Submit request"}
+            {isPending ? "Submitting…" : "Submit Request"}
           </Button>
         </div>
       </form>

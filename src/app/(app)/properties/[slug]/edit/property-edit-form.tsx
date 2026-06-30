@@ -113,7 +113,7 @@ export function PropertyEditForm({
       <Field
         label="Amenities"
         htmlFor="amenities"
-        hint="Add what the place has — one per chip."
+        hint="Add what the place has, one per chip."
       >
         <ChipListField
           id="amenities"
@@ -121,7 +121,7 @@ export function PropertyEditForm({
           inputAriaLabel="Add an amenity"
           defaultItems={property.amenities}
           placeholder="e.g., Dock, Canoe, Wood stove"
-          addLabel="Add amenity"
+          addLabel="Add Amenity"
           emptyHint="No amenities listed yet."
         />
       </Field>
@@ -187,7 +187,7 @@ export function PropertyEditForm({
           <p className="text-sm text-destructive">{state.message}</p>
         )}
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving…" : "Save changes"}
+          {isPending ? "Saving…" : "Save Changes"}
         </Button>
       </div>
     </form>
@@ -246,7 +246,7 @@ function PeakRangeEditor({
       ))}
       <div>
         <Button type="button" variant="outline" size="sm" onClick={add}>
-          Add peak period
+          Add Peak Period
         </Button>
       </div>
     </div>

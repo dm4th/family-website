@@ -339,7 +339,7 @@ async function setBookingDecision(
       return {
         status: "error",
         message:
-          "Another approved booking now conflicts with these dates — refresh the queue.",
+          "Another approved booking now conflicts with these dates. Refresh the queue.",
       };
     }
   }

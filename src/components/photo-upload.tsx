@@ -26,7 +26,7 @@ const MAX_MB = Math.round(MAX_PHOTO_BYTES / 1024 / 1024);
 
 export function PhotoUpload({
   attachment,
-  label = "Add photo",
+  label = "Add Photo",
   className,
 }: {
   attachment: Attachment;

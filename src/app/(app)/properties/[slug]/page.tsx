@@ -94,7 +94,7 @@ export default async function PropertyDetailPage({
               <Link href={`/properties/${property.slug}/calendar`}>Calendar</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link href={`/properties/${property.slug}/edit`}>Edit details</Link>
+              <Link href={`/properties/${property.slug}/edit`}>Edit Details</Link>
             </Button>
           </div>
         }
@@ -124,7 +124,7 @@ export default async function PropertyDetailPage({
         </figure>
       ) : (
         <div className="relative flex aspect-[21/9] items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-surface/60 text-foreground-subtle">
-          <span className="eyebrow">No photo yet — drop one in below</span>
+          <span className="eyebrow">No photo yet. Drop one in below</span>
         </div>
       )}
 
@@ -161,7 +161,7 @@ export default async function PropertyDetailPage({
           <section className="flex flex-col gap-4">
             <Eyebrow>About</Eyebrow>
             <h2 className="font-display text-2xl leading-tight text-foreground">
-              The place
+              The Place
             </h2>
             <Markdown source={property.description} tone="salon" />
           </section>
@@ -171,7 +171,7 @@ export default async function PropertyDetailPage({
           <section className="flex flex-col gap-4">
             <Eyebrow>How it works</Eyebrow>
             <h2 className="font-display text-2xl leading-tight text-foreground">
-              Living here
+              Living Here
             </h2>
             <Markdown source={property.how_to} tone="ledger" />
           </section>
@@ -181,7 +181,7 @@ export default async function PropertyDetailPage({
           <section className="flex flex-col gap-4">
             <Eyebrow>House rules</Eyebrow>
             <h2 className="font-display text-2xl leading-tight text-foreground">
-              What we ask
+              What We Ask
             </h2>
             <Markdown source={property.guidelines} tone="briefing" />
           </section>
@@ -206,7 +206,7 @@ export default async function PropertyDetailPage({
             <div className="border-b border-border px-5 py-4 sm:px-6">
               <Eyebrow>Contacts</Eyebrow>
               <h3 className="font-display text-lg leading-tight text-foreground">
-                On the ground
+                On the Ground
               </h3>
             </div>
             {!contacts || contacts.length === 0 ? (
