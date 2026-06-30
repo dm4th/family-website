@@ -155,7 +155,7 @@ Shipped via PR #6. The recipient *intent* matches the plan; the build deviates f
 
 The round-2 walk-through ([docs/testing-playbook-round-2.md](../docs/testing-playbook-round-2.md), Session C) at first read as "admin emails broken," but the Resend send log shows **all four transactional emails delivered**, including both admin notifications — they went to *Peter's* inbox, which the solo tester wasn't watching. The booking-email layer is healthy. Two real items came out of it:
 
-### Follow-up slice 14-R2 — booker "request received, pending approval" email · 🟢 ready · own PR
+### Follow-up slice 14-R2 — booker "request received, pending approval" email · ✅ shipped · own PR
 
 **Problem.** When a booking lands `pending` (inside a peak period), only the **admins** are emailed (`notifyBookingRequested`). The **booker** gets no acknowledgement — round-2 logged _"Pending email as the booker did not work."_ It was never built; the deviation note above already marked it **optional / not implemented**. Round 2 promotes it to a real slice: a booker who submits a request that needs approval should get a calm "we've got it, an admin will review" note, matching the confidence the auto-approve path already gives.
 
@@ -165,11 +165,13 @@ The round-2 walk-through ([docs/testing-playbook-round-2.md](../docs/testing-pla
 3. Call it in `createBookingRequest`'s **`pending`** branch in [.../calendar/actions.ts](../src/app/(app)/properties/[slug]/calendar/actions.ts) (line ~182), alongside the existing `notifyBookingRequested(...)` admin alert.
 
 **Acceptance criteria (what I'll review against):**
-- [ ] A booking that lands **pending** → the **booker** receives a "received, pending approval" email **and** admins still get the urgent alert.
-- [ ] The **auto-approve** path is unchanged (booker gets the confirmation, not this new one — no double email).
-- [ ] Best-effort: a send failure never breaks the booking write (try/catch + log, like its siblings).
-- [ ] Subject/body follow the email casing + no-em-dash conventions.
-- [ ] `tsc --noEmit` + `eslint` + `npm run build` clean. Prod spot-check via the Resend send log (`to:` = booker, subject matches).
+- [x] A booking that lands **pending** → the **booker** receives a "received, pending approval" email **and** admins still get the urgent alert. (`createBookingRequest` pending branch now calls `notifyBookingPendingRequester` alongside `notifyBookingRequested`.)
+- [x] The **auto-approve** path is unchanged (booker gets the confirmation, not this new one — no double email). The new send sits only in the `else` (pending) branch.
+- [x] Best-effort: a send failure never breaks the booking write (try/catch + log, like its siblings); returns early when the booker has no email.
+- [x] Subject/body follow the email casing + no-em-dash conventions. Subject "Your {property} request is in" (sentence case); body avoids stating a single cause (peak vs pending-overlap) so the copy stays accurate.
+- [x] `tsc --noEmit` + `eslint` + `npm run build` clean. ⏳ Prod spot-check via the Resend send log (`to:` = booker, subject matches) pending **14-R2-OPS** provisioning — the gated layer no-ops until `RESEND_API_KEY` is set.
+
+**Implementation:** template `bookingPendingRequesterEmail()` ([src/lib/email/booking-emails.ts](../src/lib/email/booking-emails.ts)) + orchestrator `notifyBookingPendingRequester()` ([src/lib/notifications/bookings.ts](../src/lib/notifications/bookings.ts)), wired into the pending branch of `createBookingRequest` ([.../calendar/actions.ts](../src/app/(app)/properties/[slug]/calendar/actions.ts)). No migration; mirrors the existing best-effort sibling pattern.
 
 **Out of scope:** reminders, decision emails (approve/decline already exist), notification preferences.
 
