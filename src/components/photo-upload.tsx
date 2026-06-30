@@ -94,14 +94,20 @@ export function PhotoUpload({
 
       // Upload the thumbnail companion best-effort: a failure here only costs
       // us the small rendition (callers fall back to the full object), so it
-      // must never fail the photo itself.
+      // must never fail the photo itself. supabase-js returns errors in the
+      // result rather than throwing, but the try/catch makes the guarantee
+      // airtight against an unexpected reject (e.g. network teardown).
       if (prepared.thumb) {
-        await supabase.storage
-          .from(PHOTOS_BUCKET)
-          .upload(thumbPathFor(storagePath), prepared.thumb, {
-            contentType: "image/jpeg",
-            upsert: false,
-          });
+        try {
+          await supabase.storage
+            .from(PHOTOS_BUCKET)
+            .upload(thumbPathFor(storagePath), prepared.thumb, {
+              contentType: "image/jpeg",
+              upsert: false,
+            });
+        } catch {
+          // Swallow — the photo's display object is already stored.
+        }
       }
 
       // Persist the small metadata row via Server Action.
