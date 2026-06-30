@@ -1,7 +1,7 @@
 # 13 — Onboarding & Profile (first-run experience)
 
 **Phase**: 2.5 (adoption) · **Depends on**: 02 (profiles), 05 (photo upload). Image-size work pairs with [17 — Image Performance](17-image-performance.md).
-**Status**: ✅ shipped (2026-06-29) — all four slices: guided `/welcome` first-run flow (gated on `profiles.onboarded_at`), Family Branch dropdown, inline profile photo, and the welcome panel + `/help` guide. New members are routed through onboarding before the app and never see "Unnamed". Migration `20260629000001_onboarding.sql` is additive (column + backfill) but **not yet pushed to prod**.
+**Status**: ✅ shipped (2026-06-29) — all four slices: guided `/welcome` first-run flow (gated on `profiles.onboarded_at`), Family Branch dropdown, inline profile photo, and the welcome panel + `/help` guide. New members are routed through onboarding before the app and never see "Unnamed". Merged in PR #7; migration `20260629000001_onboarding.sql` (additive: column + backfill) is **applied to prod**. A cross-PR redirect loop with [15 — Guest Access](15-guest-access.md) (un-onboarded guests bounced to `/welcome`) was hotfixed in `a01354b` — guests are now exempt from the onboarding gate.
 
 ---
 
@@ -103,7 +103,7 @@ Shipped 2026-06-29 (PR #7). All four slices landed together. No new infrastructu
 **Slice 1 — guided first-run flow**
 
 - `src/app/welcome/{page.tsx,welcome-flow.tsx,actions.ts}` — a focused, nav-less `/welcome` (outside the `(app)` group). Name + family **required**, photo + bio optional. `completeOnboarding()` stamps `onboarded_at` and redirects to `/?welcome=1`; `skipOnboarding()` ("Finish later") stamps `onboarded_at` only so the member isn't trapped.
-- `src/app/(app)/layout.tsx` — the redirect gate: `onboarded_at is null` → `/welcome`. Lives in the layout (not `proxy.ts`) so it's a single indexed read on an already-DB-touching path; `/welcome` sits outside `(app)` so it can't loop.
+- `src/app/(app)/layout.tsx` — the redirect gate: `onboarded_at is null` → `/welcome`. Lives in the layout (not `proxy.ts`) so it's a single indexed read on an already-DB-touching path; `/welcome` sits outside `(app)` so it can't loop. **Guests are exempt** (`resolveViewer()` is checked first): a brand-new guest also has `onboarded_at = null`, but `/welcome` isn't in the PRD 15 guest route allow-list, so gating them there bounced off the guest middleware and looped (`ERR_TOO_MANY_REDIRECTS`). Guests don't create a family profile, so they skip the gate entirely (hotfix `a01354b`, caught by the live guest e2e test).
 
 **Slice 2 — Family Branch dropdown**
 
@@ -126,12 +126,13 @@ Shipped 2026-06-29 (PR #7). All four slices landed together. No new infrastructu
 - **Backfill instead of a runtime "has a name?" check** — one-time migration write means the gate is a clean `onboarded_at is null`, and existing members aren't dragged through onboarding.
 - **"Finish later" is honored** — it stamps `onboarded_at` so the gate doesn't re-trap them; the dashboard nudge (name-only trigger, so established members aren't nagged) keeps it visible.
 - **No `Select` primitive added** — a styled native `<select>` is enough for 3 values and is the better touch control.
+- **Guests are exempt from the onboarding gate** (post-merge learning) — a not-yet-onboarded guest also has `onboarded_at = null`, and gating them to `/welcome` (not in the guest allow-list) looped against the PRD 15 middleware. The gate now resolves the viewer first and skips guests. Only surfaced once #7 and #8 were both live — neither PR showed it in isolation.
 
-**Verification** — `tsc --noEmit`, `eslint`, and `npm run build` all clean; `/welcome` and `/help` register as dynamic routes. Recipe items 1–6 covered in code; live walk-through pending the prod migration.
+**Verification** — `tsc --noEmit`, `eslint`, and `npm run build` all clean; `/welcome` and `/help` register as dynamic routes. Recipe items 1–6 covered in code. Live walk-through confirmed: the prod migration is applied and the guest end-to-end test exercised the onboarding gate (which is what surfaced the guest-exemption hotfix `a01354b`). Copy was later polished in PR #11 (welcome flow + panel, `/help`, em-dash scrub, re-cased labels).
 
 **Follow-ups**
 
-- **Migration not yet applied to prod** — `supabase db push` still needs to run (additive: column + backfill).
+- ~~Migration not yet applied to prod~~ — **resolved**: `20260629000001_onboarding.sql` (additive column + backfill) is applied to prod and live-verified. The sibling guest-access migration was renumbered to `…002` to avoid a version collision (per the PR #8 review).
 - Title Case sweep of older copy is [16 — UI Polish & Copy](16-ui-polish-copy.md); new copy here is already Title Case.
 - Real image downscaling on upload is [17 — Image Performance](17-image-performance.md); this slice surfaces the inline uploader but doesn't downscale.
 - `displayName()` fallback is name-or-"Member" (directory/profile don't select email); wire email through if first-name-from-email is wanted there too. Admin tables still show "Unnamed" (out of family-facing scope).
