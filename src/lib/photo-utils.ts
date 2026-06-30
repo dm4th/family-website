@@ -13,10 +13,39 @@ export const ALLOWED_MIME_TYPES = new Set([
   "image/heif",
 ]);
 
-// Supabase Storage on the Free tier accepts files up to 50MB by default.
-// We allow up to 50MB here; the client uploads directly to Storage, so the
-// Vercel Function 4.5MB body limit doesn't apply.
-export const MAX_PHOTO_BYTES = 50 * 1024 * 1024;
+// Ceiling on what we accept *at the picker*. Phones shoot large originals, so
+// we accept up to 25MB, but PhotoUpload downscales in-browser before the
+// direct-to-Storage upload, so the *stored* object is typically sub-1MB. The
+// old 50MB limit only ever mattered before client-side downscaling existed.
+export const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
+
+// --- Display renditions (PRD 17) -------------------------------------------
+// We store two objects per device upload: a "display" copy (long edge capped
+// at 2048px, ~matches the Google Photos import) and a small "thumb" companion
+// for avatars and grid tiles. `rendition` selects which one a call site wants.
+export type Rendition = "thumb" | "display" | "full";
+
+// Long-edge pixel caps + JPEG quality for the in-browser re-encode.
+export const DISPLAY_MAX_DIMENSION = 2048;
+export const THUMB_MAX_DIMENSION = 400;
+export const DISPLAY_QUALITY = 0.82;
+export const THUMB_QUALITY = 0.72;
+
+/**
+ * Companion thumbnail path for a stored photo. `ab/uuid.jpg` → `ab/uuid_thumb.jpg`
+ * (and `google/ab/uuid.jpg` → `google/ab/uuid_thumb.jpg`). Deterministic so the
+ * signing helper can derive it without a DB column. The thumb is best-effort:
+ * if it's missing (old uploads, HEIC/GIF, Google imports), callers fall back to
+ * the full object, so a thumb path that 404s is never fatal.
+ */
+export function thumbPathFor(storagePath: string): string {
+  const slash = storagePath.lastIndexOf("/");
+  const dir = slash >= 0 ? storagePath.slice(0, slash + 1) : "";
+  const file = slash >= 0 ? storagePath.slice(slash + 1) : storagePath;
+  const dot = file.lastIndexOf(".");
+  if (dot <= 0) return `${dir}${file}_thumb`;
+  return `${dir}${file.slice(0, dot)}_thumb${file.slice(dot)}`;
+}
 
 /**
  * Generate a random storage path for a new photo. Two-level partitioning by

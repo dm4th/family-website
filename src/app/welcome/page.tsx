@@ -29,7 +29,7 @@ export default async function WelcomePage() {
   const avatarUrls = await resolveAvatarUrls([
     { id: profile.id, avatarUrl: profile.avatar_url },
   ]);
-  const avatarSrc = avatarUrls.get(profile.id) ?? null;
+  const avatarSrc = avatarUrls.get(profile.id)?.url ?? null;
 
   const greetingName =
     profile.full_name?.trim().split(/\s+/)[0] ||

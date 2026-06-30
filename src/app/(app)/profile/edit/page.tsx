@@ -28,7 +28,7 @@ export default async function ProfileEditPage() {
   const avatarUrls = await resolveAvatarUrls([
     { id: profile.id, avatarUrl: profile.avatar_url },
   ]);
-  const avatarSrc = avatarUrls.get(profile.id) ?? null;
+  const avatarSrc = avatarUrls.get(profile.id)?.url ?? null;
 
   const { data: adminCheck } = await supabase.rpc("is_admin");
   const isAdmin = adminCheck === true;

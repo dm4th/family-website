@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import {
   Avatar,
   AvatarFallback,
@@ -45,19 +48,44 @@ const variantClass: Record<AvatarVariant, string> = {
 export function ProfileAvatar({
   name,
   src,
+  fallbackSrc,
   size = "md",
   variant = "ring",
   className,
 }: {
   name: string | null | undefined;
   src?: string | null;
+  /** Swapped in if `src` fails to load — e.g. a thumbnail that 404s, with the
+   * full-size signed URL here. */
+  fallbackSrc?: string | null;
   size?: AvatarSize;
   variant?: AvatarVariant;
   className?: string;
 }) {
+  // Track the URL actually being shown so a failed thumbnail can fall back to
+  // the full-size object before radix drops to the initials placeholder. Reset
+  // when `src` changes (signed URLs rotate) by adjusting state during render —
+  // the React-recommended alternative to a setState effect.
+  const [currentSrc, setCurrentSrc] = useState<string | null>(src ?? null);
+  const [seenSrc, setSeenSrc] = useState<string | null>(src ?? null);
+  if ((src ?? null) !== seenSrc) {
+    setSeenSrc(src ?? null);
+    setCurrentSrc(src ?? null);
+  }
+
   return (
     <Avatar className={cn(sizeClass[size], variantClass[variant], className)}>
-      {src ? <AvatarImage src={src} alt={name ?? "Family member"} /> : null}
+      {currentSrc ? (
+        <AvatarImage
+          src={currentSrc}
+          alt={name ?? "Family member"}
+          onError={() => {
+            if (fallbackSrc && currentSrc !== fallbackSrc) {
+              setCurrentSrc(fallbackSrc);
+            }
+          }}
+        />
+      ) : null}
       <AvatarFallback
         className={cn(
           "bg-surface-sunken font-display font-medium tracking-wide text-foreground-muted",

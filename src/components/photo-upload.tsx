@@ -9,7 +9,9 @@ import {
   MAX_PHOTO_BYTES,
   generatePhotoPath,
   isAllowedMime,
+  thumbPathFor,
 } from "@/lib/photo-utils";
+import { prepareImageForUpload } from "@/lib/image-resize";
 import { recordUploadedPhoto } from "@/app/(app)/photos/actions";
 
 type Attachment =
@@ -69,20 +71,37 @@ export function PhotoUpload({
         continue;
       }
 
-      const storagePath = generatePhotoPath(file.name);
+      // Downscale + re-encode in the browser before uploading (PRD 17). Turns
+      // a 9.2MB original into a sub-1MB stored object and yields a small thumb
+      // companion for avatars/grid tiles. Undecodable formats (HEIC) and GIFs
+      // pass through untouched.
+      const prepared = await prepareImageForUpload(file);
+      const storagePath = generatePhotoPath(prepared.outputName);
 
       // Direct browser → Supabase Storage upload. This bypasses the Vercel
       // Function 4.5MB body limit that breaks Server-Action file uploads
       // in production.
       const { error: uploadError } = await supabase.storage
         .from(PHOTOS_BUCKET)
-        .upload(storagePath, file, {
-          contentType: file.type,
+        .upload(storagePath, prepared.display, {
+          contentType: prepared.contentType,
           upsert: false,
         });
       if (uploadError) {
         lastError = `${file.name}: ${uploadError.message}`;
         continue;
+      }
+
+      // Upload the thumbnail companion best-effort: a failure here only costs
+      // us the small rendition (callers fall back to the full object), so it
+      // must never fail the photo itself.
+      if (prepared.thumb) {
+        await supabase.storage
+          .from(PHOTOS_BUCKET)
+          .upload(thumbPathFor(storagePath), prepared.thumb, {
+            contentType: "image/jpeg",
+            upsert: false,
+          });
       }
 
       // Persist the small metadata row via Server Action.
@@ -168,7 +187,8 @@ export function PhotoUpload({
           {isBusy ? `Uploading ${status.current}/${status.total}…` : label}
         </Button>
         <p className="text-[0.6875rem] text-foreground-subtle">
-          JPG, PNG, WebP, GIF, HEIC · up to {MAX_MB}MB each
+          JPG, PNG, WebP, GIF, HEIC · up to {MAX_MB}MB each · large photos are
+          optimized for fast loading
         </p>
         {status.phase === "error" && (
           <p className="text-xs text-destructive">{status.message}</p>

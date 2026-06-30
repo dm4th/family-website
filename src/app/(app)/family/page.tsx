@@ -46,8 +46,10 @@ export default async function FamilyDirectoryPage() {
   }
 
   const list = (profiles ?? []) as DirectoryProfile[];
+  // The directory paints many small avatars — request the thumb rendition.
   const avatarUrls = await resolveAvatarUrls(
     list.map((p) => ({ id: p.id, avatarUrl: p.avatar_url })),
+    "thumb",
   );
 
   const grouped = groupByGeneration(list);
@@ -91,7 +93,8 @@ export default async function FamilyDirectoryPage() {
                     >
                       <ProfileAvatar
                         name={displayName(p.full_name)}
-                        src={avatarUrls.get(p.id) ?? null}
+                        src={avatarUrls.get(p.id)?.url ?? null}
+                        fallbackSrc={avatarUrls.get(p.id)?.fallbackUrl ?? null}
                         size="lg"
                         variant="ring"
                       />

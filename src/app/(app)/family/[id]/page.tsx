@@ -39,7 +39,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
   const avatarUrls = await resolveAvatarUrls([
     { id: profile.id, avatarUrl: profile.avatar_url },
   ]);
-  const avatarSrc = avatarUrls.get(profile.id) ?? null;
+  // Hero avatar — keep the full-size object for a crisp portrait.
+  const avatarSrc = avatarUrls.get(profile.id)?.url ?? null;
 
   const { data: subjectRows } = await supabase
     .from("photo_subjects")
@@ -71,6 +72,8 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
     return true;
   });
 
+  // Thumb rendition: grid tiles use the small `signedUrl`; the featured tile
+  // reads `fallbackUrl` (the full object) for a larger anchor image.
   const signedPhotos = await withSignedUrls(
     uniquePhotos.map((p) => ({
       id: p.id,
@@ -78,6 +81,7 @@ export default async function ProfileDetailPage({ params }: { params: Params }) 
       caption: p.caption,
       uploadedBy: p.uploaded_by,
     })),
+    "thumb",
   );
 
   const isOwnProfile = user?.id === profile.id;

@@ -11,7 +11,9 @@ import {
   MAX_PHOTO_BYTES,
   generateGooglePhotoPath,
   isAllowedMime,
+  thumbPathFor,
 } from "@/lib/photo-utils";
+import { makeThumbnailFromBlob } from "@/lib/image-resize";
 import { recordUploadedPhoto } from "@/app/(app)/photos/actions";
 import { requestAccessToken } from "@/lib/google/identity";
 import {
@@ -104,6 +106,19 @@ async function transferOne(opts: {
     .from(PHOTOS_BUCKET)
     .upload(storagePath, blob, { contentType: mime, upsert: false });
   if (uploadError) return uploadError.message;
+
+  // Best-effort thumbnail companion so Google-imported photos get the small
+  // rendition too (the bytes are already ≤2048px). Failure is non-fatal —
+  // small contexts fall back to the full object.
+  const thumb = await makeThumbnailFromBlob(blob);
+  if (thumb) {
+    await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .upload(thumbPathFor(storagePath), thumb, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+  }
 
   const result = await recordUploadedPhoto({
     storagePath,

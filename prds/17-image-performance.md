@@ -1,7 +1,7 @@
 # 17 — Image Performance
 
 **Phase**: 2.5 (polish on shipped photo infra) · **Depends on**: 05 (direct-to-Supabase upload + signed URLs already shipped)
-**Status**: 🟢 ready
+**Status**: ✅ shipped
 
 > Pairs with **PRD 13** (the "this image is large — we'll shrink it / suggest Google Photos" prompt). This PRD makes large images *actually fast*; PRD 13 owns the surrounding "we noticed your image is big" UX. Build them together if you can, but this one stands alone.
 
@@ -107,4 +107,50 @@ src/app/(app)/properties/[slug]/property-gallery.tsx       # grid tiles → thum
 
 ## Implementation
 
-_Not started._
+**Status: code-complete AND live-verified in a real logged-in browser against the hosted Supabase. Static checks green (tsc + eslint + `npm run build`); headline downscale, per-context renditions, and graceful fallback all confirmed end-to-end (see "Live verification results").**
+
+### Rendition strategy chosen
+
+**Thumb-on-upload (Free-tier-safe)** — confirmed with the owner rather than Supabase Storage image transformations. Each device upload now stores **two** objects: a 2048px display copy at the primary path and a ~400px thumbnail companion. No paid-plan dependency.
+
+### How it fits together
+
+- **Client-side downscale baseline (the headline fix).** New [src/lib/image-resize.ts](../src/lib/image-resize.ts) — browser-only `prepareImageForUpload(file)` uses `createImageBitmap` (with `imageOrientation: "from-image"`) + `<canvas>.toBlob('image/jpeg', …)` to produce a 2048px-max display JPEG (q≈0.82) **and** a 400px-max thumb (q≈0.72). GIF and HEIC/HEIF, plus anything the browser can't decode to a bitmap, **pass through untouched** (`passthrough: true`, no thumb) so an upload never fails. [photo-upload.tsx](../src/components/photo-upload.tsx) runs every file through it, uploads the display copy at the primary path, then best-effort uploads the thumb at the derived path. The Google Photos path ([google-photos-picker.tsx](../src/components/google-photos-picker.tsx)) already downscaled to 2048; it now also generates a thumb via `makeThumbnailFromBlob()` for parity.
+- **Thumb path convention.** `thumbPathFor("ab/uuid.jpg") → "ab/uuid_thumb.jpg"` (handles the `google/` prefix), in [photo-utils.ts](../src/lib/photo-utils.ts). Deterministic, so the signing helpers derive it with **no DB column**. Thumbs are never written to the `photos` metadata row, so `isValidPhotoStoragePath` is unchanged and the metadata contract is untouched.
+- **One helper, two URLs, graceful fallback.** `withSignedUrls(photos, rendition)` and `resolveAvatarUrls(profiles, rendition)` gained a `rendition` arg (`"thumb" | "display" | "full"`, default `"full"` → existing callers unaffected). For `"thumb"` they batch-sign the thumb **and** the full object in a single `createSignedUrls` call and return `signedUrl` (thumb) **plus** `fallbackUrl`/`ResolvedAvatar.fallbackUrl` (full). Any photo lacking a thumb (pre-PRD uploads, HEIC/GIF, Google imports that failed thumb-gen) signs the thumb path to a URL that 404s at fetch time, and the **`<img onError>` swaps to the full object** — so missing thumbs are never fatal and no backfill is required.
+- **Per-context wiring.** Directory avatars (`/family`) → `thumb`. Profile photo grid + property gallery → `thumb` for tiles; the **featured tile and the property hero read `fallbackUrl` (full)** for a crisp large image — the dual-URL return means one query serves both sizes. Profile hero avatar and property list cards stay on the full/display object (already large contexts). All thumbnailed `<img>`s went through small client components (`TileImg`, and `ProfileAvatar` is now a client component) that own the onError fallback.
+- **Lazy-load + intrinsic sizing.** `decoding="async"` added across the photo `<img>`s; existing `loading="lazy"` kept (featured/hero are eager); aspect-ratio boxes that already reserved space handle layout shift.
+- **`MAX_PHOTO_BYTES` lowered 50MB → 25MB** with copy updated ("large photos are optimized for fast loading"). Stored objects are now sub-1MB regardless.
+
+### Key decisions / gotchas
+
+- **State reset on rotating signed URLs.** `TileImg`/`ProfileAvatar` track the shown URL in state for the onError swap. Since signed URLs rotate every request, a remount-less prop change must reset that state — done via the **"adjust state during render"** pattern (compare against a `seenSrc` state), not a `useEffect(setState)` (which trips `react-hooks/set-state-in-effect`).
+- **`display` vs `full` are identical today** (single 2048px stored object). The distinction is kept so call sites read intentfully and a future medium rendition has a home.
+- **Thumb uploads are best-effort and not transactional** with the display object — acceptable because the fallback covers a missing thumb.
+
+### Thumb cleanup on delete (caught during live verification)
+
+Photo deletion ([photos/actions.ts](../src/app/(app)/photos/actions.ts) `deletePhoto`, and the insert-failure cleanup in `recordUploadedPhoto`) only removed `storage_path`. With thumb-on-upload that would orphan every `_thumb` companion. Both `.remove()` calls now also remove `thumbPathFor(storagePath)` (a no-op for thumbless old/HEIC/GIF photos). **Verified live**: deleting the test photo removed both the display object and its thumb (0 rows, 0 storage objects remaining).
+
+### Key files
+
+- NEW [src/lib/image-resize.ts](../src/lib/image-resize.ts) · EDIT [photo-utils.ts](../src/lib/photo-utils.ts) (`MAX_PHOTO_BYTES`, rendition constants, `thumbPathFor`, `Rendition` type) · [photos.ts](../src/lib/photos.ts) + [avatars.ts](../src/lib/avatars.ts) (`rendition` arg + dual-URL return) · [profile-photos.ts](../src/lib/profile-photos.ts) (signs `thumb`) · [photos/actions.ts](../src/app/(app)/photos/actions.ts) (thumb cleanup on delete) · [photo-upload.tsx](../src/components/photo-upload.tsx) · [google-photos-picker.tsx](../src/components/google-photos-picker.tsx) · [profile-avatar.tsx](../src/components/profile-avatar.tsx) (client + fallback) · display surfaces: `family/page.tsx`, `family/[id]/page.tsx` + `photo-gallery.tsx`, `properties/[slug]/page.tsx` + `property-gallery.tsx`, `properties/page.tsx`.
+
+### Live verification results
+
+Run in the owner's logged-in Chrome against the hosted Supabase project, driving the real shipped browser code (the upload was dispatched to the actual `PhotoUpload` file input; sizes read authoritatively from `storage.objects`):
+
+- **Step 1 (headline) ✅** — uploaded a 6.25MB / 20MP JPEG through `PhotoUpload`. Stored **display = 129KB (2048px-capped)** + **thumb = 12KB**, down from 6.25MB. (A synthetic gradient compresses unusually well; the point is the downscale + thumb both fired and the object is sub-1MB.)
+- **Step 4 (renditions per context) ✅** — the uploaded photo's grid tile loaded its `_thumb` at **400px long edge**; the featured tile and the directory avatar loaded the **full** object. One query serves both via the dual-URL return.
+- **Graceful fallback ✅** — the directory avatar for a thumbless pre-PRD photo requested the (missing) thumb, 404'd, and `onError` swapped to the full object, which rendered (briefly shows initials while the full image loads — acceptable until backfill).
+- **Step 5 (signed-URL rotation) ✅** — each reload re-signed with fresh tokens; images still loaded.
+- **Copy + limit ✅** — the picker shows "up to 25MB each · large photos are optimized for fast loading"; `MAX_PHOTO_BYTES` is 25MB live.
+- **Thumb cleanup on delete ✅** — see above.
+- **Step 9 (build hygiene) ✅** — tsc + eslint + `npm run build` all green.
+
+**Not exercised** (data/environment limits, low risk): step 2 at scale (the test data has only 2 members, 1 with a photo avatar — the *mechanism* is proven but not the many-avatars case); step 3 layout-shift scroll (aspect-ratio boxes are structural); step 6 plan-fallback (N/A — thumb-on-upload *is* the chosen path); step 7 GIF/HEIC pass-through (covered by the passthrough branch, not run live); step 8 mobile. The testing-playbook Gap-log row for the 9.2MB case can be marked resolved.
+
+### Follow-ups
+
+- **Backfill** existing pre-PRD full-res objects (re-compress + generate thumbs) — currently they serve the full object via fallback, so an un-backfilled directory avatar loads a multi-MB original. Out of scope per the PRD; note as a one-off migration.
+- WebP/AVIF re-encode (v2); server-side HEIC→JPEG conversion (v2); storage-quota dashboard (PRD 05).
