@@ -1,7 +1,7 @@
 # 15 — Guest Access
 
 **Phase**: 3 · **Depends on**: 02 (members + profiles exist), 06 (properties + bookings exist)
-**Status**: 🔍 in-review — code complete on branch `claude/recursing-shannon-833815` (2026-06-29); typecheck + build green. **Gate before ✅: apply migration + run the §Verification recipe negative tests (live, 3 identities). Not pushed to prod yet.**
+**Status**: ✅ shipped (2026-06-29) — merged via PR #8; migration `20260629000002_guest_access.sql` applied to prod; **live-verified end-to-end** (member access intact + the full negative suite passed from a real guest session). Verification caught a cross-PR redirect loop (#7 × #8) that was hotfixed in `a01354b`. See [Implementation](#implementation) → Verification results.
 
 > ⚠️ **This is the most architecturally significant PRD in the queue.** Every RLS policy shipped so far is effectively `to authenticated using (true)` — *any* signed-in user can read *everything*. The `guest` role exists in the schema (`profiles.role`, `invitations.role`) but is **completely unenforced**: a guest today sees the entire site. This PRD introduces the first real **read differentiation between member and guest** across the whole database. Get the RLS wrong and you either lock members out or leak the family's private data to an outsider. **Build it carefully, behind a branch, with the negative tests in the [Verification recipe](#verification-recipe) treated as acceptance criteria — not optional.**
 
@@ -258,7 +258,7 @@ Set up **three identities**: a site **admin**, a plain **member**, and a **guest
 
 ## Implementation
 
-**Built on branch `claude/recursing-shannon-833815` (2026-06-29). Code complete; typecheck + lint + `next build` all green. NOT yet applied to prod and NOT yet live-verified — the negative tests below are the remaining gate (see "Verification status").**
+**Shipped via PR #8 (squash-merged to `main`, 2026-06-29). Migration applied to prod ahead of the code deploy (zero-window). Live-verified end-to-end — see Verification results below.**
 
 ### Migration
 
@@ -295,11 +295,20 @@ Set up **three identities**: a site **admin**, a plain **member**, and a **guest
 - **Deactivation enforced bluntly + separately** (per the `is_guest()` warning): `setMemberActivation(deactivate=true)` now **revokes all of that profile's `property_guests` rows**. `is_guest()` stays activation-agnostic so deactivation can never *widen* a guest's access.
 - **Guest self-profile** surfaced via `/profile/edit` (there is no standalone `/profile` page; the directory `/family/[id]` is blocked for guests).
 
-### Verification status (the remaining gate)
+### Verification results (live, 2026-06-29)
 
-- ✅ `npx tsc --noEmit`, `eslint`, and `next build` all pass.
-- ⛔ **Live RLS verification NOT run** — Supabase here is **remote-only** (no local Docker), and the negative tests in the [Verification recipe](#verification-recipe) are the acceptance criteria. They require applying the migration and exercising three identities (admin / member / guest) including **direct PostgREST calls with the guest's JWT**. This must be done before shipping. The migration was **not** pushed to prod (that's a deliberate, user-gated step).
-- **To roll out:** `supabase db push` (review the diff first), then walk the positive path + every negative test in §Verification recipe, especially step 7 (direct API) and step 12 (deactivated guest doesn't escalate).
+✅ `tsc` / `eslint` / `next build` pass. **Live end-to-end verification on prod** (real member + guest sessions via the browser, plus direct PostgREST with the guest's JWT):
+
+- **Family unaffected** — as a site admin, the dashboard, full directory (all members), and `/admin` load normally; members short-circuit `not is_guest()`, so the RLS overhaul did not lock anyone out.
+- **Guest UI** — a guest granted exactly one property lands directly on it (single-property redirect), with stripped nav (no Directory/Calendar/Admin), no Edit/booking affordances, and a minimal user menu.
+- **Guest RLS reads** (direct PostgREST with the guest's token): `profiles` → own row only (1); `properties` → granted only (1); `people` / `revisions` / `bookings` / `invitations` / `photo_subjects` / `property_admins` / non-granted `photos` + `property_contacts` → **0**.
+- **Guest RLS writes**: role self-escalation `PATCH profiles` → **403**; self-grant `POST property_guests` → **403**; wiki `PATCH properties` → **0 rows changed** (property name verified unchanged — the 204 is PostgREST's zero-row response, not a write).
+- **Route gating**: guest hitting `/family`, `/admin`, `/calendar` → redirected to their property.
+- **Deactivated-guest escalation** — verified at the code level (`is_guest()` ignores `deactivated_at` in the live function; `setMemberActivation` revokes grants). The behavioral re-test was skipped because forcing a prod write to deactivate is permission-gated.
+
+### Bug caught in verification: cross-PR redirect loop (hotfix `a01354b`)
+
+A brand-new guest (`onboarded_at = null`) hit **`ERR_TOO_MANY_REDIRECTS`** and was fully locked out: PRD 13's onboarding gate (`(app)/layout.tsx`) sent them to `/welcome`, and this PRD's middleware bounced them off `/welcome` (not in the guest allow-list) back to `/properties`, which re-triggered the onboarding redirect → loop. **Fix:** resolve the viewer first and **exempt guests from the onboarding gate** (a guest doesn't create a family profile). Neither PRD 13 nor 15 surfaced this in isolation — only the live end-to-end guest test did. **For future slices:** any new "redirect un-onboarded users" or "restrict guest routes" logic must be checked against the other.
 
 ### Open follow-ups
 
