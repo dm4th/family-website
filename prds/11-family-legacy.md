@@ -1,7 +1,7 @@
 # 11 — Family Legacy (Archive · Tree · Timeline · Stories)
 
 **Phase**: 4 · **Depends on**: 02 (members/profiles exist), 05 (photo upload + storage), **12 (authoring UX — Legacy is all content authoring; build the shared editor layer first)**
-**Status**: 🚧 in progress — **slices 1 (Photo Archive), 2 (Family Tree) & 3 (Timeline) ✅ shipped 2026-06-30**; slice 4 (Stories) 🟢 ready. Requirements locked 2026-06-30 (see the requirements-lock callouts in slices 2 & 3). Build as a sequence of small slices (see [Sequencing](#sequencing)). This is the umbrella plan; each slice is its own session/branch.
+**Status**: 🚧 in progress — **all four slices built 2026-06-30**: slices 1 (Photo Archive), 2 (Family Tree) & 3 (Timeline) ✅ shipped to prod; **slice 4 (Stories) built + PR'd, prod-apply pending**. Legacy is feature-complete once slice 4 merges + its migration is applied. Requirements locked 2026-06-30 (see the requirements-lock callouts in slices 2 & 3). Built as a sequence of small slices (see [Sequencing](#sequencing)), each its own branch/PR.
 
 > **Requirements lock (2026-06-30) — Dan confirmed this is his dad's headline interest.** Three things this build must deliver, folded into the slices below:
 > 1. **A genuinely traversable family tree** (recenter / expand-collapse / pan-zoom — a viz layout, not a static wall chart) — slice 2.
@@ -119,7 +119,7 @@ Build as four independent slices, in this order, each its own session/branch:
 1. ✅ **Photo Archive** (+ the `people` keystone table and profile→person backfill) — shipped 2026-06-30. Biggest emotional payoff; establishes the backbone.
 2. ✅ **Family Tree** — builds on `people`; adds relationships + the traversable tree view + in-memoriam. Shipped 2026-06-30.
 3. ✅ **Timeline** — per PRD 10, wired to `people` + archive photos. Shipped 2026-06-30.
-4. **Stories** — text-first; hangs off people/events/albums.
+4. ✅ **Stories** — text-first; hangs off people/events/albums. Built 2026-06-30 (prod-apply pending).
 
 Each slice should: branch, ship, fill in its Implementation section, and flip status in this file + the master-plan active queue.
 
@@ -185,4 +185,11 @@ _Filled in per slice as each ships._
   - **Nav + homepage**: `Timeline` link added to the Family nav group; homepage gains a third Legacy gateway ("The Timeline", live event count) and the old "Family Timeline" coming-soon tile is removed (now shipped).
   - **Verified**: `tsc --noEmit`, `eslint`, `next build` all clean; both routes compile as dynamic server routes. Migration applied to prod and the relational flow exercised on the live DB (see the migration note above; temp rows cleaned up). The only step not automatable is the authenticated in-browser click-through (needs a family login) — the data path beneath it is confirmed.
   - **Follow-ups**: (1) themed views (`/family/timeline/themes/[tag]`) — `events.tags` exists but no UI yet; (2) date ranges (`event_date_end`) deferred — single point/year per event for now; (3) slice 4 (Stories) can hang off events/people/albums next.
-- **Slice 4 — Stories**: _status: not started_
+- **Slice 4 — Stories & Remembrances**: ✅ **built + PR'd** _(build session 2026-06-30; branch `claude/stories-slice4`)_. The final Legacy slice; text-first per the PRD (audio deferred).
+  - **New migration** `supabase/migrations/20260630000004_stories.sql` — ⚠️ **NOT yet applied to prod** (build + PR only; awaiting Dan's go-ahead, as with prior slices). Adds `stories` (`title`, Markdown `body`, optional `album_id`/`event_id` links, audit cols; `created_by` is the recording member = the "author") and `story_people` (subjects → **`people`**, not `profiles`, so ancestors can be subjects — mirrors `photo_people`/`event_people`). Family-only wiki RLS; story delete narrowed to author/admin, join delete open for curation. Drizzle mirror (`stories`/`storyPeople` + types); `RevisionEntity` gained `"story"` (schema.ts + `src/lib/revisions.ts`).
+  - **Attribution guardrail honored**: `createStory`/`updateStory` (`src/app/(app)/family/stories/actions.ts`) set `created_by`/`updated_by` (+ bump `updated_at`), sync `story_people`, and `recordRevision({ entityType: "story" })`; `deleteStory` (author/admin via RLS).
+  - **Hub + detail**: `/family/stories` (newest-first list + "Record a Memory" `CreateFlow` with title / Markdown body / `PeoplePicker` subjects / optional album + event `<select>`s) and `/family/stories/[storyId]` (in-place `InlineEditable` edit, subject links to `/family/tree/[personId]`, Markdown body, links out to the linked album/event, author/admin delete). Shared loader `load-stories.ts` (`loadStorySummaries({ personId | albumId | eventId })`) + presentational `StoryList`/`storySnippet`.
+  - **Surfaced everywhere** (the PRD's core promise): stories about a person appear on `/family/tree/[personId]`; stories linked to an album appear on the album page; stories linked to an event appear on the event page — each a compact `StoryList` section rendered only when non-empty.
+  - **Nav + homepage**: `Stories` link added to the Family nav group; homepage gains the fourth Legacy gateway ("Stories & Remembrances", live story count). The Family gateway now leads with all four Legacy surfaces.
+  - **Verified**: `tsc --noEmit`, `eslint`, `next build` all clean; both routes compile as dynamic server routes. Live DB round-trip NOT run (migration not yet applied to prod).
+  - **Follow-ups**: (1) apply the migration to prod + live-verify (as slices 1–3 did); (2) audio recording + transcription (explicitly deferred — the highest-value capture for the eldest generation, layer on once the text surface is used); (3) a "record a memory about X" shortcut from the person/album/event surfaces (today authoring is centralized on the hub with the album/event/person pickers).

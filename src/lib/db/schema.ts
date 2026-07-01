@@ -491,6 +491,73 @@ export type EventPhoto = typeof eventPhotos.$inferSelect;
 export type NewEventPhoto = typeof eventPhotos.$inferInsert;
 
 // ----------------------------------------------------------------------------
+// stories — Family Legacy Stories & Remembrances (PRD 11, slice 4). A text-first
+// recorded memory, optionally hung off an album or timeline event.
+// ----------------------------------------------------------------------------
+export const stories = pgTable(
+  "stories",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    title: text("title").notNull(),
+    body: text("body"), // Markdown
+    albumId: uuid("album_id").references(() => albums.id, {
+      onDelete: "set null",
+    }),
+    eventId: uuid("event_id").references(() => events.id, {
+      onDelete: "set null",
+    }),
+    createdBy: uuid("created_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("stories_created_at_idx").on(table.createdAt),
+    index("stories_album_idx").on(table.albumId),
+    index("stories_event_idx").on(table.eventId),
+  ],
+);
+
+export type Story = typeof stories.$inferSelect;
+export type NewStory = typeof stories.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// story_people — story subjects (points at `people`, like photo_people).
+// ----------------------------------------------------------------------------
+export const storyPeople = pgTable(
+  "story_people",
+  {
+    storyId: uuid("story_id")
+      .notNull()
+      .references(() => stories.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    addedBy: uuid("added_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.storyId, table.personId] }),
+    index("story_people_person_idx").on(table.personId),
+  ],
+);
+
+export type StoryPerson = typeof storyPeople.$inferSelect;
+export type NewStoryPerson = typeof storyPeople.$inferInsert;
+
+// ----------------------------------------------------------------------------
 // revisions (immutable audit log)
 // ----------------------------------------------------------------------------
 export type RevisionEntity =
@@ -502,7 +569,8 @@ export type RevisionEntity =
   | "photo"
   | "person"
   | "relationship"
-  | "event";
+  | "event"
+  | "story";
 
 export const revisions = pgTable(
   "revisions",

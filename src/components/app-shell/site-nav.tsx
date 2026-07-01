@@ -42,6 +42,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Archive", href: "/family/archive", description: "Historical photos & albums" },
       { label: "Family Tree", href: "/family/tree", description: "Generations & how they connect" },
       { label: "Timeline", href: "/family/timeline", description: "The family story, year by year" },
+      { label: "Stories", href: "/family/stories", description: "Memories in the family's words" },
     ],
   },
   {

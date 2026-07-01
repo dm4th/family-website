@@ -17,6 +17,8 @@ import { updatePerson } from "../actions";
 import { PersonFields } from "../person-fields";
 import { AddRelative } from "../add-relative";
 import { RelativeChips, type RelativeChip } from "../relative-chips";
+import { loadStorySummaries } from "../../stories/load-stories";
+import { StoryList } from "../../stories/story-list";
 
 export const dynamic = "force-dynamic";
 
@@ -151,6 +153,8 @@ export default async function PersonDetailPage({ params }: { params: Params }) {
     })),
     "thumb",
   );
+
+  const stories = await loadStorySummaries({ personId: person.id });
 
   const tp = toTreePerson(person);
   const span = lifespan(tp);
@@ -301,6 +305,15 @@ export default async function PersonDetailPage({ params }: { params: Params }) {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {stories.length > 0 && (
+        <section className="flex flex-col gap-5">
+          <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
+            Stories
+          </h2>
+          <StoryList stories={stories} />
         </section>
       )}
     </div>

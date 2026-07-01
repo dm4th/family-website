@@ -13,6 +13,8 @@ import { updateEvent } from "../../actions";
 import { EventEditFields } from "./event-edit-fields";
 import { EventPhotoLinker, type LinkCandidate } from "./event-photo-linker";
 import { DeleteEvent } from "./delete-event";
+import { loadStorySummaries } from "../../../stories/load-stories";
+import { StoryList } from "../../../stories/story-list";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +112,8 @@ export default async function EventDetailPage({ params }: { params: Params }) {
     linked: linkedIds.has(s.id),
   }));
 
+  const stories = await loadStorySummaries({ eventId: event.id });
+
   const canDelete =
     (viewer?.isAdmin ?? false) || (user != null && event.created_by === user.id);
 
@@ -193,6 +197,13 @@ export default async function EventDetailPage({ params }: { params: Params }) {
         </p>
         <EventPhotoLinker eventId={event.id} candidates={candidates} />
       </section>
+
+      {stories.length > 0 && (
+        <section className="flex flex-col gap-5">
+          <SectionRule label="Stories" />
+          <StoryList stories={stories} />
+        </section>
+      )}
 
       {canDelete && (
         <div className="flex justify-end border-t border-border/70 pt-6">
