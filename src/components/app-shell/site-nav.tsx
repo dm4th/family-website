@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MenuIcon } from "lucide-react";
+import { ChevronDownIcon, MenuIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,112 +15,144 @@ import {
   SheetTrigger,
   SheetClose,
 } from "@/components/ui/sheet";
+import {
+  NavigationMenu,
+  NavigationMenuContent,
+  NavigationMenuItem,
+  NavigationMenuLink,
+  NavigationMenuList,
+  NavigationMenuTrigger,
+} from "@/components/ui/navigation-menu";
+import {
+  isGroupActive,
+  isPathActive,
+  modeAccentRail,
+  modeAccentSoft,
+  modeAccentText,
+  navGroupsForViewer,
+  navItemsForViewer,
+  type NavGroupDef,
+} from "./nav-config";
 
-type NavLink = {
-  label: string;
-  href: string;
-  description?: string;
+type SiteNavProps = {
+  isAdmin?: boolean;
 };
 
-type NavGroup = {
-  label: string;
-  /** Mode tint used as a thin colored rule under the group label. */
-  mode: "family" | "operations" | "advisory";
-  links: NavLink[];
-};
+// ── Desktop ────────────────────────────────────────────────────────────────
+// Home stays a flat link; each mode collapses its pages behind a dropdown
+// trigger tinted with that mode's accent. `viewport={false}` positions each
+// dropdown directly under its own trigger, so a two-item Operations menu and a
+// five-item Family menu each size to their own content.
 
-// Single source of truth for the family-office nav. Each group corresponds to
-// a page mode — adding routes later (booking, documents, finances, timeline,
-// messaging) means appending links to an existing group rather than spawning
-// new top-level tabs.
-export const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "Family",
-    mode: "family",
-    links: [
-      { label: "Directory", href: "/family", description: "Profiles & generations" },
-      { label: "Archive", href: "/family/archive", description: "Historical photos & albums" },
-      { label: "Family Tree", href: "/family/tree", description: "Generations & how they connect" },
-      { label: "Timeline", href: "/family/timeline", description: "The family story, year by year" },
-      { label: "Stories", href: "/family/stories", description: "Memories in the family's words" },
-    ],
-  },
-  {
-    label: "Operations",
-    mode: "operations",
-    links: [
-      { label: "Properties", href: "/properties", description: "Homes & stewardship" },
-      { label: "Calendar", href: "/calendar", description: "Bookings across properties" },
-    ],
-  },
-];
-
-const railTint: Record<NavGroup["mode"], string> = {
-  family: "bg-accent-family",
-  operations: "bg-accent-operations",
-  advisory: "bg-accent-advisory",
-};
-
-function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-export function SiteNavDesktop() {
+export function SiteNavDesktop({ isAdmin = false }: SiteNavProps) {
   const pathname = usePathname();
+  const groups = navGroupsForViewer(isAdmin);
+  const homeActive = isPathActive(pathname, "/");
+
   return (
-    <nav
-      aria-label="Primary"
-      className="hidden items-center gap-10 lg:flex"
-    >
-      <Link
-        href="/"
-        aria-current={isActive(pathname, "/") ? "page" : undefined}
-        className={cn(
-          "text-sm transition-colors",
-          isActive(pathname, "/")
-            ? "text-foreground"
-            : "text-foreground-muted hover:text-foreground"
-        )}
-      >
-        Home
-      </Link>
-      {NAV_GROUPS.map((group) => (
-        <div key={group.label} className="flex items-center gap-5">
-          <span className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className={cn("h-px w-4", railTint[group.mode])}
-            />
-            <span className="eyebrow text-foreground-subtle">{group.label}</span>
-          </span>
-          {group.links.map((link) => {
-            const active = isActive(pathname, link.href);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={active ? "page" : undefined}
+    <NavigationMenu viewport={false} className="hidden lg:flex" aria-label="Primary">
+      <NavigationMenuList className="gap-1">
+        <NavigationMenuItem>
+          <NavigationMenuLink asChild active={homeActive}>
+            <Link
+              href="/"
+              aria-current={homeActive ? "page" : undefined}
+              className={cn(
+                "inline-flex h-9 items-center rounded-md px-3 text-sm transition-colors hover:bg-surface-sunken focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                homeActive
+                  ? "text-foreground"
+                  : "text-foreground-muted hover:text-foreground"
+              )}
+            >
+              Home
+            </Link>
+          </NavigationMenuLink>
+        </NavigationMenuItem>
+
+        {groups.map((group) => {
+          const active = isGroupActive(pathname, group, isAdmin);
+          return (
+            <NavigationMenuItem key={group.label}>
+              <NavigationMenuTrigger
                 className={cn(
-                  "text-sm transition-colors",
+                  "relative hover:bg-surface-sunken data-[state=open]:bg-surface-sunken",
                   active
                     ? "text-foreground"
                     : "text-foreground-muted hover:text-foreground"
                 )}
               >
-                {link.label}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
-    </nav>
+                <span
+                  aria-hidden
+                  className={cn("h-px w-3.5", modeAccentRail[group.mode])}
+                />
+                <span>{group.label}</span>
+                {active && (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "absolute inset-x-2.5 -bottom-px h-0.5 rounded-full",
+                      modeAccentRail[group.mode]
+                    )}
+                  />
+                )}
+              </NavigationMenuTrigger>
+              <NavigationMenuContent>
+                <div
+                  aria-hidden
+                  className={cn("h-0.5 w-full", modeAccentRail[group.mode])}
+                />
+                <ul className="w-64 p-2">
+                  {navItemsForViewer(group, isAdmin).map((item) => {
+                    const leafActive = isPathActive(pathname, item.href);
+                    return (
+                      <li key={item.href}>
+                        <NavigationMenuLink asChild active={leafActive}>
+                          <Link
+                            href={item.href}
+                            aria-current={leafActive ? "page" : undefined}
+                            className={cn(
+                              "transition-colors hover:bg-surface-sunken",
+                              leafActive && modeAccentSoft[group.mode]
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "text-sm",
+                                leafActive
+                                  ? modeAccentText[group.mode]
+                                  : "text-foreground"
+                              )}
+                            >
+                              {item.label}
+                            </span>
+                            <span className="text-xs text-foreground-subtle">
+                              {item.description}
+                            </span>
+                          </Link>
+                        </NavigationMenuLink>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </NavigationMenuContent>
+            </NavigationMenuItem>
+          );
+        })}
+      </NavigationMenuList>
+    </NavigationMenu>
   );
 }
 
-export function SiteNavMobile() {
+// ── Mobile ───────────────────────────────────────────────────────────────────
+// The same groups as an accordion inside the sheet. The group containing the
+// current page starts expanded, so "where am I" survives the collapse. Every
+// target is a full-width, comfortably tall tap area for iPad use.
+
+export function SiteNavMobile({ isAdmin = false }: SiteNavProps) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
+  const groups = navGroupsForViewer(isAdmin);
+  const homeActive = isPathActive(pathname, "/");
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -134,68 +166,117 @@ export function SiteNavMobile() {
           <MenuIcon />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-72">
+      <SheetContent side="left" className="w-80">
         <SheetHeader>
           <SheetTitle className="text-base">Mathieson Family</SheetTitle>
         </SheetHeader>
-        <div className="flex flex-col gap-8 px-6 pb-6">
+        <nav aria-label="Primary" className="flex flex-col gap-2 px-4 pb-6">
           <SheetClose asChild>
             <Link
               href="/"
-              aria-current={isActive(pathname, "/") ? "page" : undefined}
+              aria-current={homeActive ? "page" : undefined}
               className={cn(
-                "block text-base transition-colors",
-                isActive(pathname, "/")
-                  ? "text-foreground"
-                  : "text-foreground-muted hover:text-foreground"
+                "rounded-md px-3 py-3 text-base transition-colors",
+                homeActive
+                  ? "bg-surface-sunken text-foreground"
+                  : "text-foreground-muted hover:bg-surface-sunken hover:text-foreground"
               )}
             >
               Home
             </Link>
           </SheetClose>
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <span
-                  aria-hidden
-                  className={cn("h-px w-4", railTint[group.mode])}
-                />
-                <span className="eyebrow text-foreground-subtle">
-                  {group.label}
-                </span>
-              </div>
-              <ul className="flex flex-col gap-2 pl-6">
-                {group.links.map((link) => {
-                  const active = isActive(pathname, link.href);
-                  return (
-                    <li key={link.href}>
-                      <SheetClose asChild>
-                        <Link
-                          href={link.href}
-                          aria-current={active ? "page" : undefined}
-                          className={cn(
-                            "block text-base transition-colors",
-                            active
-                              ? "text-foreground"
-                              : "text-foreground-muted hover:text-foreground"
-                          )}
-                        >
-                          {link.label}
-                          {link.description && (
-                            <span className="mt-0.5 block text-xs text-foreground-subtle">
-                              {link.description}
-                            </span>
-                          )}
-                        </Link>
-                      </SheetClose>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+          {groups.map((group) => (
+            <MobileNavGroup
+              key={group.label}
+              group={group}
+              isAdmin={isAdmin}
+              pathname={pathname}
+            />
           ))}
-        </div>
+        </nav>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function MobileNavGroup({
+  group,
+  isAdmin,
+  pathname,
+}: {
+  group: NavGroupDef;
+  isAdmin: boolean;
+  pathname: string;
+}) {
+  const active = isGroupActive(pathname, group, isAdmin);
+  const [expanded, setExpanded] = React.useState(active);
+  const items = navItemsForViewer(group, isAdmin);
+  const panelId = `mobile-nav-${group.mode}`;
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-2 rounded-md px-3 py-3 text-left transition-colors hover:bg-surface-sunken"
+      >
+        <span
+          aria-hidden
+          className={cn("h-px w-4", modeAccentRail[group.mode])}
+        />
+        <span
+          className={cn(
+            "eyebrow",
+            active ? modeAccentText[group.mode] : "text-foreground-subtle"
+          )}
+        >
+          {group.label}
+        </span>
+        <ChevronDownIcon
+          aria-hidden
+          className={cn(
+            "ml-auto size-4 text-foreground-subtle transition-transform",
+            expanded && "rotate-180"
+          )}
+        />
+      </button>
+      {expanded && (
+        <ul id={panelId} className="flex flex-col gap-0.5 pb-1 pl-6">
+          {items.map((item) => {
+            const leafActive = isPathActive(pathname, item.href);
+            return (
+              <li key={item.href}>
+                <SheetClose asChild>
+                  <Link
+                    href={item.href}
+                    aria-current={leafActive ? "page" : undefined}
+                    className={cn(
+                      "block rounded-md px-3 py-2.5 transition-colors",
+                      leafActive
+                        ? cn(modeAccentSoft[group.mode], modeAccentText[group.mode])
+                        : "hover:bg-surface-sunken"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "block text-base",
+                        leafActive ? modeAccentText[group.mode] : "text-foreground"
+                      )}
+                    >
+                      {item.label}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-foreground-subtle">
+                      {item.description}
+                    </span>
+                  </Link>
+                </SheetClose>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
