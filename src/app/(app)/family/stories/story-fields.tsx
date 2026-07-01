@@ -82,7 +82,7 @@ export function StoryFields({
           defaultValue={defaults?.albumId ?? ""}
           className={selectClass}
         >
-          <option value="">— None —</option>
+          <option value="">None</option>
           {albums.map((a) => (
             <option key={a.id} value={a.id}>
               {a.title}
@@ -99,7 +99,7 @@ export function StoryFields({
           defaultValue={defaults?.eventId ?? ""}
           className={selectClass}
         >
-          <option value="">— None —</option>
+          <option value="">None</option>
           {events.map((e) => (
             <option key={e.id} value={e.id}>
               {e.title} ({e.year})
