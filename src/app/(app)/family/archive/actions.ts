@@ -283,6 +283,53 @@ export async function removePhotoFromAlbum(
   return { ok: true };
 }
 
+/**
+ * Tag a batch of just-uploaded archival photos with the same people (PRD 18,
+ * slice 2). Used after a zip import so a whole batch of scans can be attributed
+ * to the people in them in one step. Idempotent per (photo, person): existing
+ * links are left untouched, so re-tagging never errors or duplicates.
+ */
+export async function tagPhotosWithPeople(
+  albumId: string,
+  photoIds: string[],
+  personIds: string[],
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { ok: false, message: "Not signed in" };
+  }
+
+  const photos = [...new Set(photoIds)].filter((id) => typeof id === "string" && id);
+  const people = [...new Set(personIds)].filter((id) => typeof id === "string" && id);
+  if (photos.length === 0 || people.length === 0) {
+    return { ok: true };
+  }
+
+  const rows = photos.flatMap((photoId) =>
+    people.map((personId) => ({
+      photo_id: photoId,
+      person_id: personId,
+      added_by: user.id,
+    })),
+  );
+
+  // Ignore rows that already exist (composite PK) so applying the same tag set
+  // twice is a no-op rather than a unique-violation error.
+  const { error } = await supabase
+    .from("photo_people")
+    .upsert(rows, { onConflict: "photo_id,person_id", ignoreDuplicates: true });
+  if (error) {
+    return { ok: false, message: error.message };
+  }
+
+  revalidatePath(`/family/archive/${albumId}`);
+  return { ok: true };
+}
+
 export async function setAlbumCover(
   albumId: string,
   photoId: string,
