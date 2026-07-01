@@ -39,9 +39,7 @@ A non-technical family member can go from "a spreadsheet of relatives and a fold
 | **Preview before commit** | **Required.** Parse → show a table of what will be created/skipped/updated → explicit "Import N people" button | Non-technical safety; bulk writes are scary without a dry run. Nothing is written until confirm. |
 | **Zip unpack** | **Client-side** (unzip in the browser), then upload each image through the existing direct-to-Storage + downscale path | Server-side unzip would route bytes through a Vercel Function (4.5 MB cap) and skip the client downscale. Client-side keeps both. |
 | **Bulk photo dating** | Read **EXIF `DateTimeOriginal`** per file → prefill `taken_on`; plus a "set an era for all" control (`circa`) | Most value for the timeline comes from dates; auto-EXIF removes the tedium, era-for-all handles undated scan batches. |
-| **Who can bulk-import** | **Open question — see below.** Recommend: any member, gated by the preview/confirm step + revisions (reversible), with an admin-only fast path for a first big load | Consistent with the wiki posture, but bulk writes warrant a conversation. |
-
-> **Open question for Dan:** should bulk import be **any-member** (matches the wiki model; the preview + revision history make it reversible) or **admin-only** to start (safer for the initial big data load, loosen later)? Defaulting to any-member with a mandatory preview unless you say otherwise.
+| **Who can bulk-import** | **Any family member** (decided 2026-07-01) | Matches the site-wide wiki posture — bulk import is just single-row authoring in a loop. The mandatory preview-before-commit + per-row revision history keep it safe and reversible, so no admin gate is needed. Guests still cannot reach the import routes. |
 
 ## In scope
 

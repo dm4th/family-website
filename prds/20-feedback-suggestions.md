@@ -23,16 +23,16 @@ Any family member can, from anywhere in the app, open a short form and suggest a
 
 | Decision | Recommendation | Why |
 |---|---|---|
-| **Entry point** | A persistent, low-key **"Suggest an idea" / "Send Feedback"** link in the footer or user menu — reachable from every page, never in the way | Feedback must be one click from anywhere without cluttering the shell. |
+| **Entry point** | A persistent, low-key **"Suggest an idea" / "Send Feedback"** link in the footer or user menu — reachable from every page, never in the way. **Must also appear in the stripped guest shell** (guests can submit too). | Feedback must be one click from anywhere without cluttering the shell — including for guests, whose nav is otherwise minimal. |
 | **Fields** | `category` (Idea / Problem / Other), a short `message` (required), optional `page_url` auto-captured | Minimal friction; the category + URL make triage fast. |
 | **Storage** | A `feedback` table (submitter, category, message, page_url, status, audit cols) | Durable + browsable; email alone loses history. |
 | **Notify** | Email admins (Dan + site admins) via the existing Resend helper, best-effort | Dan sees it immediately; the table is the record. |
 | **Admin view** | A simple `/admin/feedback` list (newest first) with a `status` (New / Seen / Planned / Done) | Turns raw suggestions into a triage queue without a heavy tool. |
-| **Guests?** | **Open question** — default: **members only** (guests get a property-scoped guestbook later in PRD 21 instead) | Keeps site-feedback a family channel; guest voice lands in the guestbook. |
+| **Guests?** | **Yes — guests can submit feedback too** (decided 2026-07-01) | A guest hitting a rough edge is exactly the signal Dan wants; don't silence it. Guests insert their own rows like members. (The property-scoped guestbook in PRD 21 is a separate, additive channel — not a replacement for guest product feedback.) |
 | **Anti-spam** | None beyond auth (it's a closed family app) | No public exposure; over-engineering unwarranted. |
 
 ## In scope
-- **`feedback` table** + RLS: any authenticated member inserts their own row; **admins read all**; a member may read their own; updates (status) admin-only. (Confirm guest posture per the open question — default members-only insert.)
+- **`feedback` table** + RLS: **any authenticated user (members _and_ guests) inserts their own row** (`created_by = auth.uid()`, no `is_guest()` block on insert); **admins read all**; a submitter may read their own row; updates (status) admin-only. Note this is deliberately *not* the usual `not is_guest()` gate — feedback is the one write guests are allowed site-wide, so the insert policy must permit them.
 - **Submit UI**: a small dialog/sheet (reuse `CreateFlow` or a plain shadcn `Dialog`) reachable from a footer/user-menu link on every page; category + message + auto `page_url`; a clear "Thanks, we got it" confirmation.
 - **Server Action** `submitFeedback`: inserts with `created_by = auth.uid()`, then best-effort Resend email to admins. Failure of the email must not fail the submission.
 - **Admin triage** at `/admin/feedback`: newest-first list, category badge, message, submitter, source page, and a `status` the admin can advance. Gate with `requireAdmin()`.
@@ -47,9 +47,10 @@ Any family member can, from anywhere in the app, open a short form and suggest a
 1. **Submit** — from a deep page (e.g. a property), open Send Feedback, pick "Idea", type a sentence, submit → see a thank-you; the row exists with the correct `page_url` and `created_by`.
 2. **Admin sees it** — as Dan, `/admin/feedback` lists it newest-first; advance its status to "Seen"; the change persists.
 3. **Email** — with Resend configured, an admin notification arrives; **with `RESEND_API_KEY` unset**, the submission still succeeds (log-and-skip), no error to the user.
-4. **Authz** — a non-admin cannot open `/admin/feedback`; a member cannot read another member's submissions via the API.
-5. **Copy** — Title Case buttons, sentence-case labels, no em-dashes; calm tone.
-6. **Mobile** — the dialog is comfortable on an iPad; the entry link is reachable.
+4. **Guest can submit** — sign in as a guest: the Send Feedback entry is reachable from their stripped shell, a submission succeeds and lands in `/admin/feedback` with their `created_by`.
+5. **Authz** — a non-admin (member or guest) cannot open `/admin/feedback`; a submitter cannot read anyone else's submissions via the API.
+6. **Copy** — Title Case buttons, sentence-case labels, no em-dashes; calm tone.
+7. **Mobile** — the dialog is comfortable on an iPad; the entry link is reachable.
 
 ## Likely file layout
 
