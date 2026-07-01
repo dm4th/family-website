@@ -5,6 +5,7 @@
 
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   date,
   index,
   integer,
@@ -152,6 +153,12 @@ export const photos = pgTable(
     storagePath: text("storage_path").notNull(),
     caption: text("caption"),
     takenAt: date("taken_at"),
+    // Fuzzy dating for archive scans (PRD 11): an exact day when known, or a
+    // free-text approximation ("circa 1972"). is_archival marks a photo as
+    // historical-archive material uploaded straight into an album.
+    takenOn: date("taken_on"),
+    circa: text("circa"),
+    isArchival: boolean("is_archival").notNull().default(false),
     uploadedBy: uuid("uploaded_by").references(() => authUsers.id, {
       onDelete: "set null",
     }),
@@ -245,13 +252,111 @@ export type Person = typeof people.$inferSelect;
 export type NewPerson = typeof people.$inferInsert;
 
 // ----------------------------------------------------------------------------
+// albums — Family Legacy Photo Archive (PRD 11, slice 1). A titled, dated
+// collection of photos (e.g. "Squam, 1960s–1970s"). Family-only wiki content.
+// ----------------------------------------------------------------------------
+export const albums = pgTable(
+  "albums",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    title: text("title").notNull(),
+    description: text("description"), // Markdown
+    era: text("era"), // e.g. "1960s–1970s"
+    coverPhotoId: uuid("cover_photo_id").references(() => photos.id, {
+      onDelete: "set null",
+    }),
+    createdBy: uuid("created_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("albums_created_at_idx").on(table.createdAt)],
+);
+
+export type Album = typeof albums.$inferSelect;
+export type NewAlbum = typeof albums.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// album_photos (many-to-many, ordered)
+// ----------------------------------------------------------------------------
+export const albumPhotos = pgTable(
+  "album_photos",
+  {
+    albumId: uuid("album_id")
+      .notNull()
+      .references(() => albums.id, { onDelete: "cascade" }),
+    photoId: uuid("photo_id")
+      .notNull()
+      .references(() => photos.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    addedBy: uuid("added_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.albumId, table.photoId] }),
+    index("album_photos_album_idx").on(
+      table.albumId,
+      table.sortOrder,
+      table.addedAt,
+    ),
+    index("album_photos_photo_idx").on(table.photoId),
+  ],
+);
+
+export type AlbumPhoto = typeof albumPhotos.$inferSelect;
+export type NewAlbumPhoto = typeof albumPhotos.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// photo_people — tag members AND ancestors in a photo. Points at `people`
+// (not `profiles`), additive to `photo_subjects` (see the migration note).
+// ----------------------------------------------------------------------------
+export const photoPeople = pgTable(
+  "photo_people",
+  {
+    photoId: uuid("photo_id")
+      .notNull()
+      .references(() => photos.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    addedBy: uuid("added_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.photoId, table.personId] }),
+    index("photo_people_person_idx").on(table.personId),
+  ],
+);
+
+export type PhotoPerson = typeof photoPeople.$inferSelect;
+export type NewPhotoPerson = typeof photoPeople.$inferInsert;
+
+// ----------------------------------------------------------------------------
 // revisions (immutable audit log)
 // ----------------------------------------------------------------------------
 export type RevisionEntity =
   | "property"
   | "profile"
   | "property_contact"
-  | "booking";
+  | "booking"
+  | "album"
+  | "photo";
 
 export const revisions = pgTable(
   "revisions",

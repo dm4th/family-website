@@ -1,7 +1,7 @@
 # 11 — Family Legacy (Archive · Tree · Timeline · Stories)
 
 **Phase**: 4 · **Depends on**: 02 (members/profiles exist), 05 (photo upload + storage), **12 (authoring UX — Legacy is all content authoring; build the shared editor layer first)**
-**Status**: 🟢 ready — scoping agreed + **requirements locked 2026-06-30** (see the requirements-lock callouts in slices 2 & 3). Build as a sequence of small slices (see [Sequencing](#sequencing)). This is the umbrella plan; each slice is its own session/branch.
+**Status**: 🚧 in progress — **slice 1 (Photo Archive) ✅ shipped 2026-06-30**; slices 2–4 🟢 ready. Requirements locked 2026-06-30 (see the requirements-lock callouts in slices 2 & 3). Build as a sequence of small slices (see [Sequencing](#sequencing)). This is the umbrella plan; each slice is its own session/branch.
 
 > **Requirements lock (2026-06-30) — Dan confirmed this is his dad's headline interest.** Three things this build must deliver, folded into the slices below:
 > 1. **A genuinely traversable family tree** (recenter / expand-collapse / pan-zoom — a viz layout, not a static wall chart) — slice 2.
@@ -116,8 +116,8 @@ The chronological spine. Now stronger because photos carry `taken_on`/`circa` an
 
 Build as four independent slices, in this order, each its own session/branch:
 
-1. **Photo Archive** (+ the `people` keystone table and profile→person backfill). Biggest emotional payoff; establishes the backbone.
-2. **Family Tree** — builds on `people`; adds relationships + the tree view + in-memoriam.
+1. ✅ **Photo Archive** (+ the `people` keystone table and profile→person backfill) — shipped 2026-06-30. Biggest emotional payoff; establishes the backbone.
+2. **Family Tree** — builds on `people`; adds relationships + the tree view + in-memoriam. ← next up.
 3. **Timeline** — per PRD 10, now wired to `people` + albums.
 4. **Stories** — text-first; hangs off people/events/albums.
 
@@ -152,9 +152,19 @@ Each slice should: branch, ship, fill in its Implementation section, and flip st
 
 _Filled in per slice as each ships._
 
-- **Slice 1 — Photo Archive + `people` keystone**: _status: not started — **but the `people` table itself landed early** via PRD 12 slice 3 (PeoplePicker needed a real backing store)._
-  - **`people` table is already created**: `supabase/migrations/20260624000001_people.sql` + Drizzle mirror in `src/lib/db/schema.ts`. It implements this PRD's keystone column set (`display_name`, `given_name`/`family_name`, `birth_date`/`birth_circa`, `death_date`/`death_circa`, `family_branch`, `bio`, nullable `photo_id` + `profile_id` FKs, audit cols), the unique-per-living-member partial index on `profile_id`, wiki RLS (authenticated read + insert/update, admin-only delete), and the **profile→person backfill**. **Applied to prod** and seeded from Dan's initial CSV (`20260624000002_people_seed.sql`) — 8 people live (members linked, ancestors `profile_id` null). Peter Mathieson's profile originally had no `full_name` (so the backfill showed his email); `20260624000003_peter_mathieson.sql` enriches both his profile name and his person row.
-  - **What's left for this slice**: `albums` / `album_photos`, the `photos` extensions (`taken_on` / `circa` / `is_archival`), the "archival" `PhotoUpload` kind, subject-tagging wired to `people` (use the `PeoplePicker` from PRD 12), and the `/family/archive` routes. The keystone dependency is done.
+- **Slice 1 — Photo Archive + `people` keystone**: ✅ **shipped** _(build session 2026-06-30; branch `claude/loving-turing-ce6e06`)_. The `people` keystone landed earlier via PRD 12 slice 3; this session built the archive on top of it.
+  - **`people` table (keystone, prior work)**: `supabase/migrations/20260624000001_people.sql` + Drizzle mirror in `src/lib/db/schema.ts`. Implements the keystone column set, the unique-per-living-member partial index on `profile_id`, wiki RLS, and the profile→person backfill. **Applied to prod** and seeded (`20260624000002_people_seed.sql`, `20260624000003_peter_mathieson.sql`).
+  - **New migration** `supabase/migrations/20260630000001_photo_archive.sql` — ✅ **applied to prod 2026-06-30** via `supabase db push` and schema-verified (all 3 tables with RLS on, the 3 `photos` columns, and all policies present). It adds:
+    - `albums` (`title`, `description` Markdown, `era`, nullable `cover_photo_id`, audit cols) + `album_photos` (ordered M:N with `sort_order`).
+    - **`photo_people`** — new join keyed on `person_id → people` (NOT `profile_id`), additive to `photo_subjects` per the slice decision, so a photo can tag both members and ancestors. `photo_subjects` is left untouched.
+    - `photos` extensions: `taken_on date`, `circa text`, `is_archival boolean default false`.
+    - RLS: family-only (`not is_guest()`) wiki posture on all three new tables (album delete narrowed to creator/admin; album_photos delete open for curation; photo_people delete uploader/admin). Archival photos carry `property_id = null` so the existing guest photos policy already hides them. **Added a scoped `photos` UPDATE policy** letting any non-guest member edit `is_archival` photos (caption/date), since the base photos-update policy is uploader-or-admin and the archive is wiki content.
+  - **Keystone attribution guardrail honored**: `albums` has open family RLS with no audit trigger, so `createAlbum`/`updateAlbum` set `created_by`/`updated_by` + bump `updated_at` and call `recordRevision({ entityType: "album" })`; per-photo dating/tagging calls `recordRevision({ entityType: "photo" })`. `RevisionEntity` gained `"album"` + `"photo"` (in both `src/lib/db/schema.ts` and `src/lib/revisions.ts`).
+  - **Upload path**: `PhotoUpload` + `recordUploadedPhoto` gained an `{ kind: "album"; albumId }` attachment that marks the photo `is_archival` and links it into `album_photos` (reuses the existing direct-to-Storage + thumb-companion pipeline; no new upload code).
+  - **Routes** (all Family mode, `SalonPanel`/`PageIntro` editorial): `/family/archive` (album grid + `CreateFlow` "New Album") and `/family/archive/[albumId]` (in-place album header edit via `InlineEditable`, archival `PhotoUpload`, per-photo details sheet with `FuzzyDateField` + `PeoplePicker`, set-cover / remove-from-album, and a dependency-free lightbox). Actions in `src/app/(app)/family/archive/actions.ts`.
+  - **Nav + homepage**: `Archive` link added to the Family nav group (`site-nav.tsx`; guests never render the nav); homepage Family gateway now **leads with "The Archive"** (`src/app/(app)/page.tsx`) with a live album count.
+  - **Verified**: `tsc --noEmit`, `eslint`, and `next build` all clean. Migration applied to prod and **the relational flow was exercised on the live DB** (temporary round-trip, then cleaned up): album create + cover, an `is_archival` photo with `circa`, the album→photos join, **ancestor tagging via `photo_people` with `profile_id null`**, and an `album` revision all succeeded. Both routes boot under `next dev` and gate correctly (`307 → /login`). The only step not automatable here is the authenticated in-browser click-through (needs a family member login) — the data path beneath it is confirmed.
+  - **Follow-ups**: (1) people chips on archive photos are plain text — they become links once slice 2 ships `/family/tree/[personId]`; (2) reuse `photo_people` for `event_people` in slice 3 (timeline); (3) Google-Photos import into an album is not wired (device upload only) — trivial to add via `AddPhotosModal` if wanted.
   - ⚠️ **Guardrail when you build the person create/edit UI** (PR #5 review finding): `people` has open wiki RLS — any authenticated member can INSERT/UPDATE any row (`with check (true)`) — and `created_by` / `updated_by` / `updated_at` are **not** enforced or auto-bumped by a trigger. So the Server Action behind person create/edit must (a) set `created_by` / `updated_by` to `auth.uid()` and bump `updated_at`, and (b) call `recordRevision({ entityType: "person", … })` — exactly like `updateProperty` — so edits stay attributable and reversible. (No person-edit UI ships yet; the `PeoplePicker` only reads, so this is a forward guardrail, not a current bug.)
 - **Slice 2 — Family Tree**: _status: not started_
 - **Slice 3 — Timeline**: _status: not started (see PRD 10)_
