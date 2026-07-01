@@ -558,6 +558,47 @@ export type StoryPerson = typeof storyPeople.$inferSelect;
 export type NewStoryPerson = typeof storyPeople.$inferInsert;
 
 // ----------------------------------------------------------------------------
+// feedback — Feedback & Suggestions (PRD 20). A durable, browsable channel for
+// the whole family (members AND guests) to suggest features or report problems.
+// RLS: anyone inserts their own row (no is_guest() gate — the one write guests
+// are allowed site-wide); admins triage via `status`.
+// ----------------------------------------------------------------------------
+export type FeedbackCategory = "idea" | "problem" | "other";
+export type FeedbackStatus = "new" | "seen" | "planned" | "done";
+
+export const feedback = pgTable(
+  "feedback",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    category: text("category").notNull().default("idea"),
+    message: text("message").notNull(),
+    pageUrl: text("page_url"),
+    status: text("status").notNull().default("new"),
+    // References profiles (not auth.users) so the admin view can embed the
+    // submitter in one query. profiles.id === auth.uid(), so RLS is unaffected.
+    createdBy: uuid("created_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("feedback_created_at_idx").on(table.createdAt),
+    index("feedback_status_idx").on(table.status),
+  ],
+);
+
+export type Feedback = typeof feedback.$inferSelect;
+export type NewFeedback = typeof feedback.$inferInsert;
+
+// ----------------------------------------------------------------------------
 // revisions (immutable audit log)
 // ----------------------------------------------------------------------------
 export type RevisionEntity =

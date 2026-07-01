@@ -1,7 +1,7 @@
 # 20 — Feedback & Suggestions
 
 **Phase**: 5 · **Depends on**: 14 (Resend wired), plus the standard auth/RLS/authoring foundation
-**Status**: 🟢 ready — scoping agreed 2026-07-01. Small. Its own session/branch.
+**Status**: ✅ shipped (2026-07-01) — built on its own branch; migration prod-apply pending.
 
 ---
 
@@ -75,9 +75,25 @@ src/app/(app)/admin/feedback/actions.ts        # updateFeedbackStatus (requireAd
 
 ## Implementation
 
-_Filled in when this ships._
+- **Status**: ✅ shipped (2026-07-01). tsc + eslint + `next build` all green; `/admin/feedback` route registered. **Migration not yet applied to prod** (same posture as PRD 11 slice 4 at PR time).
 
-- **Status**: not started
 - **Key files**:
+  - `supabase/migrations/20260701000001_feedback.sql` — the `feedback` table + RLS. Insert policy is deliberately **not** `not is_guest()`-gated (`with check (auth.uid() = created_by)`) so guests can submit; reads are `is_admin() OR own-row`; update/delete admin-only. `created_by`/`updated_by` reference **`public.profiles(id)`** (not `auth.users`) so the admin view embeds the submitter in one query — safe because `profiles.id === auth.uid()`.
+  - `src/lib/db/schema.ts` — mirrored `feedback` table + `FeedbackCategory`/`FeedbackStatus`/`Feedback` types.
+  - `src/lib/email/feedback-email.ts` — `feedbackSubmittedEmail()` built on the shared `renderEmailHtml/Text` layout (reuses `RenderedEmail` from booking-emails).
+  - `src/lib/notifications/feedback.ts` — `notifyFeedbackSubmitted()`, best-effort admin alert modeled on the booking notifier (runs post-commit, swallows errors, resolves site-admin emails under the caller's session).
+  - `src/app/(app)/feedback/actions.ts` — `submitFeedback` server action: validates, inserts with `created_by = auth.uid()`, then fires the best-effort email.
+  - `src/components/feedback/feedback-button.tsx` — the "Send Feedback" entry + submit sheet (category radios + message). Auto-captures `page_url` from `window.location` in a client action wrapper (no effect).
+  - `src/components/app-shell/site-footer.tsx` — hosts `FeedbackButton`; footer renders on **every** page incl. the guest shell, satisfying "one click from anywhere, guests included."
+  - `src/app/(app)/admin/feedback/{page.tsx,feedback-list.tsx,actions.ts}` — admin triage: newest-first list, category badge, submitter, source page, inline New→Seen→Planned→Done status advance (`updateFeedbackStatus`, admin-gated). Linked from the user-menu Governance group.
+
 - **Decisions made during build**:
+  - **Entry point = footer** (over the user menu) because the footer is identical for members and guests and always present, so a single placement covers the guest shell without extra work.
+  - **UI = right-side `Sheet`** (already in the primitives) rather than adding a new `Dialog` component — keeps the surface calm and unobtrusive, Advisory-tinted.
+  - **`created_by → profiles(id)`** instead of the Legacy tables' `auth.users(id)`, purely to enable the one-query submitter embed (bookings does the same).
+  - **No revisions-log entry** for status changes — the `feedback` table's own `updated_by/updated_at` are sufficient; adding a `feedback` `RevisionEntity` was out of scope.
+
 - **Open follow-ups**:
+  - **Apply the migration to prod** (`20260701000001_feedback.sql`) and live-verify the guest-submit path end-to-end.
+  - **Guest-submitter email**: because guests have restricted profile visibility (PRD 15), `notifyFeedbackSubmitted` may read zero admin emails from a guest session and silently send nothing — the row is still captured. If guest submissions must always email, add a `SECURITY DEFINER admin_notification_emails()` function (the escape hatch the booking notifier documents).
+  - Out-of-scope-by-design (revisit if volume warrants): upvoting, status-back-to-submitter notifications, threaded discussion, attachments.
