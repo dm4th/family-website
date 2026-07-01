@@ -1,3 +1,5 @@
+import { FeedbackButton } from "@/components/feedback/feedback-button";
+
 export function SiteFooter() {
   return (
     <footer className="border-t border-border bg-background">
@@ -5,9 +7,14 @@ export function SiteFooter() {
         <span className="eyebrow text-foreground-subtle">
           Mathieson Family · Private
         </span>
-        <span className="text-foreground-subtle">
-          For family use only. Not for distribution.
-        </span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Reachable from every page — including the stripped guest shell,
+              since guests may send feedback too (PRD 20). */}
+          <FeedbackButton />
+          <span className="text-foreground-subtle">
+            For family use only. Not for distribution.
+          </span>
+        </div>
       </div>
     </footer>
   );

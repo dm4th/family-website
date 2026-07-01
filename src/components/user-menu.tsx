@@ -95,6 +95,9 @@ export function UserMenu({
             <DropdownMenuItem asChild>
               <Link href="/admin">Admin</Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/feedback">Feedback</Link>
+            </DropdownMenuItem>
           </>
         )}
         <DropdownMenuSeparator />
