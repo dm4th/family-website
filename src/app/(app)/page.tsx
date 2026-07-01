@@ -43,6 +43,7 @@ export default async function Dashboard({
     { count: propertyCount },
     { count: albumCount },
     { count: peopleCount },
+    { count: eventCount },
     ownProfile,
   ] =
     await Promise.all([
@@ -56,6 +57,7 @@ export default async function Dashboard({
         .neq("status", "inactive"),
       supabase.from("albums").select("id", { count: "exact", head: true }),
       supabase.from("people").select("id", { count: "exact", head: true }),
+      supabase.from("events").select("id", { count: "exact", head: true }),
       user
         ? supabase
             .from("profiles")
@@ -114,6 +116,18 @@ export default async function Dashboard({
     },
     {
       mode: "family",
+      eyebrow: "Family · Legacy",
+      title: "The Timeline",
+      blurb:
+        "The family story year by year: milestones you record and dated photographs, assembled into one chronology you can jump through or follow one person across.",
+      href: "/family/timeline",
+      badge:
+        eventCount === null
+          ? null
+          : `${eventCount} ${eventCount === 1 ? "event" : "events"}`,
+    },
+    {
+      mode: "family",
       eyebrow: "Family",
       title: "The Directory",
       blurb:
@@ -159,12 +173,6 @@ export default async function Dashboard({
       blurb: "Trust performance and distributions, transparently.",
       href: "/coming-soon/finances",
       mode: "advisory",
-    },
-    {
-      title: "Family Timeline",
-      blurb: "Stories, milestones, history. Preserved.",
-      href: "/coming-soon/timeline",
-      mode: "family",
     },
     {
       title: "Messaging",
