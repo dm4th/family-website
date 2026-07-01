@@ -38,7 +38,12 @@ export default async function Dashboard({
 
   // Two cheap counts so the gateways show signal instead of static copy, plus
   // the caller's name/branch so we can nudge an incomplete profile.
-  const [{ count: memberCount }, { count: propertyCount }, ownProfile] =
+  const [
+    { count: memberCount },
+    { count: propertyCount },
+    { count: albumCount },
+    ownProfile,
+  ] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -48,6 +53,7 @@ export default async function Dashboard({
         .from("properties")
         .select("id", { count: "exact", head: true })
         .neq("status", "inactive"),
+      supabase.from("albums").select("id", { count: "exact", head: true }),
       user
         ? supabase
             .from("profiles")
@@ -80,6 +86,18 @@ export default async function Dashboard({
   // documents, finances, timeline, messaging) join their matching mode's
   // group as they ship.
   const gateways: Gateway[] = [
+    {
+      mode: "family",
+      eyebrow: "Family · Legacy",
+      title: "The Archive",
+      blurb:
+        "Historical photographs, gathered into albums, dated, and tagged with the people in them. The family's living memory.",
+      href: "/family/archive",
+      badge:
+        albumCount === null
+          ? null
+          : `${albumCount} ${albumCount === 1 ? "album" : "albums"}`,
+    },
     {
       mode: "family",
       eyebrow: "Family",

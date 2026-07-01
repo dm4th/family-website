@@ -14,7 +14,11 @@ export type RecordUploadResult =
 
 type Attachment =
   | { kind: "profile"; profileId: string }
-  | { kind: "property"; propertyId: string };
+  | { kind: "property"; propertyId: string }
+  // Family Legacy archive (PRD 11): a historical scan uploaded straight into an
+  // album, attached to no living profile/property. Marks the photo is_archival
+  // and links it into album_photos.
+  | { kind: "album"; albumId: string };
 
 export type PhotoSource = "upload" | "google_photos";
 
@@ -62,12 +66,15 @@ export async function recordUploadedPhoto(opts: {
     return { ok: false, message: "googleMediaId only valid for google_photos source" };
   }
 
+  const isArchival = opts.attachment.kind === "album";
+
   const photoInsert = {
     storage_path: opts.storagePath,
     caption: opts.caption?.trim() || null,
     uploaded_by: user.id,
     property_id:
       opts.attachment.kind === "property" ? opts.attachment.propertyId : null,
+    is_archival: isArchival,
     source,
     google_media_id: opts.googleMediaId ?? null,
   };
@@ -106,6 +113,17 @@ export async function recordUploadedPhoto(opts: {
 
   if (opts.attachment.kind === "profile") {
     revalidatePath(`/family/${opts.attachment.profileId}`);
+  } else if (opts.attachment.kind === "album") {
+    // Link the scan into its album. Best-effort so a failed link never loses
+    // the uploaded photo — it can be re-added, and per-photo dating/tagging
+    // happens on the album page after upload.
+    await supabase.from("album_photos").insert({
+      album_id: opts.attachment.albumId,
+      photo_id: photoRow.id,
+      added_by: user.id,
+    });
+    revalidatePath(`/family/archive/${opts.attachment.albumId}`);
+    revalidatePath("/family/archive");
   } else {
     revalidatePath("/properties");
     // The per-slug detail page revalidates via the client router.refresh().

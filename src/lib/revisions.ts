@@ -4,7 +4,9 @@ export type RevisionEntity =
   | "property"
   | "profile"
   | "property_contact"
-  | "booking";
+  | "booking"
+  | "album"
+  | "photo";
 
 type Scalar = string | number | boolean | null | undefined;
 type FieldValue = Scalar | Scalar[];

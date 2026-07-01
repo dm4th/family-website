@@ -16,7 +16,8 @@ import { recordUploadedPhoto } from "@/app/(app)/photos/actions";
 
 type Attachment =
   | { kind: "profile"; profileId: string }
-  | { kind: "property"; propertyId: string };
+  | { kind: "property"; propertyId: string }
+  | { kind: "album"; albumId: string };
 
 type Status =
   | { phase: "idle" }
