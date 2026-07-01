@@ -35,6 +35,9 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublicPath =
     pathname.startsWith("/login") ||
+    // Where an uninvited sign-in lands (PRD 24). Must be reachable without a
+    // session, since the rejected user has none.
+    pathname.startsWith("/no-invite") ||
     pathname.startsWith("/auth") ||
     // ICS calendar feeds authorize via a per-member `?token=`, not the session
     // cookie, so external calendar pollers (Google/Apple) can reach them. The
