@@ -6,7 +6,9 @@ export type RevisionEntity =
   | "property_contact"
   | "booking"
   | "album"
-  | "photo";
+  | "photo"
+  | "person"
+  | "relationship";
 
 type Scalar = string | number | boolean | null | undefined;
 type FieldValue = Scalar | Scalar[];

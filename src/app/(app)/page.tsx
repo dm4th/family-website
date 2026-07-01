@@ -42,6 +42,7 @@ export default async function Dashboard({
     { count: memberCount },
     { count: propertyCount },
     { count: albumCount },
+    { count: peopleCount },
     ownProfile,
   ] =
     await Promise.all([
@@ -54,6 +55,7 @@ export default async function Dashboard({
         .select("id", { count: "exact", head: true })
         .neq("status", "inactive"),
       supabase.from("albums").select("id", { count: "exact", head: true }),
+      supabase.from("people").select("id", { count: "exact", head: true }),
       user
         ? supabase
             .from("profiles")
@@ -97,6 +99,18 @@ export default async function Dashboard({
         albumCount === null
           ? null
           : `${albumCount} ${albumCount === 1 ? "album" : "albums"}`,
+    },
+    {
+      mode: "family",
+      eyebrow: "Family · Legacy",
+      title: "The Family Tree",
+      blurb:
+        "Everyone in the family and how they connect across the generations. Traverse it, and add ancestors without creating accounts.",
+      href: "/family/tree",
+      badge:
+        peopleCount === null
+          ? null
+          : `${peopleCount} ${peopleCount === 1 ? "person" : "people"}`,
     },
     {
       mode: "family",

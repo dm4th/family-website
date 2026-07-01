@@ -348,6 +348,52 @@ export type PhotoPerson = typeof photoPeople.$inferSelect;
 export type NewPhotoPerson = typeof photoPeople.$inferInsert;
 
 // ----------------------------------------------------------------------------
+// relationships — Family Tree graph edges (PRD 11, slice 2). `parent` is
+// directional (person_a is a parent of person_b); `spouse` is undirected and
+// stored canonically (person_a < person_b). Siblings/grandparents/cousins are
+// derived from these edges, never stored.
+// ----------------------------------------------------------------------------
+export type RelationshipType = "parent" | "spouse";
+
+export const relationships = pgTable(
+  "relationships",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    personA: uuid("person_a")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    personB: uuid("person_b")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    type: text("type").$type<RelationshipType>().notNull(),
+    createdBy: uuid("created_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("relationships_edge_key").on(
+      table.personA,
+      table.personB,
+      table.type,
+    ),
+    index("relationships_person_a_idx").on(table.personA, table.type),
+    index("relationships_person_b_idx").on(table.personB, table.type),
+  ],
+);
+
+export type Relationship = typeof relationships.$inferSelect;
+export type NewRelationship = typeof relationships.$inferInsert;
+
+// ----------------------------------------------------------------------------
 // revisions (immutable audit log)
 // ----------------------------------------------------------------------------
 export type RevisionEntity =
@@ -356,7 +402,9 @@ export type RevisionEntity =
   | "property_contact"
   | "booking"
   | "album"
-  | "photo";
+  | "photo"
+  | "person"
+  | "relationship";
 
 export const revisions = pgTable(
   "revisions",
