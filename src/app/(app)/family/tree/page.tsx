@@ -97,7 +97,8 @@ export default async function FamilyTreePage({
           />
           <p className="text-sm text-foreground-muted">
             Missing someone? Use{" "}
-            <span className="text-foreground">Add a Person</span> above, then open
+            <span className="text-foreground">Add a Person</span>{" "}
+            above, then open
             their page to connect them. You can also add a relative directly from
             anyone&rsquo;s page.{" "}
             <Link
