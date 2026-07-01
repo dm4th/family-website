@@ -8,6 +8,7 @@ import { Eyebrow } from "@/components/shell";
 import { PhotoUpload } from "@/components/photo-upload";
 import { AlbumHeader } from "./album-header";
 import { ArchiveGallery, type ArchivePhoto } from "./archive-gallery";
+import { ZipUpload } from "./zip-upload";
 import { loadStorySummaries } from "../../stories/load-stories";
 import { StoryList } from "../../stories/story-list";
 
@@ -138,6 +139,7 @@ export default async function AlbumDetailPage({ params }: { params: Params }) {
           attachment={{ kind: "album", albumId: album.id }}
           label="Add Scans"
         />
+        <ZipUpload albumId={album.id} />
         <p className="text-xs text-foreground-subtle">
           Historical photos live here, not on a member&apos;s profile. After
           adding, open a photo to set its date and note who&apos;s in it.

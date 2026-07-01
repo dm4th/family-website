@@ -40,6 +40,14 @@ export async function recordUploadedPhoto(opts: {
   tagSubjectIds?: string[];
   source?: PhotoSource;
   googleMediaId?: string | null;
+  /**
+   * Fuzzy dating written at creation, used by the bulk zip import (PRD 18):
+   * an exact `takenOn` (ISO YYYY-MM-DD, e.g. from EXIF) OR an approximate
+   * `circa` era phrase. Only meaningful for archival (album) uploads; ignored
+   * for profile/property attachments. Never both.
+   */
+  takenOn?: string | null;
+  circa?: string | null;
 }): Promise<RecordUploadResult> {
   const supabase = await createClient();
   const {
@@ -68,9 +76,21 @@ export async function recordUploadedPhoto(opts: {
 
   const isArchival = opts.attachment.kind === "album";
 
+  // Archival scans can carry a date at creation (EXIF or an era-for-all). Only
+  // one of the two columns is ever set, and only for album uploads — a stray
+  // date on a profile/property photo would be meaningless.
+  const takenOn =
+    isArchival && typeof opts.takenOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(opts.takenOn)
+      ? opts.takenOn
+      : null;
+  const circa =
+    isArchival && !takenOn && opts.circa?.trim() ? opts.circa.trim() : null;
+
   const photoInsert = {
     storage_path: opts.storagePath,
     caption: opts.caption?.trim() || null,
+    taken_on: takenOn,
+    circa,
     uploaded_by: user.id,
     property_id:
       opts.attachment.kind === "property" ? opts.attachment.propertyId : null,

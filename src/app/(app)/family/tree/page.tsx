@@ -87,6 +87,16 @@ export default async function FamilyTreePage({
             Start the tree by adding a person. Living members and ancestors alike
             belong here; ancestors don&rsquo;t need an account.
           </p>
+          <p className="mx-auto mt-4 max-w-md text-sm text-foreground-muted">
+            Have a spreadsheet of relatives?{" "}
+            <Link
+              href="/family/tree/import"
+              className="text-accent-family underline-offset-4 hover:underline"
+            >
+              Import many at once
+            </Link>
+            .
+          </p>
         </div>
       ) : (
         <>
@@ -100,7 +110,14 @@ export default async function FamilyTreePage({
             <span className="text-foreground">Add a Person</span>{" "}
             above, then open
             their page to connect them. You can also add a relative directly from
-            anyone&rsquo;s page.{" "}
+            anyone&rsquo;s page, or{" "}
+            <Link
+              href="/family/tree/import"
+              className="text-accent-family underline-offset-4 hover:underline"
+            >
+              import many from a spreadsheet
+            </Link>
+            .{" "}
             <Link
               href="/family/archive"
               className="text-accent-family underline-offset-4 hover:underline"

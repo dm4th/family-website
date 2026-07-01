@@ -1,7 +1,7 @@
 # 18 — Legacy Bulk Authoring (people import + zip photo upload)
 
 **Phase**: 5 · **Depends on**: 11 (Family Legacy — `people`, `albums`, `photo_people`, `relationships` all live), 12 (authoring layer), 05 (`PhotoUpload` pipeline), 17 (client downscale + thumb)
-**Status**: 🟢 ready — scoping agreed 2026-07-01. Build as small slices (see [Sequencing](#sequencing)); each its own session/branch.
+**Status**: ✅ shipped (slices 1 & 2, 2026-07-01) — CSV people import + zip photo upload built, PR'd. Slice 3 (Google Photos multi-import) deferred as an optional follow-up. See [Implementation](#implementation). No migration required.
 
 ---
 
@@ -121,8 +121,80 @@ src/lib/legacy-import.ts       # pure: CSV parse, column mapping, dedup verdicts
 
 ## Implementation
 
-_Filled in per slice as each ships._
+Slices 1 & 2 (the content unlock) built 2026-07-01. Slice 3 (optional Google Photos
+multi-import) deferred as a follow-up. tsc + eslint + `next build` all green. **No new
+migration** — inserts only into existing tables and uses existing columns
+(`photos.taken_on` / `photos.circa` already exist), so nothing to apply to prod.
 
-- **Slice 1 — CSV people import**: _status: not started_
-- **Slice 2 — Zip photo upload**: _status: not started_
-- **Slice 3 — Google Photos multi-import (optional)**: _status: not started_
+**New client-only deps** (Next 16 / React 19 verified via `next build`): `jszip`
+(client unzip) and `exifr` (EXIF `DateTimeOriginal`). Both are **dynamically imported**
+inside the zip-upload run handler so they never touch the album page's initial bundle.
+CSV parsing is **hand-rolled** (no dep) as a pure, unit-tested function.
+
+### Slice 1 — CSV people import ✅
+
+- **Route**: [`/family/tree/import`](../src/app/(app)/family/tree/import/page.tsx) (Family mode).
+  Server component: guest 404 guard (`resolveViewer`), fetches existing lowercased
+  display names for the dedup preview.
+- **Pure lib**: [`src/lib/legacy-import.ts`](../src/lib/legacy-import.ts) — RFC-4180-ish
+  `parseCsv` (quoted fields, embedded commas/newlines, `""` escapes, CRLF, BOM),
+  `parsePeopleCsv` (header→column mapping, per-row validation, ISO-date checks),
+  `computeVerdicts` (case-insensitive dedup vs existing **and** in-file), and the
+  `PERSON_IMPORT_TEMPLATE` (single source of truth for the downloadable template).
+  Column set maps 1:1 to `people`; only `display_name` required.
+- **Preview-before-commit**: [`people-import.tsx`](../src/app/(app)/family/tree/import/people-import.tsx)
+  (client) — upload **or** paste, a per-row table with New / Already-in-the-tree /
+  Repeated-in-file verdicts, per-row include checkboxes (new rows pre-checked,
+  duplicates unchecked so a re-run adds nothing), inline validation warnings, and a
+  client-side template download.
+- **Commit**: [`commitPeopleImport`](../src/app/(app)/family/tree/import/import-actions.ts)
+  re-sanitizes each row, **re-checks dedup against the DB** (authoritative + batch-local
+  so a re-run is idempotent), inserts with `created_by`/`updated_by` + a `person`
+  `recordRevision` each — the single-row guardrail looped. Rows fail independently;
+  returns `{ created, skippedDuplicate, failed, errors }`.
+- **Entry points**: links from the tree page (empty state + helper text) → import route.
+
+### Slice 2 — Zip photo upload ✅
+
+- **Component**: [`zip-upload.tsx`](../src/app/(app)/family/archive/[albumId]/zip-upload.tsx)
+  on the album page, beside the existing single `PhotoUpload`. Client unzip (JSZip) →
+  filter to images (jpg/png/webp/gif/heic/heif; skips `__MACOSX/`, dotfiles, non-images)
+  → per file: read EXIF `DateTimeOriginal`, run the **existing** `prepareImageForUpload`
+  (PRD-17 2048px display + 400px thumb) → **direct-to-Storage** upload → `recordUploadedPhoto`.
+  The bytes never hit a Vercel Function, so the 4.5 MB body cap and the renditions both hold.
+- **Dating**: EXIF prefills `taken_on` per photo; an optional "era for all" fills `circa`
+  on the **undated** only.
+- **Progress + resilience**: N-of-M with the current filename; a corrupt image / oversize /
+  non-image is skipped-and-reported in a collapsible list, never aborting the batch.
+- **Batch tagging**: after upload, a `PeoplePicker` + [`tagPhotosWithPeople`](../src/app/(app)/family/archive/actions.ts)
+  applies the same people to every uploaded photo (idempotent upsert on the composite PK).
+- **Shared-infra change**: `recordUploadedPhoto` gained optional `takenOn`/`circa` params
+  (additive; guarded to album kind and to one column; no behavior change for the single
+  uploader or the Google picker).
+
+### Auth / attribution (the primary reviewer check)
+
+RLS is the guarantee, matching the sibling single-row actions: `people` insert and
+`photo_people` insert both carry `with check (not public.is_guest())`, so guests are
+blocked at the DB even though the routes also 404 them. Every created `people` row sets
+`created_by`/`updated_by` + records a `person` revision; every photo carries `uploaded_by`
+(same as single upload — photo creation records no revision by existing convention).
+
+### Verification
+
+- `parseCsv` / `parsePeopleCsv` / `computeVerdicts` / `isValidIsoDate` validated with a
+  throwaway `tsx` harness (25 assertions: quoting, escapes, CRLF, blank lines, bad dates,
+  header mapping, dedup existing + in-file, fatal missing-column, template round-trip).
+  Not committed — the repo has no test framework; adding one was out of scope.
+- tsc + eslint + `next build` green (route `/family/tree/import` present; album route
+  compiles with the zip uploader).
+- **Not yet live-verified in a browser against Supabase** (no local Supabase session in
+  this build environment) — recommend the PRD's per-slice manual recipe before prod.
+
+### Follow-ups
+
+- **Slice 3 (Google Photos multi-import)** — deferred; the existing picker imports to
+  profile/property attachments only, so an album-attachment + new-album flow is net-new work.
+- **Duplicate → update** dedup verdict — v1 ships New + Duplicate(skip); "update existing"
+  needs a by-id match UX and was left out to keep the commit path safe/simple.
+- Relationship columns (`parent_of`/`spouse_of`) — still v2, per the pre-flight decision.
