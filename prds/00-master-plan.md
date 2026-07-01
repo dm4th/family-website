@@ -32,12 +32,28 @@ The first-slice build was a single long session, deliberately. From here, every 
 | [16 — UI Polish & Copy](16-ui-polish-copy.md) | ✅ shipped | 13, 14, 17 | Title Case site-wide (eyebrows left as-is), em-dash scrub (placeholders kept), calendar legend verified + `Property · Person (N guests)` band labels, unified ICS title `[Property] \| [Person]`, standalone Home nav link + clickable wordmark. No DB/route/dep changes; tsc + eslint + build green. |
 | [17 — Image Performance](17-image-performance.md) | ✅ shipped | 14, 16 | Client-side downscale on upload (2048px/JPEG q0.82) + thumb-on-upload (400px companion) + per-context rendition helper with graceful full-object fallback. Live-verified: 6.25MB→129KB display + 12KB thumb, grid tiles fetch the 400px thumb. Also fixed thumb cleanup on photo delete. tsc + eslint + build green. |
 | [15 — Guest Access](15-guest-access.md) | ✅ shipped (2026-06-29) | — | Property-scoped guest role: first real member/guest RLS differentiation + `property_guests` join + middleware/page gating. Shipped via PR #8; migration applied to prod; **live-verified end-to-end** (member access intact + full negative suite passed from a real guest session). Verification caught a cross-PR redirect loop (13×15), hotfixed in `a01354b`. Follow-up: storage signed-URL hardening (defense-in-depth). |
+| [18 — Legacy Bulk Authoring](18-legacy-bulk-authoring.md) | 🟢 ready (2026-07-01) | 19, 20 | **Top post-Legacy priority — the content unlock.** CSV bulk people import (ancestors, no accounts) + zip-archive photo upload into an album (client unzip → existing downscale/thumb pipeline) + optional Google Photos multi-import. Preview-before-commit; attribution guardrail looped at scale. The four Legacy slices launch empty; this makes them fillable. |
+| [19 — Shell Nav & Home](19-shell-nav-home.md) | 🟢 ready (2026-07-01) | 18, 20 | Group the crowded top nav into **mode dropdowns** (Family/Operations/Advisory, accent-tinted) and restructure the homepage into **three calm doors** instead of a link wall. Fixes the "overwhelming for older users" problem Legacy's five new Family pages created. Design-only; no new tables/routes. |
+| [20 — Feedback & Suggestions](20-feedback-suggestions.md) | 🟢 ready (2026-07-01) | 18, 19 | Small. A `feedback` table + one-click "Send Feedback" from any page + `/admin/feedback` triage + best-effort Resend alert. Builds the channel the family uses to prioritize the rest of the roadmap. |
 | [09 — Family messaging](09-family-messaging.md) | 🟡 hold | — | Don't build until the family is actively using the portal — otherwise it's an empty room. Re-evaluate in 2-3 months of usage. |
 | [10 — Family timeline](10-family-timeline.md) | 🔵 absorbed | — | Now a slice inside [11 — Family Legacy](11-family-legacy.md). PRD 10 retained for its detailed timeline schema/UX notes. |
 | [07 — Trust-doc RAG](07-trust-doc-rag.md) | 🔴 blocked | — | Gated on the trust-doc security decision (see Open decisions). Don't start until that conversation has happened. |
 | [08 — Financial dashboard](08-financial-dashboard.md) | 🔴 blocked | — | Same security gate as 07, plus a real scoping conversation with Dan's dad about what data should surface. |
 
 **Parallel-safety legend**: features marked "parallel-safe with" can be developed simultaneously without merge conflicts (different tables, different routes, different components). The shared infrastructure (PhotoUpload, recordRevision, canManageProperty, etc.) is stable — adding to it is fine; reshaping it should be done in a dedicated session.
+
+## Post-Legacy roadmap (agreed 2026-07-01)
+
+With Family Legacy shipped, Dan prioritized the next wave. Order: **18 → 19 → 20 → 21 → 22 → 23**. The first three have full PRDs (above, 🟢 ready); the last three are captured here and get full PRDs when their turn comes up.
+
+| Order | PRD | Idea | Builds on | Notes |
+|---|---|---|---|---|
+| 1 | [18](18-legacy-bulk-authoring.md) | Bulk people import + zip photo upload | 11, 12, 05, 17 | ✅ full PRD written. The content unlock. |
+| 2 | [19](19-shell-nav-home.md) | Nav dropdowns + home restructure | shell | ✅ full PRD written. Older-user clarity. |
+| 3 | [20](20-feedback-suggestions.md) | Family feedback/suggestions form | 14 | ✅ full PRD written. Builds the prioritization channel. |
+| 4 | 21 (TBD) | **Guest notes + guestbook** — guests staying at a property share their stay | 15 (guest access), properties | Not yet written. Visibility (per-property vs family-wide) + moderation are the open calls. |
+| 5 | 22 (TBD) | **Stays + broadcast comms** — link guests/members to a "stay" (booking) and email-blast anyone linked | 06 (booking), 14 (Resend) | Not yet written. **Email-blast consent/unsubscribe is a compliance gate.** Adjacent to the shelved [09 messaging](09-family-messaging.md) — decide if 09 folds in. |
+| 6 | 23 (TBD) | **ChatOps agent** — embedded AI agent doing app actions (property/member/profile mgmt, Q&A) mirroring the testing-playbook actions | ~everything; Anthropic API / tool use | Not yet written. **The agent must enforce the same `canManageProperty()`/`is_admin()`/RLS gates as the UI** — wrapping server actions without re-checking authz is the central risk. Largest, most experimental; deliberately last. Lean on latest Claude models (Opus 4.8 / Sonnet 5) + Vercel AI SDK. |
 
 ## Round-2 follow-up queue (from the 2026-06-30 testing round)
 
