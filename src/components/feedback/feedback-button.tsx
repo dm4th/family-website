@@ -29,15 +29,19 @@ const CATEGORIES: { value: string; label: string }[] = [
 ];
 
 /**
- * The always-reachable "Send Feedback" entry (PRD 20). Lives in the site footer,
- * so it's one click from every page — including the stripped guest shell, since
- * guests may submit too. Opens a small sheet with a category + message form; the
- * page they were on is auto-captured for triage context.
+ * The always-reachable "Send Feedback" entry (PRD 20). Rendered in both the
+ * header (a visible button) and the footer (a quiet link), so it's one obvious
+ * click from every page — including the stripped guest shell, since guests may
+ * submit too. Opens a small sheet with a category + message form; the page they
+ * were on is auto-captured for triage context. Pass `children` to override the
+ * trigger's contents (e.g. an icon + label for the header).
  */
 export function FeedbackButton({
   className,
+  children,
 }: {
   className?: string;
+  children?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   // Capture the page they were on at submit time (client-side, fresh from
@@ -68,7 +72,7 @@ export function FeedbackButton({
             "text-foreground-subtle underline-offset-4 transition-colors hover:text-foreground-muted hover:underline"
           }
         >
-          Send Feedback
+          {children ?? "Send Feedback"}
         </button>
       </SheetTrigger>
       <SheetContent side="right" className="w-full sm:max-w-md">

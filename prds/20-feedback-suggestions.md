@@ -84,7 +84,8 @@ src/app/(app)/admin/feedback/actions.ts        # updateFeedbackStatus (requireAd
   - `src/lib/notifications/feedback.ts` — `notifyFeedbackSubmitted()`, best-effort admin alert modeled on the booking notifier (runs post-commit, swallows errors, resolves site-admin emails under the caller's session).
   - `src/app/(app)/feedback/actions.ts` — `submitFeedback` server action: validates, inserts with `created_by = auth.uid()`, then fires the best-effort email.
   - `src/components/feedback/feedback-button.tsx` — the "Send Feedback" entry + submit sheet (category radios + message). Auto-captures `page_url` from `window.location` in a client action wrapper (no effect).
-  - `src/components/app-shell/site-footer.tsx` — hosts `FeedbackButton`; footer renders on **every** page incl. the guest shell, satisfying "one click from anywhere, guests included."
+  - `src/components/app-shell/site-footer.tsx` — hosts `FeedbackButton` as a quiet link; footer renders on **every** page incl. the guest shell.
+  - `src/components/app-shell/site-header.tsx` — **also** hosts `FeedbackButton` as a visible outline button (`MessageSquarePlus` icon + "Feedback" label, icon-only under `sm`) in the always-sticky header, next to the theme toggle. Added 2026-07-01 after the footer-only placement proved too easy to miss; `FeedbackButton` gained a `children` prop so the same component renders both the quiet footer link and the prominent header button. Present in the guest shell too (guests submit).
   - `src/app/(app)/admin/feedback/{page.tsx,feedback-list.tsx,actions.ts}` — admin triage: newest-first list, category badge, submitter, source page, inline New→Seen→Planned→Done status advance (`updateFeedbackStatus`, admin-gated). Linked from the user-menu Governance group.
 
 - **Decisions made during build**:

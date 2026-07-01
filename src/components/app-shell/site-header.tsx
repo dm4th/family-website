@@ -1,5 +1,9 @@
 import Link from "next/link";
+import { MessageSquarePlus } from "lucide-react";
 
+import { cn } from "@/lib/utils";
+import { buttonVariants } from "@/components/ui/button";
+import { FeedbackButton } from "@/components/feedback/feedback-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { UserMenu } from "@/components/user-menu";
 import { SiteNavDesktop, SiteNavMobile } from "./site-nav";
@@ -36,6 +40,16 @@ export function SiteHeader({ isGuest, isAdmin, ...props }: SiteHeaderProps) {
           {!isGuest && <SiteNavDesktop isAdmin={isAdmin} />}
         </div>
         <div className="flex items-center gap-1.5">
+          <FeedbackButton
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "gap-1.5"
+            )}
+          >
+            <MessageSquarePlus aria-hidden />
+            <span className="hidden sm:inline">Feedback</span>
+            <span className="sr-only sm:hidden">Send Feedback</span>
+          </FeedbackButton>
           <ThemeToggle />
           <UserMenu {...props} isAdmin={isAdmin} isGuest={isGuest} />
         </div>
