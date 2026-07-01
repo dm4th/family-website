@@ -125,6 +125,12 @@ export const NAV_GROUPS: NavGroupDef[] = [
         adminOnly: true,
       },
       {
+        label: "Feedback",
+        href: "/admin/feedback",
+        description: "Family suggestions and reports",
+        adminOnly: true,
+      },
+      {
         label: "Documents & AI",
         href: "/coming-soon/documents",
         description: "Plain-language answers from trust documents",
