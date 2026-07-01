@@ -44,6 +44,7 @@ export default async function Dashboard({
     { count: albumCount },
     { count: peopleCount },
     { count: eventCount },
+    { count: storyCount },
     ownProfile,
   ] =
     await Promise.all([
@@ -58,6 +59,7 @@ export default async function Dashboard({
       supabase.from("albums").select("id", { count: "exact", head: true }),
       supabase.from("people").select("id", { count: "exact", head: true }),
       supabase.from("events").select("id", { count: "exact", head: true }),
+      supabase.from("stories").select("id", { count: "exact", head: true }),
       user
         ? supabase
             .from("profiles")
@@ -125,6 +127,18 @@ export default async function Dashboard({
         eventCount === null
           ? null
           : `${eventCount} ${eventCount === 1 ? "event" : "events"}`,
+    },
+    {
+      mode: "family",
+      eyebrow: "Family · Legacy",
+      title: "Stories & Remembrances",
+      blurb:
+        "The family's memories, in the family's words. Recorded stories tied to the people, albums, and moments they're about.",
+      href: "/family/stories",
+      badge:
+        storyCount === null
+          ? null
+          : `${storyCount} ${storyCount === 1 ? "story" : "stories"}`,
     },
     {
       mode: "family",

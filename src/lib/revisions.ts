@@ -9,7 +9,8 @@ export type RevisionEntity =
   | "photo"
   | "person"
   | "relationship"
-  | "event";
+  | "event"
+  | "story";
 
 type Scalar = string | number | boolean | null | undefined;
 type FieldValue = Scalar | Scalar[];

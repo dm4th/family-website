@@ -8,6 +8,8 @@ import { Eyebrow } from "@/components/shell";
 import { PhotoUpload } from "@/components/photo-upload";
 import { AlbumHeader } from "./album-header";
 import { ArchiveGallery, type ArchivePhoto } from "./archive-gallery";
+import { loadStorySummaries } from "../../stories/load-stories";
+import { StoryList } from "../../stories/story-list";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +113,8 @@ export default async function AlbumDetailPage({ params }: { params: Params }) {
     ];
   });
 
+  const stories = await loadStorySummaries({ albumId: album.id });
+
   return (
     <div className="flex flex-col gap-12">
       <div className="flex flex-col gap-2">
@@ -147,6 +151,15 @@ export default async function AlbumDetailPage({ params }: { params: Params }) {
         currentUserId={user?.id ?? null}
         isAdmin={isAdmin}
       />
+
+      {stories.length > 0 && (
+        <section className="flex flex-col gap-5">
+          <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
+            Stories
+          </h2>
+          <StoryList stories={stories} />
+        </section>
+      )}
     </div>
   );
 }
