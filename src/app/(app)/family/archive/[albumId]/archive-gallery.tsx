@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Pencil, Star, Trash2, X } from "lucide-react";
 
@@ -336,9 +337,17 @@ function Lightbox({
             {photo.caption}
             {photo.people.length > 0 && (
               <span className="mt-1 block text-xs text-surface/70">
-                {photo.people
-                  .map((p) => (p.inMemoriam ? `† ${p.displayName}` : p.displayName))
-                  .join(", ")}
+                {photo.people.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 && ", "}
+                    <Link
+                      href={`/family/tree/${p.id}`}
+                      className="underline-offset-4 hover:text-surface hover:underline"
+                    >
+                      {p.inMemoriam ? `† ${p.displayName}` : p.displayName}
+                    </Link>
+                  </span>
+                ))}
               </span>
             )}
           </figcaption>
