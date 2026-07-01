@@ -37,7 +37,7 @@ export function SiteHeader({ isGuest, isAdmin, ...props }: SiteHeaderProps) {
         </div>
         <div className="flex items-center gap-1.5">
           <ThemeToggle />
-          <UserMenu {...props} isGuest={isGuest} />
+          <UserMenu {...props} isAdmin={isAdmin} isGuest={isGuest} />
         </div>
       </div>
     </header>

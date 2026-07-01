@@ -31,6 +31,7 @@ import {
   modeAccentText,
   navGroupsForViewer,
   navItemsForViewer,
+  soonItemsForViewer,
   type NavGroupDef,
 } from "./nav-config";
 
@@ -133,6 +134,28 @@ export function SiteNavDesktop({ isAdmin = false }: SiteNavProps) {
                       </li>
                     );
                   })}
+                  {soonItemsForViewer(group, isAdmin).map((item) => (
+                    <li key={item.href}>
+                      <NavigationMenuLink asChild>
+                        <Link
+                          href={item.href}
+                          className="transition-colors hover:bg-surface-sunken"
+                        >
+                          <span className="flex items-center justify-between gap-3">
+                            <span className="text-sm text-foreground-muted">
+                              {item.label}
+                            </span>
+                            <span className="shrink-0 text-[0.6rem] uppercase tracking-[0.18em] text-foreground-subtle">
+                              Soon
+                            </span>
+                          </span>
+                          <span className="text-xs text-foreground-subtle">
+                            {item.description}
+                          </span>
+                        </Link>
+                      </NavigationMenuLink>
+                    </li>
+                  ))}
                 </ul>
               </NavigationMenuContent>
             </NavigationMenuItem>
@@ -275,6 +298,28 @@ function MobileNavGroup({
               </li>
             );
           })}
+          {soonItemsForViewer(group, isAdmin).map((item) => (
+            <li key={item.href}>
+              <SheetClose asChild>
+                <Link
+                  href={item.href}
+                  className="block rounded-md px-3 py-2.5 transition-colors hover:bg-surface-sunken"
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="block text-base text-foreground-muted">
+                      {item.label}
+                    </span>
+                    <span className="shrink-0 text-[0.6rem] uppercase tracking-[0.18em] text-foreground-subtle">
+                      Soon
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-xs text-foreground-subtle">
+                    {item.description}
+                  </span>
+                </Link>
+              </SheetClose>
+            </li>
+          ))}
         </ul>
       )}
     </div>

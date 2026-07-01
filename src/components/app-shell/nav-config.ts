@@ -114,22 +114,15 @@ export const NAV_GROUPS: NavGroupDef[] = [
     ],
   },
   {
+    // Advisory is the financial-stewardship zone — trust documents and finances.
+    // None of it is built yet, so this group holds only `soon` items: it never
+    // renders a top-nav trigger, and shows as muted "Soon" rows on the homepage
+    // door. Admin + Feedback are NOT advisory (they're account utilities) and
+    // live in the user menu, not here.
     mode: "advisory",
     label: "Advisory",
     blurb: "Governance, trust, and finances. The family's stewardship desk.",
     items: [
-      {
-        label: "Admin",
-        href: "/admin",
-        description: "Roster, invitations, and governance",
-        adminOnly: true,
-      },
-      {
-        label: "Feedback",
-        href: "/admin/feedback",
-        description: "Family suggestions and reports",
-        adminOnly: true,
-      },
       {
         label: "Documents & AI",
         href: "/coming-soon/documents",
@@ -176,12 +169,18 @@ export function navItemsForViewer(group: NavGroupDef, isAdmin: boolean): NavItem
 }
 
 /**
- * Groups that should render a top-nav trigger for this viewer — i.e. those
- * with at least one reachable page. (Advisory collapses away for non-admins,
- * since its only built page is Admin.)
+ * Groups that should render a top-nav trigger for this viewer — i.e. those with
+ * at least one visible page, built *or* coming-soon. Advisory renders even
+ * though its only pages are `soon` (Documents & AI, Finances): the dropdown
+ * shows them as muted "Soon" rows, previewing the financial-stewardship zone.
+ * (Admin + Feedback are account utilities in the user menu, not a nav group.)
  */
 export function navGroupsForViewer(isAdmin: boolean): NavGroupDef[] {
-  return NAV_GROUPS.filter((group) => navItemsForViewer(group, isAdmin).length > 0);
+  return NAV_GROUPS.filter(
+    (group) =>
+      navItemsForViewer(group, isAdmin).length > 0 ||
+      soonItemsForViewer(group, isAdmin).length > 0
+  );
 }
 
 /**
@@ -193,19 +192,32 @@ export function doorItemsForViewer(group: NavGroupDef, isAdmin: boolean): NavIte
   return group.items.filter((item) => !item.adminOnly || isAdmin);
 }
 
+/**
+ * The `soon` (unbuilt) items of a group — rendered as muted "Soon" rows at the
+ * bottom of the top-nav dropdown / mobile accordion, mirroring the homepage
+ * door, so the mode's full shape is legible before every page exists. A group
+ * whose *only* items are `soon` (Advisory today) still gets a nav trigger via
+ * `navGroupsForViewer`, so its dropdown previews those coming-soon pages.
+ */
+export function soonItemsForViewer(group: NavGroupDef, isAdmin: boolean): NavItem[] {
+  return group.items.filter((item) => item.soon && (!item.adminOnly || isAdmin));
+}
+
 /** Active-state test shared by the nav and any "you are here" affordance. */
 export function isPathActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** True when the current path lives inside any of a group's reachable pages. */
+/** True when the current path lives inside any of a group's visible pages —
+ * built or coming-soon (so a `/coming-soon/*` stub highlights its own mode). */
 export function isGroupActive(
   pathname: string,
   group: NavGroupDef,
   isAdmin: boolean
 ): boolean {
-  return navItemsForViewer(group, isAdmin).some((item) =>
-    isPathActive(pathname, item.href)
-  );
+  return [
+    ...navItemsForViewer(group, isAdmin),
+    ...soonItemsForViewer(group, isAdmin),
+  ].some((item) => isPathActive(pathname, item.href));
 }

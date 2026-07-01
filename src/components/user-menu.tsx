@@ -29,12 +29,14 @@ export function UserMenu({
   email,
   avatarUrl,
   displayName,
+  isAdmin,
   isGuest,
 }: {
   userId: string;
   email: string | null | undefined;
   avatarUrl?: string | null;
   displayName?: string | null;
+  isAdmin?: boolean;
   isGuest?: boolean;
 }) {
   const label = displayName ?? email ?? "Account";
@@ -84,6 +86,20 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/help">How This Works</Link>
         </DropdownMenuItem>
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-foreground-subtle">
+              Administration
+            </DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <Link href="/admin">Admin</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/feedback">Feedback</Link>
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <form action={signOut}>
           <DropdownMenuItem asChild>
