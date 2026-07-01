@@ -97,7 +97,7 @@ src/app/(app)/timeline/
 
 Shipped as **PRD 11 slice 3** (2026-06-30, branch `claude/timeline-slice3`). See PRD 11's slice-3 Implementation section for the authoritative record; summary here.
 
-- **Status**: ✅ shipped (migration not yet applied to prod — see PRD 11).
+- **Status**: ✅ shipped (migration applied to prod + live-verified 2026-06-30 — see PRD 11).
 - **Key files**: `supabase/migrations/20260630000003_timeline.sql` (`events`/`event_people`/`event_photos`); `src/lib/timeline.ts` (pure grouping/decade/year helpers); `src/app/(app)/family/timeline/` (`page.tsx` load+assembly, `timeline-view.tsx` jump rail + filter, `event-create.tsx`, `actions.ts`, `events/[eventId]/` detail + edit + photo linker + delete).
 - **Decisions made during build**:
   - **Subjects point at `people`, not `profiles`** (`event_people`), mirroring slice-1 `photo_people`, so ancestors can be event subjects and the person/branch filter spans everyone.
