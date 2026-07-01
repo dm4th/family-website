@@ -1,7 +1,7 @@
 # 10 — Family Timeline & History
 
 **Phase**: 4 · **Depends on**: photo collection has reached critical mass
-**Status**: 🔵 absorbed into [11 — Family Legacy](11-family-legacy.md) (the timeline is Legacy slice 3). This file is retained for its detailed timeline schema and UX notes — build the timeline from here, but read PRD 11 first for the parent context and the `people`-table backbone that subjects now reference.
+**Status**: ✅ shipped as [11 — Family Legacy](11-family-legacy.md) slice 3 (2026-06-30). This file is retained for its detailed timeline schema and UX notes; the authoritative build record is PRD 11's slice-3 Implementation section. Subjects reference the `people` backbone (not `profiles`) via `event_people`.
 
 ## Onboarding (read first if you're picking this up cold)
 
@@ -95,9 +95,14 @@ src/app/(app)/timeline/
 
 ## Implementation
 
-_To be filled in by the contributor who ships this. Wait until the photo collection has critical mass — otherwise the timeline is mostly empty._
+Shipped as **PRD 11 slice 3** (2026-06-30, branch `claude/timeline-slice3`). See PRD 11's slice-3 Implementation section for the authoritative record; summary here.
 
-- **Status**: held pending photo-collection growth
-- **Key files**:
+- **Status**: ✅ shipped (migration not yet applied to prod — see PRD 11).
+- **Key files**: `supabase/migrations/20260630000003_timeline.sql` (`events`/`event_people`/`event_photos`); `src/lib/timeline.ts` (pure grouping/decade/year helpers); `src/app/(app)/family/timeline/` (`page.tsx` load+assembly, `timeline-view.tsx` jump rail + filter, `event-create.tsx`, `actions.ts`, `events/[eventId]/` detail + edit + photo linker + delete).
 - **Decisions made during build**:
-- **Open follow-ups**:
+  - **Subjects point at `people`, not `profiles`** (`event_people`), mirroring slice-1 `photo_people`, so ancestors can be event subjects and the person/branch filter spans everyone.
+  - **`event_year` is a stored canonical grouping year** (always set, derived from the exact date or a year parsed from the circa phrase) so grouping/sorting never parses fuzzy text.
+  - **Auto-assembly** from dated `is_archival` photos (by `taken_on`/`circa` year), interleaved with explicit events; photos curated onto an event are excluded from the standalone stream. Satisfies "pull photos from albums" without a heavyweight picker.
+  - **Traversability** (the slice-3 requirements-lock beyond PRD 10's scroll): a decade/year jump rail + client-side filter by family branch or a single person.
+  - Newest-year-first ordering per this PRD's verification recipe.
+- **Open follow-ups**: themed views (`/timeline/themes/[tag]` — `events.tags` column exists, no UI yet); date ranges (`event_date_end`) deferred; audio stories still deferred (slice 4 is text-first).

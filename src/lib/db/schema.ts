@@ -394,6 +394,103 @@ export type Relationship = typeof relationships.$inferSelect;
 export type NewRelationship = typeof relationships.$inferInsert;
 
 // ----------------------------------------------------------------------------
+// events — Family Legacy Timeline (PRD 11, slice 3). Narrative anchors on the
+// chronological spine. `event_year` is the canonical grouping year (always set);
+// `event_date`/`event_circa` carry exact/fuzzy dating like the archive.
+// ----------------------------------------------------------------------------
+export const events = pgTable(
+  "events",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    title: text("title").notNull(),
+    description: text("description"), // Markdown
+    eventDate: date("event_date"),
+    eventCirca: text("event_circa"),
+    eventYear: integer("event_year").notNull(),
+    location: text("location"),
+    tags: text("tags").array().notNull().default(sql`'{}'`),
+    createdBy: uuid("created_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("events_year_idx").on(table.eventYear, table.eventDate)],
+);
+
+export type Event = typeof events.$inferSelect;
+export type NewEvent = typeof events.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// event_people — event subjects (points at `people`, like photo_people).
+// ----------------------------------------------------------------------------
+export const eventPeople = pgTable(
+  "event_people",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    addedBy: uuid("added_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.personId] }),
+    index("event_people_person_idx").on(table.personId),
+  ],
+);
+
+export type EventPerson = typeof eventPeople.$inferSelect;
+export type NewEventPerson = typeof eventPeople.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// event_photos — curate archive photos onto an event (ordered M:N).
+// ----------------------------------------------------------------------------
+export const eventPhotos = pgTable(
+  "event_photos",
+  {
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    photoId: uuid("photo_id")
+      .notNull()
+      .references(() => photos.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    addedBy: uuid("added_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.eventId, table.photoId] }),
+    index("event_photos_event_idx").on(
+      table.eventId,
+      table.sortOrder,
+      table.addedAt,
+    ),
+    index("event_photos_photo_idx").on(table.photoId),
+  ],
+);
+
+export type EventPhoto = typeof eventPhotos.$inferSelect;
+export type NewEventPhoto = typeof eventPhotos.$inferInsert;
+
+// ----------------------------------------------------------------------------
 // revisions (immutable audit log)
 // ----------------------------------------------------------------------------
 export type RevisionEntity =
@@ -404,7 +501,8 @@ export type RevisionEntity =
   | "album"
   | "photo"
   | "person"
-  | "relationship";
+  | "relationship"
+  | "event";
 
 export const revisions = pgTable(
   "revisions",
