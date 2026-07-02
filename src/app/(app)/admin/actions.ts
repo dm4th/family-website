@@ -115,9 +115,22 @@ export async function setMemberActivation(
   deactivate: boolean,
 ) {
   const { supabase } = await requireAdmin();
+
+  // Deactivation is now DB-enforced (PRD 26): the is_active() restrictive RLS
+  // policies deny a deactivated user every read/write the moment this stamp
+  // lands. Rotating ics_token in the same update kills any leaked calendar-feed
+  // URL immediately (belt-and-suspenders with PRD 25, which also rejects a
+  // deactivated token in the feed function). Reactivation clears the stamp; the
+  // rotated token stays rotated (harmless — the old URL is simply dead).
+  const patch: { deactivated_at: string | null; ics_token?: string } = {
+    deactivated_at: deactivate ? new Date().toISOString() : null,
+  };
+  if (deactivate) {
+    patch.ics_token = randomUUID();
+  }
   const { error } = await supabase
     .from("profiles")
-    .update({ deactivated_at: deactivate ? new Date().toISOString() : null })
+    .update(patch)
     .eq("id", profileId);
   if (error) throw new Error(error.message);
 
@@ -127,6 +140,19 @@ export async function setMemberActivation(
   // here. (PRD 15: enforce deactivation separately and bluntly.)
   if (deactivate) {
     await supabase.from("property_guests").delete().eq("profile_id", profileId);
+
+    // Kill any live session at the source so a still-valid access token can't
+    // be refreshed. RLS already denies data to the current token; this deletes
+    // the user's auth.sessions rows so the logout is permanent within one token
+    // lifetime. Admin-guarded SECURITY DEFINER RPC (PRD 26) — best-effort: the
+    // RLS gate + middleware redirect are the real guarantee, so a transient
+    // failure here must not block the deactivation the admin already committed.
+    const { error: revokeError } = await supabase.rpc("revoke_user_sessions", {
+      p_user_id: profileId,
+    });
+    if (revokeError) {
+      console.error("revoke_user_sessions failed", revokeError);
+    }
   }
 
   revalidatePath("/admin");
