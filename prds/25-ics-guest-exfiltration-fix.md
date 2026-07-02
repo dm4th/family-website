@@ -1,7 +1,7 @@
 # 25 — Calendar-Feed Guest Exfiltration Fix
 
 **Phase**: 6 (security hardening) · **Depends on**: 06 (ICS feeds + `ics_token`), 15 (guest access)
-**Status**: 🟢 ready — **SECURITY, HIGH. Do first, before the link is shared wider.** Its own session/branch.
+**Status**: ✅ shipped — **SECURITY, HIGH.** Migration + ICS route hardening landed; prod apply + live re-verify pending (see Implementation).
 **Parallel-safe with**: 26, 27, 28, 29, 30, 31 (touches only one new migration + optionally the ICS route). No shared files.
 
 ---
@@ -57,6 +57,28 @@ A guest's token can never read anything the guest can't already see in-app. Deac
 supabase/migrations/20260702000001_ics_guest_scope.sql   # create or replace ics_bookings_for_token with role+deactivation checks
 src/app/api/ics/[scope]/route.ts                          # (optional) Cache-Control private for token feeds
 ```
+
+## Implementation
+
+**Shipped 2026-07-02** on branch `claude/jolly-burnell-d319e1`.
+
+### Key files
+- [supabase/migrations/20260702000001_ics_guest_scope.sql](../supabase/migrations/20260702000001_ics_guest_scope.sql) — `create or replace ics_bookings_for_token(uuid, text)` with role + deactivation checks.
+- [src/app/api/ics/[scope]/route.ts](../src/app/api/ics/[scope]/route.ts) — `Cache-Control` for token feeds tightened from `public, max-age=300` to `private, max-age=300`.
+
+### Decisions made during build
+- **Collapse-to-own for guests at every scope.** The function runs cookieless (anon role, no JWT), so `auth.uid()` is null and `is_guest()`/`is_property_guest()` are unusable inside it. Role + deactivation are read directly from the token-resolved profile row. A guest token returns only `b.requested_by = v_member` at **any** `p_scope` (`me`/`all`/`<slug>`). This is the PRD's "simplest correct option": it structurally guarantees no other booker's `guest_name`/`guest_email` can ever leak to a guest, and a guest's calendar app still resolves (to their own rows — none in v1, since guests can't book yet).
+- **Deactivation checked for all roles**, before the return query, raising `28000` (route maps → 401). This kills a departed member's leaked feed URL independently of PRD 26 (which additionally rotates the token — defense in depth).
+- **Member/admin branch is byte-identical** to the original where-clause (guarded by `v_role <> 'guest'`), so member/admin feeds return exactly the same rows as before.
+- **Cache-Control → private** for token feeds too: the token is the secret and lives in the URL, and feeds are now caller-scoped, so a shared/CDN cache keyed on the URL must never serve one caller's feed to another. Third-party pollers fetch per-subscriber anyway.
+
+### Verification
+- `npx tsc --noEmit` clean; `eslint` clean on the route.
+- Manual review against the reviewer sign-off checklist below — all boxes hold (guest branch cannot return a non-guest identity under any scope; deactivation covers all roles; member/admin unchanged; migration idempotent).
+
+### Open follow-ups
+- **Prod apply + live re-verify pending.** No local DB was available this session (Docker down, no `psql`), so the SQL was reviewed but not executed, and verification steps 1–6 (member unaffected / guest `all` blocked / guest property scope / deactivated token dead / junk token 401 / prod re-run) still need a live run. Apply the migration to prod and re-run steps 1–4 against real `+guest@` test accounts.
+- PRD 26 owns nulling/rotating `ics_token` in the deactivation path; once it lands, a deactivated token is dead by rotation *and* by this function's check.
 
 ## Reviewer sign-off (I check these)
 - [ ] Function still `security definer` + `set search_path = ''` + `revoke all` / explicit `grant to anon, authenticated`.

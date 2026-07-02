@@ -198,11 +198,12 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
-      // Token feeds are polled by third-party servers; allow brief shared
-      // caching. Cookie feeds stay private.
-      "Cache-Control": token
-        ? "public, max-age=300"
-        : "private, max-age=300",
+      // Both paths stay private. The token IS the secret and lives in the URL,
+      // and token feeds are now guest-scoped (PRD 25) — a shared/CDN cache
+      // keyed on the URL must never serve one caller's scoped feed to another.
+      // Third-party pollers (Google/Apple) fetch per-subscriber anyway, so
+      // brief per-client caching is all we need.
+      "Cache-Control": "private, max-age=300",
     },
   });
 }
