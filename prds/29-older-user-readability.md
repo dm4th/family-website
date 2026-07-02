@@ -1,7 +1,7 @@
 # 29 — Older-User Readability & Touch Targets
 
 **Phase**: 6 (usability) · **Depends on**: the shell/token system (globals.css, ui primitives)
-**Status**: 🔍 in review — built + live-verified 2026-07-02, PR open from `claude/cool-sammet-38972f`.
+**Status**: 🔍 in review — built + live-verified 2026-07-02, [PR #30](https://github.com/dm4th/family-website/pull/30).
 **Parallel-safe with**: 25, 26, 27, 28, 30, 31. It **owns** `globals.css` + `components/ui/button.tsx` + `components/ui/input.tsx`; other PRDs consume those primitives without editing them, so no conflict. (If 30/31 also nudge a primitive, coordinate — but they shouldn't need to.)
 
 ---
