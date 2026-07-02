@@ -1,7 +1,7 @@
 # 28 — Security Headers & CSP Baseline
 
 **Phase**: 6 (security hardening / financial-readiness foundation) · **Depends on**: nothing
-**Status**: 🚧 in progress (claimed 2026-07-02, branch `claude/focused-margulis-603f4c`) — **SECURITY, MEDIUM** (foundation for the 07/08 financial bar). Its own session/branch.
+**Status**: 🚧 built, in review — [PR #28](https://github.com/dm4th/family-website/pull/28) (2026-07-02). CSP is **report-only**; enforce-flip is the follow-up after a clean window. — **SECURITY, MEDIUM** (foundation for the 07/08 financial bar).
 **Parallel-safe with**: everything (touches only `next.config.ts` + possibly a headers config). No shared app files.
 
 ---
