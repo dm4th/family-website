@@ -51,7 +51,7 @@ A thorough site review (security + older-user usability + flexibility) ran 2026-
 |---|---|---|---|---|
 | [25](25-ics-guest-exfiltration-fix.md) | Calendar-feed guest exfiltration fix | ✅ shipped + applied to prod (Security HIGH) | all | 1 migration (+ ICS route) |
 | [26](26-member-deactivation-lockout.md) | Member deactivation lockout | ✅ shipped + applied to prod (2026-07-02) | 25, 27, 28, 29, 31 (light: `admin/actions.ts` w/ 30) | `is_active()` + **RESTRICTIVE `is_active` policy on all 21 tables + photos bucket** (the RLS guarantee) + admin-guarded `revoke_user_sessions()` RPC (kills live sessions at the source, chose this over a service-role key) + `ics_token` rotation on deactivate + middleware `/deactivated` redirect/page + auth-callback re-login block. |
-| [27](27-direct-write-hardening.md) | Direct-write hardening (property cols + peak approval) | 🟠 Security MEDIUM | all | migrations only |
+| [27](27-direct-write-hardening.md) | Direct-write hardening (property cols + peak approval) | 🚧 in progress (2026-07-02) · Security MEDIUM | all | migrations only |
 | [28](28-security-headers-baseline.md) | Security headers & CSP baseline | 🟠 Security MEDIUM (financial-readiness) | all | `next.config.ts` only |
 | [29](29-older-user-readability.md) | Older-user readability & touch targets | 🟡 Usability (highest UX leverage) | all | `globals.css` + `ui/button`,`ui/input` |
 | [30](30-safe-announced-actions.md) | Safe & announced actions (confirms, aria-live, silent-failure) | 🟡 Usability / a11y | all (coordinate w/ 31 on `admin/*`) | client interaction components + 2 new shared |
