@@ -1,7 +1,7 @@
 # 27 — Direct-Write Hardening (Property Columns + Peak Approval)
 
 **Phase**: 6 (security hardening) · **Depends on**: 03 (properties + `canManageProperty`), 06 (bookings + `enforce_booking_transitions`)
-**Status**: 🚧 in progress (claimed 2026-07-02, branch `claude/stoic-torvalds-03624b`) — **SECURITY, MEDIUM.** Its own session/branch.
+**Status**: 🔵 in review (PR [#31](https://github.com/dm4th/family-website/pull/31), 2026-07-02) — **SECURITY, MEDIUM.** Its own session/branch.
 **Parallel-safe with**: 25, 26, 28, 29, 30, 31 (migration-only; no shared app files).
 
 ---
