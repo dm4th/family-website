@@ -38,6 +38,10 @@ export async function updateSession(request: NextRequest) {
     // Where an uninvited sign-in lands (PRD 24). Must be reachable without a
     // session, since the rejected user has none.
     pathname.startsWith("/no-invite") ||
+    // Where a deactivated (but still-authenticated) user lands (PRD 26). Must
+    // stay reachable while a session exists, or the redirect below would loop;
+    // it also hosts the sign-out form (a server-action POST to this path).
+    pathname.startsWith("/deactivated") ||
     pathname.startsWith("/auth") ||
     // ICS calendar feeds authorize via a per-member `?token=`, not the session
     // cookie, so external calendar pollers (Google/Apple) can reach them. The
@@ -51,6 +55,22 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
+  }
+
+  // Deactivation gate (PRD 26, defense layer 2 — UX + early block). RLS is the
+  // real guarantee (the is_active() restrictive policies deny all data); this
+  // just keeps a deactivated user from ever seeing an app shell and lands them
+  // on the calm /deactivated page. Only redirect on an explicit `false` so a
+  // transient RPC error never locks out an active member. Runs before the guest
+  // check so a deactivated guest is caught here, not bounced to /properties.
+  if (user && !isPublicPath) {
+    const { data: isActive } = await supabase.rpc("is_active");
+    if (isActive === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/deactivated";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   // Guest route gating (PRD 15, defense layer 2 — UX + early block). RLS is the

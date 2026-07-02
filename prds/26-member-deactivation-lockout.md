@@ -1,7 +1,7 @@
 # 26 — Member Deactivation Lockout
 
 **Phase**: 6 (security hardening) · **Depends on**: 01 (auth/session), 04 (admin deactivate), 15 (guest deactivation handling)
-**Status**: 🟢 ready — **SECURITY, HIGH.** Its own session/branch.
+**Status**: ✅ shipped (2026-07-02) — **SECURITY, HIGH.** Built on its own branch; **migration not yet applied to prod** (see Implementation). Its own session/branch.
 **Parallel-safe with**: 25, 27, 28, 29, 31. **Coordinate with 25** (both may touch the deactivation path / `ics_token` rotation) and lightly with 30 (both may touch `admin/actions.ts`) — different functions, easy to merge.
 
 ---
@@ -71,3 +71,28 @@ src/lib/supabase/admin.ts                                    # service-role clie
 - [ ] `is_active()` is `security definer`, `search_path=''`, `revoke all` + explicit grant.
 - [ ] No policy accidentally locks out the admin doing the deactivating.
 - [ ] Live session actually dies (not just future logins).
+
+---
+
+## Implementation (shipped 2026-07-02)
+
+**Branch**: `claude/sharp-roentgen-7028dd`. tsc + eslint + `next build` all green. Migration **built but not yet applied to prod** — apply, then run the live verification recipe (steps 2/3/6 need a real deactivated session).
+
+### Key files
+- **`supabase/migrations/20260702000002_deactivation_lockout.sql`** (new) — the whole DB guarantee:
+  - `public.is_active()` — SECURITY DEFINER, `stable`, `search_path=''`, `revoke all` + `grant execute to authenticated`. True iff the caller has a profile with `deactivated_at is null`. Mirrors the `is_admin`/`is_guest` posture.
+  - A **`RESTRICTIVE` `is_active()` policy on all 21 authenticated tables** (`profiles, properties, property_contacts, photos, photo_subjects, photo_people, albums, album_photos, revisions, invitations, bookings, people, relationships, events, event_people, event_photos, stories, story_people, feedback, property_admins, property_guests`) **+ the `photos` storage bucket**. `for all` covers select/insert/update/delete in one policy; restrictive = AND-combined with the existing permissive policies, so a deactivated user fails every command everywhere.
+  - `public.revoke_user_sessions(uuid)` — admin-guarded SECURITY DEFINER RPC that `delete`s the target's `auth.sessions` so a live session can't refresh into a new access token.
+- **`src/app/(app)/admin/actions.ts`** — `setMemberActivation` now, on deactivate: rotates `ics_token` (kills leaked feed URLs) and calls `revoke_user_sessions` (best-effort — RLS is the guarantee). Guest-grant cleanup unchanged.
+- **`src/lib/supabase/middleware.ts`** — an `is_active` RPC check in `updateSession` (before the guest check) redirects a deactivated user to `/deactivated`; that path is added to the public allowlist. Only redirects on an explicit `false` (transient RPC error can't strand an active member).
+- **`src/app/(auth)/deactivated/page.tsx`** (new) — calm BriefingPanel "your access is paused" page with a sign-out form (server action posting to the allowlisted path).
+- **`src/app/auth/callback/route.ts`** — post-exchange `is_active` check; a deactivated re-login is signed back out and sent to `/deactivated`.
+
+### Decisions / deviations
+- **RESTRICTIVE policy over rewriting ~40 permissive policies.** One auditable global gate per table (`grep "active only"`), and it avoids editing the intricate guest-aware policies that sibling PRDs 25/27/30 also touch — near-zero merge risk.
+- **DB-level session kill instead of the PRD's proposed service-role key.** The whole codebase already does privileged writes through admin-guarded SECURITY DEFINER functions; an admin-guarded `revoke_user_sessions()` RPC is reliable, testable, and — crucially for a *security* PRD — avoids adding an all-RLS-bypassing secret to the Next.js runtime for a single operation that doesn't need to bypass RLS. **No `SUPABASE_SECRET_KEY` / `src/lib/supabase/admin.ts` was introduced.** If a future op genuinely must bypass RLS from app code, add the service-role client then. (Reviewer: easy to swap in the service-key path if you'd rather establish that precedent now — flag it.)
+- **Enforcement timing.** RLS denies data to the still-valid current access token *immediately*; middleware redirects on the next request; `revoke_user_sessions` prevents refresh — so a deactivated user is hard-logged-out within one access-token lifetime (≤1h), with zero data access in the interim.
+
+### Follow-ups
+- Apply the migration to prod and run the live verification recipe (member-unaffected, deactivate-mid-session via direct PostgREST, re-login blocked, admin re-activate, ICS 401 once **PRD 25** lands).
+- Coordinates with **PRD 25** (feed-function deactivation check) — independent branches; both should be prod-applied together for the ICS step to fully verify.
