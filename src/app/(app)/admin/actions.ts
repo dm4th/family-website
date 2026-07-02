@@ -28,6 +28,26 @@ async function requireAdmin(): Promise<AdminContext> {
   return { supabase, userId: user.id };
 }
 
+// Any signed-in member (not a guest). Used by the invite actions, which PRD 24
+// opens up from admin-only to all members. RLS on `invitations` is the real
+// authority (insert-own, no admin-role unless is_admin); this is the app-layer
+// mirror so a guest never even reaches the write.
+async function requireMember(): Promise<AdminContext> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    throw new Error("Not signed in");
+  }
+  const { data: isGuest } = await supabase.rpc("is_guest");
+  if (isGuest === true) {
+    throw new Error("Members only");
+  }
+  return { supabase, userId: user.id };
+}
+
 function readText(formData: FormData, key: string): string | null {
   const v = formData.get(key);
   if (typeof v !== "string") return null;
@@ -128,7 +148,7 @@ export async function createInvitation(
   formData: FormData,
 ): Promise<InvitationActionState> {
   try {
-    const { supabase, userId } = await requireAdmin();
+    const { supabase, userId } = await requireMember();
     const email = readText(formData, "email")?.toLowerCase() ?? null;
     const role = readText(formData, "role");
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -136,6 +156,17 @@ export async function createInvitation(
     }
     if (!role || !["admin", "member", "guest"].includes(role)) {
       return { status: "error", message: "Pick a role." };
+    }
+
+    // Only an admin may invite a new admin (mirrors the invitations RLS check).
+    if (role === "admin") {
+      const { data: adminCheck } = await supabase.rpc("is_admin");
+      if (adminCheck !== true) {
+        return {
+          status: "error",
+          message: "Only an admin can invite a new admin.",
+        };
+      }
     }
 
     // Guest invites must carry the property to grant on accept (PRD 15). The
@@ -173,6 +204,7 @@ export async function createInvitation(
       return { status: "error", message: error.message };
     }
     revalidatePath("/admin");
+    revalidatePath("/invite");
     return { status: "created", email };
   } catch (err) {
     return {
@@ -183,13 +215,15 @@ export async function createInvitation(
 }
 
 export async function revokeInvitation(invitationId: string) {
-  const { supabase } = await requireAdmin();
+  // RLS restricts the UPDATE to the inviter or an admin.
+  const { supabase } = await requireMember();
   const { error } = await supabase
     .from("invitations")
     .update({ status: "revoked" })
     .eq("id", invitationId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin");
+  revalidatePath("/invite");
 }
 
 /**
@@ -199,7 +233,8 @@ export async function revokeInvitation(invitationId: string) {
  * doesn't already have the family-portal URL in their head.
  */
 export async function sendInviteMagicLink(invitationId: string) {
-  const { supabase } = await requireAdmin();
+  // RLS on invitations SELECT restricts a member to their own invites.
+  const { supabase } = await requireMember();
   const { data: invitation, error } = await supabase
     .from("invitations")
     .select("email, status")
@@ -223,6 +258,7 @@ export async function sendInviteMagicLink(invitationId: string) {
   if (otpErr) throw new Error(otpErr.message);
 
   revalidatePath("/admin");
+  revalidatePath("/invite");
 }
 
 // ============================================================================

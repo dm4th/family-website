@@ -82,6 +82,11 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link href="/profile/edit">Edit Profile</Link>
         </DropdownMenuItem>
+        {!isGuest && (
+          <DropdownMenuItem asChild>
+            <Link href="/invite">Invite Someone</Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/help">How This Works</Link>

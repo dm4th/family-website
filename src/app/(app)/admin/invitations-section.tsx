@@ -31,9 +31,15 @@ export type InvitePropertyOption = { id: string; name: string };
 export function InvitationsSection({
   invitations,
   properties,
+  isAdmin = false,
+  listTitle = "All invitations",
 }: {
   invitations: InvitationRow[];
   properties: InvitePropertyOption[];
+  /** Admins may also invite a new admin, and (on /admin) see everyone's invites. */
+  isAdmin?: boolean;
+  /** Heading over the list. "All invitations" on /admin; "Invitations you've sent" on /invite. */
+  listTitle?: string;
 }) {
   const [state, formAction, isPending] = useActionState(
     createInvitation,
@@ -81,7 +87,7 @@ export function InvitationsSection({
               className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
             >
               <option value="member">member</option>
-              <option value="admin">admin</option>
+              {isAdmin && <option value="admin">admin</option>}
               <option value="guest">guest</option>
             </select>
           </div>
@@ -137,7 +143,7 @@ export function InvitationsSection({
       </form>
 
       <div className="flex flex-col gap-3">
-        <Eyebrow>All invitations</Eyebrow>
+        <Eyebrow>{listTitle}</Eyebrow>
         {invitations.length === 0 ? (
           <p className="text-sm italic text-foreground-subtle">
             No invitations yet.

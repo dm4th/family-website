@@ -102,6 +102,7 @@ export default async function AdminPage() {
             properties={(properties ?? [])
               .filter((p) => p.status !== "inactive")
               .map((p) => ({ id: p.id, name: p.name }))}
+            isAdmin
           />
         </Section>
       </BriefingPanel>

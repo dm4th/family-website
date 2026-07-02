@@ -36,14 +36,29 @@ export async function sendMagicLink(
     email,
     options: {
       emailRedirectTo: `${origin}/auth/callback`,
-      // Allowlist enforcement is handled at the Supabase project level
-      // (Auth → Providers → Email → Restrict to allowed emails) and via
-      // the invitations table check in a later chunk.
+      // Invite-only is enforced by the handle_new_user() trigger (PRD 24): a
+      // new email with no pending invitation is rejected at account creation,
+      // which for a magic link happens right here at request time.
       shouldCreateUser: true,
     },
   });
 
   if (error) {
+    // An uninvited email surfaces as GoTrue's generic "Database error saving
+    // new user" (the trigger raised). Show the family-friendly reason instead
+    // of the raw error. Genuine failures fall through to their real message.
+    const msg = error.message?.toLowerCase() ?? "";
+    const notInvited =
+      error.status === 500 ||
+      msg.includes("saving new user") ||
+      msg.includes("database error");
+    if (notInvited) {
+      return {
+        status: "error",
+        message:
+          "This email address has not been invited yet. Ask a family member to send an invitation to this address, then try again.",
+      };
+    }
     return { status: "error", message: error.message };
   }
 
