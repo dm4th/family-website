@@ -51,7 +51,7 @@ export function RemovePhotoButton({
 
   if (!canRemove) return null;
 
-  async function confirm() {
+  async function handleConfirm() {
     const result = await deletePhoto(photoId);
     if (!result.ok) {
       toast.error("Couldn't remove photo", { description: result.message });
@@ -98,7 +98,7 @@ export function RemovePhotoButton({
             disabled={pending}
             onClick={(e) => {
               e.preventDefault();
-              void confirm();
+              void handleConfirm();
             }}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >

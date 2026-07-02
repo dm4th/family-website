@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmButton } from "@/components/confirm-button";
+import { FormStatus } from "@/components/form-status";
 import { generationShort } from "@/lib/generations";
 import {
   changeMemberRole,
@@ -59,7 +61,7 @@ function MemberRowEditor({
   const router = useRouter();
   const roleAction = changeMemberRole.bind(null, row.id);
   const [state, formAction, isPending] = useActionState(roleAction, initial);
-  const [activatePending, startActivate] = useTransition();
+  const name = row.full_name ?? row.email;
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -104,49 +106,37 @@ function MemberRowEditor({
         </Button>
       </form>
 
-      <Button
-        type="button"
-        size="sm"
-        variant={row.deactivated_at ? "outline" : "ghost"}
-        disabled={isSelf || activatePending}
-        className={
-          row.deactivated_at
-            ? ""
-            : "text-destructive hover:text-destructive"
+      <ConfirmButton
+        triggerVariant={row.deactivated_at ? "outline" : "ghost"}
+        triggerSize="sm"
+        triggerClassName={
+          row.deactivated_at ? undefined : "text-destructive hover:text-destructive"
         }
-        onClick={() => {
-          if (
-            !confirm(
-              row.deactivated_at
-                ? `Reactivate ${row.full_name ?? row.email}?`
-                : `Deactivate ${row.full_name ?? row.email}? They won't appear in the directory until reactivated.`,
-            )
-          ) {
-            return;
-          }
-          startActivate(async () => {
-            try {
-              await setMemberActivation(row.id, !row.deactivated_at);
-              router.refresh();
-            } catch (err) {
-              console.error(err);
-              alert(
-                err instanceof Error ? err.message : "Could not update.",
-              );
-            }
-          });
+        disabled={isSelf}
+        title={row.deactivated_at ? "Reactivate this member?" : "Deactivate this member?"}
+        description={
+          row.deactivated_at
+            ? `${name} will appear in the directory again and regain access to the site.`
+            : `${name} won't appear in the directory and will lose access to the site until reactivated.`
+        }
+        confirmLabel={row.deactivated_at ? "Reactivate" : "Deactivate"}
+        pendingLabel={row.deactivated_at ? "Reactivating…" : "Deactivating…"}
+        destructive={!row.deactivated_at}
+        successMessage={
+          row.deactivated_at ? "Member reactivated." : "Member deactivated."
+        }
+        errorTitle="Couldn't update this member"
+        onConfirm={async () => {
+          await setMemberActivation(row.id, !row.deactivated_at);
+          router.refresh();
         }}
       >
-        {activatePending
-          ? "…"
-          : row.deactivated_at
-            ? "Reactivate"
-            : "Deactivate"}
-      </Button>
+        {row.deactivated_at ? "Reactivate" : "Deactivate"}
+      </ConfirmButton>
 
-      {state.status === "error" && (
-        <p className="basis-full text-xs text-destructive">{state.message}</p>
-      )}
+      <FormStatus tone="error" className="basis-full text-xs">
+        {state.status === "error" ? state.message : null}
+      </FormStatus>
     </div>
   );
 }

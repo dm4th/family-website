@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ConfirmButton } from "@/components/confirm-button";
+import { FormStatus } from "@/components/form-status";
 import {
   addPropertyContact,
   deletePropertyContact,
@@ -78,9 +80,9 @@ function AddContactForm({
     >
       <ContactFieldsGrid disabled={isPending} />
       <div className="flex items-center justify-end gap-3">
-        {state.status === "error" && (
-          <p className="text-sm text-destructive">{state.message}</p>
-        )}
+        <FormStatus tone="error">
+          {state.status === "error" ? state.message : null}
+        </FormStatus>
         <Button type="submit" size="sm" disabled={isPending}>
           {isPending ? "Adding…" : "Add Contact"}
         </Button>
@@ -103,46 +105,43 @@ function ContactRowForm({
   );
   const [state, formAction, isPending] = useActionState(updateAction, initial);
   const router = useRouter();
-  const [isDeleting, startDelete] = useTransition();
-
-  function onDelete() {
-    if (!confirm(`Delete contact "${contact.label}"?`)) return;
-    startDelete(async () => {
-      try {
-        await deletePropertyContact(contact.id, propertySlug);
-        router.refresh();
-      } catch (err) {
-        console.error(err);
-      }
-    });
-  }
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
       <ContactFieldsGrid
         defaultValues={contact}
-        disabled={isPending || isDeleting}
+        disabled={isPending}
         idPrefix={contact.id}
       />
       <div className="flex items-center justify-between gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onDelete}
-          disabled={isPending || isDeleting}
-          className="text-destructive hover:text-destructive"
+        <ConfirmButton
+          triggerVariant="ghost"
+          triggerSize="sm"
+          triggerClassName="text-destructive hover:text-destructive"
+          disabled={isPending}
+          title="Delete this contact?"
+          description={`"${contact.label}" will be removed from the property. This can't be undone.`}
+          confirmLabel="Delete Contact"
+          pendingLabel="Deleting…"
+          destructive
+          successMessage="Contact deleted."
+          errorTitle="Couldn't delete the contact"
+          onConfirm={async () => {
+            await deletePropertyContact(contact.id, propertySlug);
+            router.refresh();
+          }}
         >
-          {isDeleting ? "Deleting…" : "Delete"}
-        </Button>
+          Delete
+        </ConfirmButton>
         <div className="flex items-center gap-3">
-          {state.status === "error" && (
-            <p className="text-sm text-destructive">{state.message}</p>
-          )}
-          {state.status === "saved" && (
-            <p className="text-sm text-accent-operations">Saved.</p>
-          )}
-          <Button type="submit" size="sm" disabled={isPending || isDeleting}>
+          <FormStatus tone={state.status === "error" ? "error" : "success"}>
+            {state.status === "error"
+              ? state.message
+              : state.status === "saved"
+                ? "Saved."
+                : null}
+          </FormStatus>
+          <Button type="submit" size="sm" disabled={isPending}>
             {isPending ? "Saving…" : "Save"}
           </Button>
         </div>

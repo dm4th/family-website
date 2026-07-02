@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FormStatus } from "@/components/form-status";
 import {
   Sheet,
   SheetClose,
@@ -78,9 +79,9 @@ export function CreateFlow({
             {children}
           </div>
           <SheetFooter className="flex-row items-center justify-end gap-2 p-0">
-            {errorMessage && (
-              <p className="mr-auto text-sm text-destructive">{errorMessage}</p>
-            )}
+            <FormStatus tone="error" className="mr-auto">
+              {errorMessage}
+            </FormStatus>
             <SheetClose asChild>
               <Button type="button" variant="ghost" size="sm" disabled={isPending}>
                 Cancel

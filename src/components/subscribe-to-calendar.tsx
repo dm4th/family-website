@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/confirm-button";
 import { resetIcsToken } from "@/app/(app)/profile/actions";
 import type { IcsFeedLinks } from "@/lib/ics";
 
@@ -25,8 +26,6 @@ export function SubscribeToCalendar({
 }) {
   const router = useRouter();
   const [copied, setCopied] = React.useState(false);
-  const [resetting, setResetting] = React.useState(false);
-  const [confirmingReset, setConfirmingReset] = React.useState(false);
 
   async function copy() {
     try {
@@ -35,17 +34,6 @@ export function SubscribeToCalendar({
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard can be blocked; the input is selectable as a fallback.
-    }
-  }
-
-  async function doReset() {
-    setResetting(true);
-    try {
-      await resetIcsToken();
-      setConfirmingReset(false);
-      router.refresh();
-    } finally {
-      setResetting(false);
     }
   }
 
@@ -88,39 +76,24 @@ export function SubscribeToCalendar({
       </div>
 
       <div className="border-t border-border pt-3">
-        {confirmingReset ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-foreground-muted">
-              Reset the link? Existing subscriptions will stop updating.
-            </span>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={doReset}
-              disabled={resetting}
-              type="button"
-            >
-              {resetting ? "Resetting…" : "Reset Link"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setConfirmingReset(false)}
-              disabled={resetting}
-              type="button"
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmingReset(true)}
-            className="text-xs text-foreground-subtle underline-offset-4 hover:text-foreground hover:underline"
-          >
-            Reset My Calendar Link
-          </button>
-        )}
+        <ConfirmButton
+          triggerVariant="ghost"
+          triggerSize="sm"
+          triggerClassName="h-auto px-0 py-0 text-xs text-foreground-subtle underline-offset-4 hover:bg-transparent hover:text-foreground hover:underline"
+          title="Reset your calendar link?"
+          description="Existing subscriptions will stop updating. You'll need to re-add the new link in each calendar app."
+          confirmLabel="Reset Link"
+          pendingLabel="Resetting…"
+          destructive
+          successMessage="Your calendar link was reset."
+          errorTitle="Couldn't reset your calendar link"
+          onConfirm={async () => {
+            await resetIcsToken();
+            router.refresh();
+          }}
+        >
+          Reset My Calendar Link
+        </ConfirmButton>
       </div>
     </div>
   );

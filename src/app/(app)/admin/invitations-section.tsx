@@ -2,11 +2,14 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmButton } from "@/components/confirm-button";
+import { FormStatus } from "@/components/form-status";
 import { Eyebrow } from "@/components/shell";
 import {
   createInvitation,
@@ -130,16 +133,13 @@ export function InvitationsSection({
             )}
           </div>
         )}
-        {state.status === "created" && (
-          <p className="text-sm text-accent-operations">
-            Invitation created for {state.email}. When they sign in (Google or
-            magic link) with that email, they&apos;ll automatically get the
-            assigned role.
-          </p>
-        )}
-        {state.status === "error" && (
-          <p className="text-sm text-destructive">{state.message}</p>
-        )}
+        <FormStatus tone={state.status === "error" ? "error" : "success"}>
+          {state.status === "created"
+            ? `Invitation created for ${state.email}. When they sign in (Google or magic link) with that email, they'll automatically get the assigned role.`
+            : state.status === "error"
+              ? state.message
+              : null}
+        </FormStatus>
       </form>
 
       <div className="flex flex-col gap-3">
@@ -164,7 +164,6 @@ export function InvitationsSection({
 
 function InvitationRowItem({ invitation }: { invitation: InvitationRow }) {
   const router = useRouter();
-  const [revokePending, startRevoke] = useTransition();
   const [sendPending, startSend] = useTransition();
 
   const expires = invitation.expires_at
@@ -200,36 +199,36 @@ function InvitationRowItem({ invitation }: { invitation: InvitationRow }) {
                 try {
                   await sendInviteMagicLink(invitation.id);
                   router.refresh();
-                  alert(`Magic link sent to ${invitation.email}.`);
+                  toast.success(`Magic link sent to ${invitation.email}.`);
                 } catch (err) {
-                  alert(err instanceof Error ? err.message : "Failed");
+                  toast.error("Couldn't send the magic link", {
+                    description:
+                      err instanceof Error ? err.message : undefined,
+                  });
                 }
               });
             }}
           >
             {sendPending ? "Sending…" : "Email Magic Link"}
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={revokePending}
-            className="text-destructive hover:text-destructive"
-            onClick={() => {
-              if (!confirm(`Revoke invitation for ${invitation.email}?`))
-                return;
-              startRevoke(async () => {
-                try {
-                  await revokeInvitation(invitation.id);
-                  router.refresh();
-                } catch (err) {
-                  alert(err instanceof Error ? err.message : "Failed");
-                }
-              });
+          <ConfirmButton
+            triggerVariant="ghost"
+            triggerSize="sm"
+            triggerClassName="text-destructive hover:text-destructive"
+            title="Revoke this invitation?"
+            description={`${invitation.email} will no longer be able to use it to join.`}
+            confirmLabel="Revoke Invitation"
+            pendingLabel="Revoking…"
+            destructive
+            successMessage="Invitation revoked."
+            errorTitle="Couldn't revoke the invitation"
+            onConfirm={async () => {
+              await revokeInvitation(invitation.id);
+              router.refresh();
             }}
           >
-            {revokePending ? "Revoking…" : "Revoke"}
-          </Button>
+            Revoke
+          </ConfirmButton>
         </>
       )}
     </div>

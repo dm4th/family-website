@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FormStatus } from "@/components/form-status";
 import { Eyebrow } from "@/components/shell";
 
 import {
@@ -290,16 +291,15 @@ export function BookingRequestForm({
           </p>
         )}
 
-        {state.status === "error" && (
-          <p className="text-sm text-destructive">{state.message}</p>
-        )}
-        {state.status === "saved" && (
-          <p className="text-sm text-accent-operations">
-            {state.bookingStatus === "approved"
-              ? "Approved. These dates are yours."
-              : "Submitted. A property admin will review."}
-          </p>
-        )}
+        <FormStatus tone={state.status === "error" ? "error" : "success"}>
+          {state.status === "error"
+            ? state.message
+            : state.status === "saved"
+              ? state.bookingStatus === "approved"
+                ? "Approved. These dates are yours."
+                : "Submitted. A property admin will review."
+              : null}
+        </FormStatus>
 
         <div className="flex justify-end">
           <Button type="submit" disabled={isPending || !range}>

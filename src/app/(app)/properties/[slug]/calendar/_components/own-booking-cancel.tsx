@@ -1,23 +1,37 @@
 "use client";
 
-import { useActionState } from "react";
+import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
-import { cancelBooking, type BookingActionState } from "../actions";
-
-const initial: BookingActionState = { status: "idle" };
+import { ConfirmButton } from "@/components/confirm-button";
+import { cancelBooking } from "../actions";
 
 export function OwnBookingCancel({ bookingId }: { bookingId: string }) {
-  const action = cancelBooking.bind(null, bookingId);
-  const [state, formAction, isPending] = useActionState(action, initial);
+  const router = useRouter();
   return (
-    <form action={formAction} className="flex flex-col items-end gap-1">
-      <Button type="submit" size="sm" variant="ghost" disabled={isPending}>
-        {isPending ? "…" : "Cancel"}
-      </Button>
-      {state.status === "error" && (
-        <p className="text-xs text-destructive">{state.message}</p>
-      )}
-    </form>
+    <div className="flex flex-col items-end">
+      <ConfirmButton
+        triggerVariant="ghost"
+        triggerSize="sm"
+        title="Cancel this stay?"
+        description="This releases the dates so others can request them. You can book them again later if plans change."
+        confirmLabel="Cancel Stay"
+        cancelLabel="Keep Stay"
+        pendingLabel="Cancelling…"
+        destructive
+        successMessage="Your stay was cancelled."
+        errorTitle="Couldn't cancel this stay"
+        onConfirm={async () => {
+          const result = await cancelBooking(
+            bookingId,
+            { status: "idle" },
+            new FormData(),
+          );
+          if (result.status === "error") throw new Error(result.message);
+          router.refresh();
+        }}
+      >
+        Cancel
+      </ConfirmButton>
+    </div>
   );
 }

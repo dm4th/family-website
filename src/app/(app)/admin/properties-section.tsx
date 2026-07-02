@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useActionState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormStatus } from "@/components/form-status";
 import { Eyebrow } from "@/components/shell";
 import {
   createProperty,
@@ -87,21 +89,22 @@ export function PropertiesSection({
           </FieldCol>
         </div>
         <div className="flex items-center justify-end gap-3">
-          {state.status === "created" && (
-            <p className="text-sm text-accent-operations">
-              Created.{" "}
-              <Link
-                href={`/properties/${state.slug}/edit`}
-                className="underline-offset-4 hover:underline"
-              >
-                Edit it
-              </Link>
-              .
-            </p>
-          )}
-          {state.status === "error" && (
-            <p className="text-sm text-destructive">{state.message}</p>
-          )}
+          <FormStatus tone={state.status === "error" ? "error" : "success"}>
+            {state.status === "created" ? (
+              <>
+                Created.{" "}
+                <Link
+                  href={`/properties/${state.slug}/edit`}
+                  className="underline-offset-4 hover:underline"
+                >
+                  Edit it
+                </Link>
+                .
+              </>
+            ) : state.status === "error" ? (
+              state.message
+            ) : null}
+          </FormStatus>
           <Button type="submit" disabled={isPending}>
             {isPending ? "Creating…" : "Create Property"}
           </Button>
@@ -138,7 +141,9 @@ function PropertyRowItem({ property }: { property: AdminPropertyRow }) {
         await setPropertyStatus(property.id, newStatus);
         router.refresh();
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Failed");
+        toast.error("Couldn't update the property status", {
+          description: err instanceof Error ? err.message : undefined,
+        });
       }
     });
   }

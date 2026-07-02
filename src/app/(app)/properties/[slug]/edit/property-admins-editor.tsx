@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { ConfirmButton } from "@/components/confirm-button";
+import { FormStatus } from "@/components/form-status";
 import { Eyebrow } from "@/components/shell";
 import {
   addPropertyAdmin,
@@ -82,7 +84,6 @@ function AdminRow({
   canManage: boolean;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
 
   return (
     <li className="flex items-center justify-between gap-3 py-3">
@@ -95,35 +96,24 @@ function AdminRow({
         </div>
       </div>
       {canManage && (
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={isPending}
-          className="text-destructive hover:text-destructive"
-          onClick={() => {
-            if (
-              !confirm(
-                `Remove ${admin.fullName ?? admin.email} as a property admin?`,
-              )
-            )
-              return;
-            startTransition(async () => {
-              try {
-                await removePropertyAdmin(
-                  propertyId,
-                  propertySlug,
-                  admin.profileId,
-                );
-                router.refresh();
-              } catch (err) {
-                alert(err instanceof Error ? err.message : "Failed");
-              }
-            });
+        <ConfirmButton
+          triggerVariant="ghost"
+          triggerSize="sm"
+          triggerClassName="text-destructive hover:text-destructive"
+          title="Remove this property admin?"
+          description={`${admin.fullName ?? admin.email} will no longer be able to manage this property.`}
+          confirmLabel="Remove Admin"
+          pendingLabel="Removing…"
+          destructive
+          successMessage="Property admin removed."
+          errorTitle="Couldn't remove the property admin"
+          onConfirm={async () => {
+            await removePropertyAdmin(propertyId, propertySlug, admin.profileId);
+            router.refresh();
           }}
         >
-          {isPending ? "Removing…" : "Remove"}
-        </Button>
+          Remove
+        </ConfirmButton>
       )}
     </li>
   );
@@ -178,9 +168,9 @@ function AddAdminForm({
         </select>
       </div>
       <div className="flex items-center justify-end gap-3">
-        {state.status === "error" && (
-          <p className="text-sm text-destructive">{state.message}</p>
-        )}
+        <FormStatus tone="error">
+          {state.status === "error" ? state.message : null}
+        </FormStatus>
         <Button type="submit" size="sm" disabled={isPending}>
           {isPending ? "Adding…" : "Add"}
         </Button>

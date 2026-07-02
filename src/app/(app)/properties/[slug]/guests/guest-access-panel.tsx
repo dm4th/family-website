@@ -1,11 +1,13 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ConfirmButton } from "@/components/confirm-button";
+import { FormStatus } from "@/components/form-status";
 import { Eyebrow } from "@/components/shell";
 import {
   grantGuestAccess,
@@ -81,7 +83,6 @@ function GuestRow({
   propertySlug: string;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
 
   return (
     <li className="flex items-center justify-between gap-3 py-3">
@@ -93,31 +94,24 @@ function GuestRow({
           {guest.email}
         </div>
       </div>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        disabled={isPending}
-        className="text-destructive hover:text-destructive"
-        onClick={() => {
-          if (
-            !confirm(
-              `Revoke ${guest.fullName ?? guest.email}'s access to this property?`,
-            )
-          )
-            return;
-          startTransition(async () => {
-            try {
-              await revokeGuestAccess(propertyId, guest.profileId, propertySlug);
-              router.refresh();
-            } catch (err) {
-              alert(err instanceof Error ? err.message : "Failed");
-            }
-          });
+      <ConfirmButton
+        triggerVariant="ghost"
+        triggerSize="sm"
+        triggerClassName="text-destructive hover:text-destructive"
+        title="Revoke this guest's access?"
+        description={`${guest.fullName ?? guest.email} will no longer be able to see this property.`}
+        confirmLabel="Revoke Access"
+        pendingLabel="Revoking…"
+        destructive
+        successMessage="Guest access revoked."
+        errorTitle="Couldn't revoke access"
+        onConfirm={async () => {
+          await revokeGuestAccess(propertyId, guest.profileId, propertySlug);
+          router.refresh();
         }}
       >
-        {isPending ? "Revoking…" : "Revoke"}
-      </Button>
+        Revoke
+      </ConfirmButton>
     </li>
   );
 }
@@ -155,17 +149,20 @@ function AddGuestForm({
           autoComplete="off"
         />
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-foreground-subtle" aria-live="polite">
-          {state.status === "granted" &&
-            `${state.email} now has access to ${propertyName}.`}
-          {state.status === "invited" &&
-            `Invited ${state.email}. They'll appear here once they sign in.`}
-          {state.status === "error" && (
-            <span className="text-destructive">{state.message}</span>
-          )}
-        </p>
-        <Button type="submit" size="sm" disabled={isPending}>
+      <div className="flex flex-wrap items-center gap-3">
+        <FormStatus
+          tone={state.status === "error" ? "error" : "success"}
+          className="text-xs"
+        >
+          {state.status === "granted"
+            ? `${state.email} now has access to ${propertyName}.`
+            : state.status === "invited"
+              ? `Invited ${state.email}. They'll appear here once they sign in.`
+              : state.status === "error"
+                ? state.message
+                : null}
+        </FormStatus>
+        <Button type="submit" size="sm" disabled={isPending} className="ml-auto">
           {isPending ? "Adding…" : "Add Guest"}
         </Button>
       </div>

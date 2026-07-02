@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormStatus } from "@/components/form-status";
 import {
   sendMagicLink,
   signInWithGoogle,
@@ -76,11 +77,13 @@ export function LoginForm({ initialError }: { initialError?: string }) {
         >
           {isPending ? "Sending…" : "Send Sign-In Link"}
         </Button>
-        {(state.status === "error" || initialError) && (
-          <p className="text-sm text-destructive">
-            {state.status === "error" ? state.message : initialError}
-          </p>
-        )}
+        <FormStatus tone="error">
+          {state.status === "error"
+            ? state.message
+            : initialError
+              ? initialError
+              : null}
+        </FormStatus>
       </form>
     </div>
   );
