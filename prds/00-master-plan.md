@@ -49,7 +49,7 @@ A thorough site review (security + older-user usability + flexibility) ran 2026-
 
 | PRD | Title | Severity / kind | Parallel-safe with | Owns (conflict surface) |
 |---|---|---|---|---|
-| [25](25-ics-guest-exfiltration-fix.md) | Calendar-feed guest exfiltration fix | 🔴 **Security HIGH — do first** | all | 1 migration (+ ICS route) |
+| [25](25-ics-guest-exfiltration-fix.md) | Calendar-feed guest exfiltration fix | ✅ shipped (Security HIGH) | all | 1 migration (+ ICS route) |
 | [26](26-member-deactivation-lockout.md) | Member deactivation lockout | 🔴 **Security HIGH** | 25, 27, 28, 29, 31 (light: `admin/actions.ts` w/ 30) | migration + middleware + admin action |
 | [27](27-direct-write-hardening.md) | Direct-write hardening (property cols + peak approval) | 🟠 Security MEDIUM | all | migrations only |
 | [28](28-security-headers-baseline.md) | Security headers & CSP baseline | 🟠 Security MEDIUM (financial-readiness) | all | `next.config.ts` only |
