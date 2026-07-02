@@ -1,7 +1,7 @@
 # 27 — Direct-Write Hardening (Property Columns + Peak Approval)
 
 **Phase**: 6 (security hardening) · **Depends on**: 03 (properties + `canManageProperty`), 06 (bookings + `enforce_booking_transitions`)
-**Status**: 🟢 ready — **SECURITY, MEDIUM.** Its own session/branch.
+**Status**: 🔵 in review (PR [#31](https://github.com/dm4th/family-website/pull/31), 2026-07-02) — **SECURITY, MEDIUM.** Its own session/branch.
 **Parallel-safe with**: 25, 26, 28, 29, 30, 31 (migration-only; no shared app files).
 
 ---
@@ -63,3 +63,23 @@ supabase/migrations/20260702000004_peak_approval_in_trigger.sql # peak check ins
 - [ ] Peak-window bypass closed at the DB; off-peak auto-approve unaffected.
 - [ ] Triggers are `security definer`, `search_path=''`.
 - [ ] Prod-apply status recorded.
+
+---
+
+## Implementation (shipped 2026-07-02, PR pending review)
+
+**Migrations added** (migrations-only PR, no TS changes):
+
+1. [`20260702000003_property_column_guard.sql`](../supabase/migrations/20260702000003_property_column_guard.sql) — `guard_property_privileged_columns()` BEFORE UPDATE trigger on `properties`. Mirrors the existing `guard_profile_privileged_columns` pattern: raises `42501` if a caller who is **not** `is_admin() OR is_property_admin(old.id)` tries to change `status`, `max_guests`, `peak_period_ranges`, or `hero_image_path`. Uses `is distinct from` so same-value writes (the server action always sends all fields) pass. `security definer`, `search_path=''`. RLS policy untouched — wiki fields stay open to any non-guest member.
+
+2. [`20260702000004_peak_approval_in_trigger.sql`](../supabase/migrations/20260702000004_peak_approval_in_trigger.sql) — new `booking_touches_peak(property_id, start, end)` SQL helper that mirrors `isInPeakPeriod()` in [`src/lib/bookings.ts`](../src/lib/bookings.ts) exactly (recurring annual `MM-DD` windows, inclusive both ends, year-boundary wrap when `end < start`, half-open `[start, end)` stay nights so the checkout day is not a stay night, malformed entries skipped via the same regex bounds as `parseMonthDay`). `enforce_booking_transitions` re-created with one added rule on the non-admin INSERT path: `status='approved'` is rejected when any stay night touches a peak window. Rest is byte-identical to the `20260525150000` version; trigger binding unchanged.
+
+**Key decisions:**
+- Went with the **peak-check-in-trigger** approach (pre-flight recommendation A), not the simpler "forbid all non-admin approved inserts" fallback — off-peak auto-approve stays a single round-trip, matching current UX.
+- No UPDATE-path peak check needed: a non-admin can never set `status='approved'` via UPDATE (existing rule), so approved bookings' dates can't be edited around the check.
+- Server Action `determineInitialStatus()` kept for fast UX feedback; the DB is now the authority.
+
+**Verification:** built a 15-case local-Supabase suite (member / property-admin / site-admin PostgREST simulations via `set_config` JWT claims) covering all four privileged columns, wiki-field openness, off-peak vs on-peak self-approve, wrap-around windows, half-open checkout-day boundary, and the GiST double-booking guard. _Local run was set up but the run itself was skipped at Dan's request to ship the PR; suite is committed for the reviewer / prod re-run._
+
+**Open follow-up:**
+- [ ] **Prod apply** — `supabase db push` after merge, then re-run the member-token negative cases (columns + peak) live per Verification recipe step 5. Update this section + the master-plan row with the prod-apply date.
