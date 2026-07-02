@@ -54,7 +54,7 @@ A thorough site review (security + older-user usability + flexibility) ran 2026-
 | [27](27-direct-write-hardening.md) | Direct-write hardening (property cols + peak approval) | 🟠 Security MEDIUM | all | migrations only |
 | [28](28-security-headers-baseline.md) | Security headers & CSP baseline | 🟠 Security MEDIUM (financial-readiness) | all | `next.config.ts` only |
 | [29](29-older-user-readability.md) | Older-user readability & touch targets | 🟡 Usability (highest UX leverage) | all | `globals.css` + `ui/button`,`ui/input` |
-| [30](30-safe-announced-actions.md) | Safe & announced actions (confirms, aria-live, silent-failure) | 🟡 Usability / a11y | all (coordinate w/ 31 on `admin/*`) | client interaction components + 2 new shared |
+| [30](30-safe-announced-actions.md) | Safe & announced actions (confirms, aria-live, silent-failure) | ✅ shipped | all (coordinate w/ 31 on `admin/*`) | new `confirm-button.tsx` + `form-status.tsx` (the one confirm/status idiom) + wired into every destructive/status/silent-failure site; killed all `window.confirm`/`alert`; archive lightbox focus trap |
 | [31](31-copy-and-date-cleanup.md) | Copy & date-format cleanup | 🟢 Polish | all (coordinate w/ 30 on `admin/*`) | `lib/dates.ts` + server-page display + static copy |
 
 Deferred/tracked (not yet PRD'd): **rate limiting / WAF** (login, invites, feedback, ICS) — noted in 28; **feature gaps** surfaced by the review — a global "what's new" activity feed (precursor to shelved [09](09-family-messaging.md)), site-wide **search**, and a **lightbox** on all photo galleries (archive-only today).

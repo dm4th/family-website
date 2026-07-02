@@ -1,8 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/confirm-button";
+import { FormStatus } from "@/components/form-status";
 
 import {
   approveBooking,
@@ -30,49 +33,49 @@ export function AdminBookingRow({ bookingId, mode }: Props) {
 }
 
 function PendingActions({ bookingId }: { bookingId: string }) {
+  const router = useRouter();
   const approve = approveBooking.bind(null, bookingId);
-  const decline = declineBooking.bind(null, bookingId);
   const [approveState, approveAction, approvePending] = useActionState(
     approve,
     initial,
   );
-  const [declineState, declineAction, declinePending] = useActionState(
-    decline,
-    initial,
-  );
-  const error =
-    approveState.status === "error"
-      ? approveState.message
-      : declineState.status === "error"
-        ? declineState.message
-        : null;
 
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex gap-2">
-        <form action={declineAction}>
-          <Button
-            type="submit"
-            size="sm"
-            variant="outline"
-            disabled={declinePending || approvePending}
-          >
-            {declinePending ? "…" : "Decline"}
-          </Button>
-        </form>
+        <ConfirmButton
+          triggerVariant="outline"
+          triggerSize="sm"
+          disabled={approvePending}
+          title="Decline this request?"
+          description="The family member who asked will be notified that these dates weren't approved."
+          confirmLabel="Decline Request"
+          cancelLabel="Keep It"
+          pendingLabel="Declining…"
+          destructive
+          successMessage="Request declined."
+          errorTitle="Couldn't decline this request"
+          onConfirm={async () => {
+            const result = await declineBooking(
+              bookingId,
+              { status: "idle" },
+              new FormData(),
+            );
+            if (result.status === "error") throw new Error(result.message);
+            router.refresh();
+          }}
+        >
+          Decline
+        </ConfirmButton>
         <form action={approveAction}>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={declinePending || approvePending}
-          >
+          <Button type="submit" size="sm" disabled={approvePending}>
             {approvePending ? "…" : "Approve"}
           </Button>
         </form>
       </div>
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
+      <FormStatus tone="error">
+        {approveState.status === "error" ? approveState.message : null}
+      </FormStatus>
     </div>
   );
 }
@@ -98,9 +101,9 @@ function CancelAction({ bookingId }: { bookingId: string }) {
           {isPending ? "…" : "Cancel Booking"}
         </Button>
       </div>
-      {state.status === "error" && (
-        <p className="text-xs text-destructive">{state.message}</p>
-      )}
+      <FormStatus tone="error">
+        {state.status === "error" ? state.message : null}
+      </FormStatus>
     </form>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import type { FeedbackCategory, FeedbackStatus } from "@/lib/db/schema";
@@ -104,7 +105,9 @@ function FeedbackRowItem({ item }: { item: FeedbackRow }) {
                     await updateFeedbackStatus(item.id, s);
                     router.refresh();
                   } catch (err) {
-                    alert(err instanceof Error ? err.message : "Failed");
+                    toast.error("Couldn't update the status", {
+                      description: err instanceof Error ? err.message : undefined,
+                    });
                   }
                 });
               }}

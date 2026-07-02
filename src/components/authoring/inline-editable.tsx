@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FormStatus } from "@/components/form-status";
 import { idleState, type SaveState } from "./save-state";
 
 /**
@@ -65,9 +66,9 @@ export function InlineEditable({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           {display}
-          {showSaved && (
-            <p className="mt-1 text-sm text-accent-operations">{savedMessage}</p>
-          )}
+          <FormStatus tone="success" className="mt-1">
+            {showSaved ? savedMessage : null}
+          </FormStatus>
         </div>
         <Button
           type="button"
@@ -88,9 +89,9 @@ export function InlineEditable({
     <form action={onSubmit} className="flex flex-col gap-3">
       {children}
       <div className="flex items-center justify-end gap-2">
-        {errorMessage && (
-          <p className="mr-auto text-sm text-destructive">{errorMessage}</p>
-        )}
+        <FormStatus tone="error" className="mr-auto">
+          {errorMessage}
+        </FormStatus>
         <Button
           type="button"
           variant="ghost"

@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FormStatus } from "@/components/form-status";
 import {
   Sheet,
   SheetClose,
@@ -137,9 +138,9 @@ export function FeedbackButton({
               />
             </div>
 
-            {state.status === "error" && (
-              <p className="text-sm text-destructive">{state.message}</p>
-            )}
+            <FormStatus tone="error">
+              {state.status === "error" ? state.message : null}
+            </FormStatus>
 
             <SheetFooter className="mt-auto flex-row gap-2 px-0">
               <Button type="submit" disabled={isPending}>

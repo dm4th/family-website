@@ -10,6 +10,7 @@ import { GENERATION_HINT } from "@/lib/generations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormStatus } from "@/components/form-status";
 import { SalonPanel, PanelEyebrow } from "@/components/shell";
 import { completeOnboarding, skipOnboarding } from "./actions";
 import type { WelcomeFormState } from "./actions";
@@ -142,9 +143,9 @@ export function WelcomeFlow({
             />
           </Field>
 
-          {state.status === "error" && (
-            <p className="text-sm text-destructive">{state.message}</p>
-          )}
+          <FormStatus tone="error">
+            {state.status === "error" ? state.message : null}
+          </FormStatus>
 
           <div className="flex flex-wrap items-center gap-4 border-t border-border pt-5">
             <Button

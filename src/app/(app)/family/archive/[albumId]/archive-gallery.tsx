@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Pencil, Star, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { ConfirmButton } from "@/components/confirm-button";
+import { FormStatus } from "@/components/form-status";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -234,7 +237,11 @@ function CoverButton({
       className="text-xs text-foreground-muted"
       disabled={isPending}
       onClick={async () => {
-        await setAlbumCover(albumId, photoId);
+        const result = await setAlbumCover(albumId, photoId);
+        if (!result.ok) {
+          toast.error("Couldn't set the cover", { description: result.message });
+          return;
+        }
         startTransition(() => router.refresh());
       }}
     >
@@ -254,29 +261,38 @@ function RemoveButton({
   canRemove: boolean;
 }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [confirming, setConfirming] = useState(false);
   if (!canRemove) return null;
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="xs"
-      className="text-xs text-foreground-muted hover:text-destructive"
-      disabled={isPending}
-      onClick={async () => {
-        if (!confirming) {
-          setConfirming(true);
-          setTimeout(() => setConfirming(false), 3000);
-          return;
-        }
-        await removePhotoFromAlbum(albumId, photoId);
-        startTransition(() => router.refresh());
+    <ConfirmButton
+      triggerVariant="ghost"
+      triggerSize="xs"
+      triggerClassName="text-xs text-foreground-muted hover:text-destructive"
+      title="Remove this photo from the album?"
+      description="The photo stays in the family archive. It's only removed from this album."
+      confirmLabel="Remove"
+      pendingLabel="Removing…"
+      destructive
+      successMessage="Photo removed from the album."
+      errorTitle="Couldn't remove the photo"
+      onConfirm={async () => {
+        const result = await removePhotoFromAlbum(albumId, photoId);
+        if (!result.ok) throw new Error(result.message);
+        router.refresh();
       }}
     >
       <Trash2 aria-hidden className="size-3.5" />
-      {confirming ? "Confirm" : "Remove"}
-    </Button>
+      Remove
+    </ConfirmButton>
+  );
+}
+
+/** Tabbable elements inside a container, in DOM order — for the lightbox focus trap. */
+function focusablesIn(container: HTMLElement | null): HTMLElement[] {
+  if (!container) return [];
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
   );
 }
 
@@ -293,12 +309,46 @@ function Lightbox({
 }) {
   const photo = photos[index]!;
   const label = dateLabel(photo);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  // Move focus into the lightbox on open and restore it to the trigger on
+  // close. Runs once per open (the component stays mounted while navigating).
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const first = focusablesIn(containerRef.current)[0];
+    first?.focus();
+    return () => previouslyFocused?.focus?.();
+  }, []);
+
+  // Keyboard: Escape closes, arrows navigate, Tab is trapped inside the dialog.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-      else if (e.key === "ArrowRight" && index < photos.length - 1) onNavigate(index + 1);
-      else if (e.key === "ArrowLeft" && index > 0) onNavigate(index - 1);
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key === "ArrowRight" && index < photos.length - 1) {
+        onNavigate(index + 1);
+        return;
+      }
+      if (e.key === "ArrowLeft" && index > 0) {
+        onNavigate(index - 1);
+        return;
+      }
+      if (e.key === "Tab") {
+        const items = focusablesIn(containerRef.current);
+        if (items.length === 0) return;
+        const first = items[0]!;
+        const last = items[items.length - 1]!;
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || !containerRef.current?.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (active === last || !containerRef.current?.contains(active))) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -306,9 +356,11 @@ function Lightbox({
 
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/90 p-4 sm:p-10"
       role="dialog"
       aria-modal="true"
+      aria-label={photo.caption ?? "Archive photo"}
       onClick={onClose}
     >
       <button
@@ -448,9 +500,9 @@ function PhotoDetailsSheet({
           </div>
 
           <SheetFooter className="flex-row items-center justify-end gap-2 p-0">
-            {errorMessage && (
-              <p className="mr-auto text-sm text-destructive">{errorMessage}</p>
-            )}
+            <FormStatus tone="error" className="mr-auto">
+              {errorMessage}
+            </FormStatus>
             <SheetClose asChild>
               <Button type="button" variant="ghost" size="sm" disabled={isPending}>
                 Cancel

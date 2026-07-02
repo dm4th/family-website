@@ -6,6 +6,7 @@ import { ChipListField, RichTextField } from "@/components/authoring";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormStatus } from "@/components/form-status";
 import {
   updateProperty,
   type PropertyFormState,
@@ -178,14 +179,13 @@ export function PropertyEditForm({
       )}
 
       <div className="mt-2 flex items-center justify-end gap-3 border-t border-border pt-5">
-        {state.status === "saved" && (
-          <p className="text-sm text-accent-operations">
-            Saved. Logged to revisions.
-          </p>
-        )}
-        {state.status === "error" && (
-          <p className="text-sm text-destructive">{state.message}</p>
-        )}
+        <FormStatus tone={state.status === "error" ? "error" : "success"}>
+          {state.status === "error"
+            ? state.message
+            : state.status === "saved"
+              ? "Saved. Logged to revisions."
+              : null}
+        </FormStatus>
         <Button type="submit" disabled={isPending}>
           {isPending ? "Saving…" : "Save Changes"}
         </Button>

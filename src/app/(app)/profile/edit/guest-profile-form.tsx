@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormStatus } from "@/components/form-status";
 import { updateGuestProfile, type ProfileFormState } from "../actions";
 
 const initialState: ProfileFormState = { status: "idle" };
@@ -56,12 +57,13 @@ export function GuestProfileForm({ profile }: { profile: GuestProfileFormValues 
         </Button>
       </div>
 
-      {state.status === "saved" && (
-        <p className="text-sm text-accent-operations">Saved.</p>
-      )}
-      {state.status === "error" && (
-        <p className="text-sm text-destructive">{state.message}</p>
-      )}
+      <FormStatus tone={state.status === "error" ? "error" : "success"}>
+        {state.status === "error"
+          ? state.message
+          : state.status === "saved"
+            ? "Saved."
+            : null}
+      </FormStatus>
     </form>
   );
 }

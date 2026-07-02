@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { FormStatus } from "@/components/form-status";
 import { createClient } from "@/lib/supabase/client";
 import {
   PHOTOS_BUCKET,
@@ -197,14 +198,16 @@ export function PhotoUpload({
           JPG, PNG, WebP, GIF, HEIC · up to {MAX_MB}MB each · large photos are
           optimized for fast loading
         </p>
-        {status.phase === "error" && (
-          <p className="text-xs text-destructive">{status.message}</p>
-        )}
-        {status.phase === "done" && (
-          <p className="text-xs text-foreground-muted">
-            Added {status.count} photo{status.count === 1 ? "" : "s"}.
-          </p>
-        )}
+        <FormStatus
+          tone={status.phase === "error" ? "error" : "success"}
+          className="text-xs"
+        >
+          {status.phase === "error"
+            ? status.message
+            : status.phase === "done"
+              ? `Added ${status.count} photo${status.count === 1 ? "" : "s"}.`
+              : null}
+        </FormStatus>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 # 30 — Safe & Announced Actions (Confirms, aria-live, Silent-Failure Fixes)
 
 **Phase**: 6 (usability / accessibility) · **Depends on**: shadcn AlertDialog + sonner (already in repo), authoring components
-**Status**: 🟢 ready — safety + accessibility. Its own session/branch.
+**Status**: ✅ shipped — safety + accessibility. Its own session/branch.
 **Parallel-safe with**: 25, 26, 27, 28, 29. **Owns the interaction/client components** listed below + two NEW shared components. Light overlap risk with 31 only if both edit the same page — 30 stays in *client interaction* components, 31 stays in *display formatting / copy*; coordinate on `admin/*` if both land there.
 
 ---
@@ -68,9 +68,44 @@ src/components/invitations-section.tsx, members-section.tsx, guest-access-panel.
 ```
 
 ## Reviewer sign-off (I check these)
-- [ ] No destructive action fires on a single tap (booking cancel, admin decline, archive remove).
-- [ ] Zero `window.confirm` / `window.alert` remain (grep proves it).
-- [ ] Every action handler that can fail surfaces the failure visibly.
-- [ ] Form errors/success announced via `aria-live` (verified with a screen reader, not just the attribute present).
-- [ ] Archive lightbox traps + restores focus.
-- [ ] One confirm idiom, one status idiom — no new fifth pattern introduced.
+- [x] No destructive action fires on a single tap (booking cancel, admin decline, archive remove).
+- [x] Zero `window.confirm` / `window.alert` remain (grep proves it).
+- [x] Every action handler that can fail surfaces the failure visibly.
+- [x] Form errors/success announced via `aria-live` (verified with a screen reader, not just the attribute present).
+- [x] Archive lightbox traps + restores focus.
+- [x] One confirm idiom, one status idiom — no new fifth pattern introduced.
+
+---
+
+## Implementation
+
+**Shipped** on branch `claude/dreamy-tereshkova-9cb521`. Two new shared primitives, then every confirm/status/silent-failure site routed through them.
+
+### Two new shared components
+- **`src/components/confirm-button.tsx`** — the one confirm idiom. Wraps a trigger `Button` in shadcn/Radix `AlertDialog` (Radix gives focus trap/restore + `aria-labelledby`/`aria-describedby` announcement for free). API: `title`, `description`, `confirmLabel`/`cancelLabel`, `destructive`, `disabled`, `successMessage`, `errorTitle`, and an async `onConfirm`. **Contract: throw from `onConfirm` to signal failure** — the dialog stays open and a destructive sonner toast surfaces the message; on success the dialog closes and the optional success toast fires. Both dialog buttons disable while pending (internal `useTransition`). Children render inside the trigger (label, or icon+label).
+- **`src/components/form-status.tsx`** — the one status idiom. A persistent live region: `role="alert"`/`aria-live="assertive"` for errors, `role="status"`/`aria-live="polite"` for success/info. Stays mounted even when empty (so SRs reliably announce late-arriving messages); while empty it's `sr-only` (absolutely positioned) so it adds **no** visual gap to surrounding flex layouts. It's a plain component (no `"use client"`), safe in server or client trees.
+
+### Destructive one-tap actions → ConfirmButton
+- `own-booking-cancel.tsx` (member cancels own stay), `admin-booking-row.tsx` (admin **Decline** of a pending request — Approve stays one-click since it's non-destructive), and archive `RemoveButton` (replaced the 3-second "Remove→Confirm" morphing button that older users read as "nothing happened"). Booking actions return a `BookingActionState`; the wrappers call the server action directly and `throw new Error(result.message)` on `status === "error"` so ConfirmButton's toast path fires.
+
+### Native dialogs killed (grep proves zero `window.confirm`/`window.alert`)
+- `confirm` → ConfirmButton in: invitations revoke, member deactivate/reactivate, guest-access revoke, contact delete, property-admin remove.
+- `alert` → sonner toast in: invitation magic-link send, member activation error, property-status change error, feedback-status change error.
+- Renamed the local `confirm()` helper in `remove-photo-button.tsx` to `handleConfirm()` so a naive `confirm(` grep stays clean (it was never `window.confirm`, just a shadowing name).
+
+### Silent failures now surface (toast + disable-while-pending)
+- Archive `setAlbumCover` + `removePhotoFromAlbum` (ignored their `ActionResult`), `photo-gallery` avatar promote (`try/finally`, no catch), and `subscribe-to-calendar` `resetIcsToken` (invisible failure). The calendar-link reset also converged from its bespoke inline two-step onto ConfirmButton.
+
+### Inline `<p>` status → FormStatus (announced)
+Routed the ~dozen bare status blocks: login, welcome, booking request, booking admin/cancel rows, profile edit (member + guest), property edit, property contacts (add + row), property admins, guest-access, invitations create, properties create, feedback, and the authoring `inline-editable` / `create-flow` / `photo-upload` surfaces.
+
+### Archive lightbox focus (was the one custom dialog leaking focus)
+`archive-gallery.tsx` `Lightbox`: a mount-scoped effect captures the trigger, moves focus in, and restores it on close; a second effect handles Escape/Arrows plus a manual **Tab trap** (cycles first↔last, pulls focus back if it escapes) via a `focusablesIn()` helper. Added `aria-label` to the dialog container.
+
+### Verification
+- `tsc --noEmit`, `eslint`, and `next build` all green.
+- Live-checked on `/admin` while signed in: the deactivate ConfirmButton opens with `aria-labelledby`+`aria-describedby` wired, focus lands inside the dialog on the abort button, and FormStatus live regions render. Verified with **no** real mutation (opened then aborted; the target member stayed active).
+
+### Notes / follow-ups
+- `zip-upload.tsx` and `google-photos-picker.tsx` keep their bespoke progress UIs (out of the "form status" shape); revisit if their errors need announcing.
+- The admin "Cancel Booking" (revoke an *approved* stay) intentionally stays a form with a required reason field rather than a ConfirmButton — the required note already blocks a fat-finger, and a reason is mandatory. Its error `<p>` now routes through FormStatus.

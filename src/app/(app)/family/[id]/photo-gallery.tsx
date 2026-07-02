@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RemovePhotoButton } from "@/components/remove-photo-button";
@@ -51,7 +52,12 @@ export function PhotoGallery({
     setBusyId(photoId);
     try {
       await setAvatarFromPhoto(photoId);
+      toast.success("Avatar updated");
       startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error("Couldn't update your avatar", {
+        description: err instanceof Error ? err.message : undefined,
+      });
     } finally {
       setBusyId(null);
     }
