@@ -43,6 +43,22 @@ The first-slice build was a single long session, deliberately. From here, every 
 
 **Parallel-safety legend**: features marked "parallel-safe with" can be developed simultaneously without merge conflicts (different tables, different routes, different components). The shared infrastructure (PhotoUpload, recordRevision, canManageProperty, etc.) is stable — adding to it is fine; reshaping it should be done in a dedicated session.
 
+## Review-and-hardening queue (from the 2026-07-01 full review)
+
+A thorough site review (security + older-user usability + flexibility) ran 2026-07-01/02 and produced **PRDs 25–31**, each scoped as its own small branch so they can be built **in parallel** and reviewed in isolation. Priority: security PRDs (25, 26) first, before the site link is shared more widely. Findings + review checklist are captured in Claude's project memory (`reviewer-checklist`, `security-posture-2026-07`, `usability-bar-older-users`).
+
+| PRD | Title | Severity / kind | Parallel-safe with | Owns (conflict surface) |
+|---|---|---|---|---|
+| [25](25-ics-guest-exfiltration-fix.md) | Calendar-feed guest exfiltration fix | 🔴 **Security HIGH — do first** | all | 1 migration (+ ICS route) |
+| [26](26-member-deactivation-lockout.md) | Member deactivation lockout | 🔴 **Security HIGH** | 25, 27, 28, 29, 31 (light: `admin/actions.ts` w/ 30) | migration + middleware + admin action |
+| [27](27-direct-write-hardening.md) | Direct-write hardening (property cols + peak approval) | 🟠 Security MEDIUM | all | migrations only |
+| [28](28-security-headers-baseline.md) | Security headers & CSP baseline | 🟠 Security MEDIUM (financial-readiness) | all | `next.config.ts` only |
+| [29](29-older-user-readability.md) | Older-user readability & touch targets | 🟡 Usability (highest UX leverage) | all | `globals.css` + `ui/button`,`ui/input` |
+| [30](30-safe-announced-actions.md) | Safe & announced actions (confirms, aria-live, silent-failure) | 🟡 Usability / a11y | all (coordinate w/ 31 on `admin/*`) | client interaction components + 2 new shared |
+| [31](31-copy-and-date-cleanup.md) | Copy & date-format cleanup | 🟢 Polish | all (coordinate w/ 30 on `admin/*`) | `lib/dates.ts` + server-page display + static copy |
+
+Deferred/tracked (not yet PRD'd): **rate limiting / WAF** (login, invites, feedback, ICS) — noted in 28; **feature gaps** surfaced by the review — a global "what's new" activity feed (precursor to shelved [09](09-family-messaging.md)), site-wide **search**, and a **lightbox** on all photo galleries (archive-only today).
+
 ## Post-Legacy roadmap (agreed 2026-07-01)
 
 With Family Legacy shipped, Dan prioritized the next wave. **[24 — invite-only access](24-member-invites-access.md) jumped to the front (security) on 2026-07-01** and must ship before the site link is shared. Then: **18 → 19 → 20 → 21 → 22 → 23**. 18/19/20 shipped; 24 has a full PRD; 21/22/23 are captured here and get full PRDs when their turn comes.
