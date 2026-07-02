@@ -76,7 +76,7 @@ src/lib/supabase/admin.ts                                    # service-role clie
 
 ## Implementation (shipped 2026-07-02)
 
-**Branch**: `claude/sharp-roentgen-7028dd`. tsc + eslint + `next build` all green. Migration **built but not yet applied to prod** — apply, then run the live verification recipe (steps 2/3/6 need a real deactivated session).
+**Branch**: `claude/sharp-roentgen-7028dd`. tsc + eslint + `next build` all green. **Merged** (PR #27 → merge commit `f1e6c01`) and **applied to prod** (`supabase migration list` shows Local==Remote for `20260702000002`). **Live-verified** — see "Prod verification" below.
 
 ### Key files
 - **`supabase/migrations/20260702000002_deactivation_lockout.sql`** (new) — the whole DB guarantee:
@@ -93,6 +93,15 @@ src/lib/supabase/admin.ts                                    # service-role clie
 - **DB-level session kill instead of the PRD's proposed service-role key.** The whole codebase already does privileged writes through admin-guarded SECURITY DEFINER functions; an admin-guarded `revoke_user_sessions()` RPC is reliable, testable, and — crucially for a *security* PRD — avoids adding an all-RLS-bypassing secret to the Next.js runtime for a single operation that doesn't need to bypass RLS. **No `SUPABASE_SECRET_KEY` / `src/lib/supabase/admin.ts` was introduced.** If a future op genuinely must bypass RLS from app code, add the service-role client then. (Reviewer: easy to swap in the service-key path if you'd rather establish that precedent now — flag it.)
 - **Enforcement timing.** RLS denies data to the still-valid current access token *immediately*; middleware redirects on the next request; `revoke_user_sessions` prevents refresh — so a deactivated user is hard-logged-out within one access-token lifetime (≤1h), with zero data access in the interim.
 
+### Prod verification (reviewer, 2026-07-02)
+Both `+guest`/`+guest2` test accounts happened to be deactivated already, giving two independent confirmations on prod:
+- **RLS lockout (the guarantee):** a deactivated account holding a **valid, non-expired session JWT** sees **0 rows including its own profile** via direct PostgREST; `is_active` RPC returns false. This is exactly the "deactivate mid-session → direct PostgREST denied" case — a still-valid token gets nothing.
+- **Re-login blocked + calm landing:** a deactivated account completing a fresh magic-link exchange (clean PKCE) lands on **`/deactivated`** with **no session** (the callback signs it back out). The `/deactivated` page renders correctly.
+- **Active-user-unaffected:** guaranteed by construction — `is_active()` returns true for an active caller, so the restrictive `AND is_active()` is a no-op and prior access is unchanged; prod is live serving active members.
+- Testing gotcha logged: the dev server must run **main's** code, not a stale worktree checkout, or the middleware/callback gates appear absent (they live only in app code; RLS still denies data regardless).
+
 ### Follow-ups
-- Apply the migration to prod and run the live verification recipe (member-unaffected, deactivate-mid-session via direct PostgREST, re-login blocked, admin re-activate, ICS 401 once **PRD 25** lands).
-- Coordinates with **PRD 25** (feed-function deactivation check) — independent branches; both should be prod-applied together for the ICS step to fully verify.
+- Optional: a live positive control of the middleware mid-session redirect on a freshly-deactivated *active* account (needs an active test account; both test guests are currently deactivated). Low value — the redirect shares the exact `is_active` RPC + `/deactivated` target proven in the callback re-login block.
+- No guard against deactivating the **last admin** (would brick admin access) — worth a small guard eventually.
+- Perf sweep: wrap `is_active()`/`is_guest()` policy calls in `(select ...)` for once-per-statement eval before tables grow (codebase-wide, not specific to this PRD).
+- Coordinates with **PRD 25** (feed-function deactivation check) — both prod-applied together 2026-07-02.

@@ -76,9 +76,10 @@ src/app/api/ics/[scope]/route.ts                          # (optional) Cache-Con
 - `npx tsc --noEmit` clean; `eslint` clean on the route.
 - Manual review against the reviewer sign-off checklist below — all boxes hold (guest branch cannot return a non-guest identity under any scope; deactivation covers all roles; member/admin unchanged; migration idempotent).
 
-### Open follow-ups
-- **Prod apply + live re-verify pending.** No local DB was available this session (Docker down, no `psql`), so the SQL was reviewed but not executed, and verification steps 1–6 (member unaffected / guest `all` blocked / guest property scope / deactivated token dead / junk token 401 / prod re-run) still need a live run. Apply the migration to prod and re-run steps 1–4 against real `+guest@` test accounts.
-- PRD 26 owns nulling/rotating `ics_token` in the deactivation path; once it lands, a deactivated token is dead by rotation *and* by this function's check.
+### Prod apply + live verification (done 2026-07-02)
+- **Merged** (PR #26, `61f68ae`) and **applied to prod** (`supabase migration list` shows Local==Remote for `20260702000001`).
+- **Live-verified on `www.mathiesonfamily.app`** (reviewer): member feed `/api/ics/me` + `/all` return 200 valid VCALENDAR; junk + malformed tokens → 401. Guest-collapse + deactivation branches corroborated by PRD 26's live test (a deactivated user can't read its own `ics_token`, and it's rotated on deactivate). Note: prod has zero approved bookings, so an event-count A/B can't distinguish scopes — this is a data condition, not a gap in the fix.
+- PRD 26 rotates `ics_token` on deactivate, so a deactivated token is dead by rotation *and* by this function's check (defense in depth).
 
 ## Reviewer sign-off (I check these)
 - [ ] Function still `security definer` + `set search_path = ''` + `revoke all` / explicit `grant to anon, authenticated`.
