@@ -146,16 +146,16 @@ export function PeoplePicker({
                   type="button"
                   onClick={() => removePerson(p.id)}
                   aria-label={`Remove ${p.displayName}`}
-                  className="inline-flex size-5 items-center justify-center rounded text-foreground-subtle transition-colors hover:bg-background hover:text-foreground"
+                  className="inline-flex size-8 items-center justify-center rounded text-foreground-subtle transition-colors hover:bg-background hover:text-foreground"
                 >
-                  <X className="size-3.5" aria-hidden />
+                  <X className="size-4" aria-hidden />
                 </button>
               </span>
             </li>
           ))}
         </ul>
       ) : emptyHint ? (
-        <p className="text-xs italic text-foreground-subtle">{emptyHint}</p>
+        <p className="text-sm italic text-foreground-subtle">{emptyHint}</p>
       ) : null}
 
       <div className="relative max-w-[20rem]">

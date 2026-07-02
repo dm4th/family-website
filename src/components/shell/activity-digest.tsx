@@ -51,7 +51,7 @@ function ActivityDigestItem({
         {when}
       </span>
       <div className="flex flex-col gap-1">
-        <span className="text-sm leading-snug text-foreground sm:text-[0.95rem]">
+        <span className="text-base leading-snug text-foreground">
           {title}
         </span>
         {by && (

@@ -229,7 +229,7 @@ function FieldInline({
     <div className={`flex flex-col gap-1 ${className ?? ""}`}>
       <Label
         htmlFor={htmlFor}
-        className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+        className="text-foreground-muted"
       >
         {label}
       </Label>

@@ -74,7 +74,7 @@ function PageIntro({
           {title}
         </h1>
         {context && (
-          <p className="text-sm leading-relaxed text-foreground-muted sm:text-[0.95rem]">
+          <p className="text-base leading-relaxed text-foreground-muted">
             {context}
           </p>
         )}

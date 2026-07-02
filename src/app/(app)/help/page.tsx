@@ -78,7 +78,7 @@ export default function HelpPage() {
         context="Everything on the site, in plain language, grouped by area. Come back any time."
       />
 
-      <p className="mb-10 max-w-prose text-sm leading-relaxed text-foreground-muted sm:text-[0.95rem]">
+      <p className="mb-10 max-w-prose text-base leading-relaxed text-foreground-muted">
         {HELP_INTRO}
       </p>
 

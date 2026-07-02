@@ -106,6 +106,15 @@
   /* tracking helpers for editorial UI */
   --tracking-eyebrow: 0.18em;
   --tracking-display: -0.012em;
+
+  /* type scale — readability floor for the 60+ audience (PRD 29).
+     xs is meta/decorative only (13px); sm is the UI default (15px).
+     Anything instructional (labels, hints, tap instructions) must be
+     text-sm or larger. Eyebrows keep their arbitrary sizes on purpose. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: calc(1.125 / 0.8125);
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: calc(1.375 / 0.9375);
 }
 
 :root {
@@ -118,7 +127,7 @@
 
   --foreground: oklch(0.215 0.018 60);          /* deep warm ink */
   --foreground-muted: oklch(0.48 0.015 65);     /* warm mid */
-  --foreground-subtle: oklch(0.62 0.012 70);    /* whisper */
+  --foreground-subtle: oklch(0.55 0.013 70);    /* whisper — dark enough for hint text at small sizes */
 
   --border: oklch(0.895 0.012 75);              /* hairline */
   --border-strong: oklch(0.80 0.015 70);        /* visible rule */
@@ -188,7 +197,7 @@
 
   --foreground: oklch(0.935 0.012 78);
   --foreground-muted: oklch(0.70 0.012 75);
-  --foreground-subtle: oklch(0.55 0.012 72);
+  --foreground-subtle: oklch(0.62 0.012 72);
 
   --border: oklch(0.30 0.012 65);
   --border-strong: oklch(0.42 0.012 65);

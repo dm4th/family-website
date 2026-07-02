@@ -393,7 +393,7 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
         </>
       )}
 
-      <p className="text-[0.6875rem] text-foreground-subtle">
+      <p className="text-sm text-foreground-subtle">
         Per-pick consent: we never read your wider library.
       </p>
 
@@ -401,7 +401,7 @@ export function GooglePhotosPicker({ attachment }: { attachment: Attachment }) {
         <button
           type="button"
           onClick={cancel}
-          className="text-[0.6875rem] text-foreground-subtle underline-offset-4 hover:underline"
+          className="min-h-9 text-sm text-foreground-subtle underline-offset-4 hover:underline"
         >
           Cancel
         </button>

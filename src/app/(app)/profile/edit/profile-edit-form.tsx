@@ -130,7 +130,7 @@ function Field({
       </Label>
       {children}
       {hint ? (
-        <p className="text-xs text-foreground-subtle">{hint}</p>
+        <p className="text-sm text-foreground-subtle">{hint}</p>
       ) : null}
     </div>
   );

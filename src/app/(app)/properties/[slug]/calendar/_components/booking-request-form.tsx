@@ -184,7 +184,7 @@ export function BookingRequestForm({
           <Field>
             <Label
               htmlFor="bk-start"
-              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+              className="text-foreground-muted"
             >
               Arrive
             </Label>
@@ -204,7 +204,7 @@ export function BookingRequestForm({
           <Field>
             <Label
               htmlFor="bk-end"
-              className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+              className="text-foreground-muted"
             >
               Last night
             </Label>
@@ -224,14 +224,14 @@ export function BookingRequestForm({
         </div>
 
         {range && nights > 0 && (
-          <p className="text-xs text-foreground-subtle">
+          <p className="text-sm text-foreground-muted">
             {nights} night{nights === 1 ? "" : "s"} · arrive{" "}
             {formatHumanDate(range.start)}, depart{" "}
             {formatHumanDate(exclusiveEnd)}
           </p>
         )}
         {awaitingLastNight && (
-          <p className="text-xs text-foreground-subtle">
+          <p className="text-sm text-foreground-muted">
             Arrive {formatHumanDate(selection!.start)} selected. Pick your last
             night to finish.
           </p>
@@ -240,7 +240,7 @@ export function BookingRequestForm({
         <Field>
           <Label
             htmlFor="bk-guests"
-            className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            className="text-foreground-muted"
           >
             Guest count
           </Label>
@@ -254,7 +254,7 @@ export function BookingRequestForm({
             required
           />
           {maxGuests != null && (
-            <p className="text-xs text-foreground-subtle">
+            <p className="text-sm text-foreground-muted">
               This property sleeps up to {maxGuests}.
             </p>
           )}
@@ -263,7 +263,7 @@ export function BookingRequestForm({
         <Field>
           <Label
             htmlFor="bk-notes"
-            className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            className="text-foreground-muted"
           >
             Notes
           </Label>

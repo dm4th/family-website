@@ -52,7 +52,7 @@ export function Markdown({
       "prose-headings:font-display prose-headings:tracking-[-0.012em] prose-headings:text-foreground",
       "prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3",
       "prose-h3:text-base prose-h3:mt-6 prose-h3:mb-2",
-      "prose-p:text-[0.95rem] prose-p:text-foreground"
+      "prose-p:text-base prose-p:text-foreground"
     ),
     ledger: cn(
       "prose-headings:font-sans prose-headings:font-medium prose-headings:tracking-tight prose-headings:text-foreground",

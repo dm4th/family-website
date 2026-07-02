@@ -174,7 +174,7 @@ export function MonthCalendar({
         <button
           type="button"
           onClick={() => jumpMonths(-1)}
-          className="h-8 rounded-md border border-border bg-surface px-3 text-sm text-foreground hover:bg-surface-raised"
+          className="h-10 min-w-10 rounded-md border border-border bg-surface px-3 text-sm text-foreground hover:bg-surface-raised"
           aria-label="Previous month"
         >
           ←
@@ -185,7 +185,7 @@ export function MonthCalendar({
         <button
           type="button"
           onClick={() => jumpMonths(1)}
-          className="h-8 rounded-md border border-border bg-surface px-3 text-sm text-foreground hover:bg-surface-raised"
+          className="h-10 min-w-10 rounded-md border border-border bg-surface px-3 text-sm text-foreground hover:bg-surface-raised"
           aria-label="Next month"
         >
           →
@@ -196,7 +196,7 @@ export function MonthCalendar({
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div
             key={d}
-            className="bg-surface-sunken py-2 text-center text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+            className="bg-surface-sunken py-2 text-center text-xs uppercase tracking-[0.16em] text-foreground-subtle"
           >
             {d}
           </div>
@@ -226,8 +226,8 @@ export function MonthCalendar({
                     key={b.bookingId + iso}
                     className={
                       b.status === "approved"
-                        ? "truncate rounded-sm px-1 py-0.5 text-[0.65rem] text-accent-operations-foreground"
-                        : "truncate rounded-sm border border-dashed border-accent-bronze/60 px-1 py-0.5 text-[0.65rem] text-foreground-muted"
+                        ? "truncate rounded-sm px-1 py-0.5 text-xs text-accent-operations-foreground"
+                        : "truncate rounded-sm border border-dashed border-accent-bronze/60 px-1 py-0.5 text-xs text-foreground-muted"
                     }
                     style={
                       b.status === "approved"
@@ -240,7 +240,7 @@ export function MonthCalendar({
                   </div>
                 ))}
                 {cellBands.length > 3 && (
-                  <span className="text-[0.6rem] text-foreground-subtle">
+                  <span className="text-xs text-foreground-subtle">
                     +{cellBands.length - 3} more
                   </span>
                 )}
@@ -277,7 +277,7 @@ export function MonthCalendar({
 
       {onSelect && (
         <div className="flex min-h-6 flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-foreground-subtle">
+          <p className="text-sm text-foreground-muted">
             {awaitingLastNight
               ? `Arrive ${format(fromIso(selection!.start), "MMM d")} selected. Now tap your last night.`
               : "Tap your arrival day, then tap your last night."}
@@ -286,7 +286,7 @@ export function MonthCalendar({
             <button
               type="button"
               onClick={clearSelection}
-              className="text-xs text-foreground-muted underline-offset-4 hover:underline"
+              className="min-h-10 text-sm text-foreground-muted underline-offset-4 hover:underline"
             >
               Start Over
             </button>
