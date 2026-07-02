@@ -143,7 +143,7 @@ function PanelDescription({
     <p
       data-slot="panel-description"
       className={cn(
-        "max-w-prose text-sm leading-relaxed text-foreground-muted",
+        "max-w-prose text-base leading-relaxed text-foreground-muted",
         className
       )}
       {...props}

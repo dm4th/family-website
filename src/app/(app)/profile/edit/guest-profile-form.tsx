@@ -83,7 +83,7 @@ function Field({
         {label}
       </Label>
       {children}
-      {hint ? <p className="text-xs text-foreground-subtle">{hint}</p> : null}
+      {hint ? <p className="text-sm text-foreground-subtle">{hint}</p> : null}
     </div>
   );
 }

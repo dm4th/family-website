@@ -165,7 +165,7 @@ export function WelcomeFlow({
               Add a photo{" "}
               <span className="text-foreground-subtle">(optional)</span>
             </p>
-            <p className="text-xs text-foreground-subtle">
+            <p className="text-sm text-foreground-subtle">
               Saves on its own. You don&apos;t need to press Enter for this.
             </p>
           </div>
@@ -207,7 +207,7 @@ function Field({
         {label}
       </Label>
       {children}
-      {hint ? <p className="text-xs text-foreground-subtle">{hint}</p> : null}
+      {hint ? <p className="text-sm text-foreground-subtle">{hint}</p> : null}
     </div>
   );
 }

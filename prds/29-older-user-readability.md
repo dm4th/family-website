@@ -1,7 +1,7 @@
 # 29 — Older-User Readability & Touch Targets
 
 **Phase**: 6 (usability) · **Depends on**: the shell/token system (globals.css, ui primitives)
-**Status**: 🟢 ready — **highest-leverage UX fix for the 60+ audience.** Its own session/branch.
+**Status**: 🔍 in review — built + live-verified 2026-07-02, PR open from `claude/cool-sammet-38972f`.
 **Parallel-safe with**: 25, 26, 27, 28, 30, 31. It **owns** `globals.css` + `components/ui/button.tsx` + `components/ui/input.tsx`; other PRDs consume those primitives without editing them, so no conflict. (If 30/31 also nudge a primitive, coordinate — but they shouldn't need to.)
 
 ---
@@ -57,6 +57,27 @@ src/components/ui/input.tsx               # height
 src/components/authoring/people-picker.tsx, chip-list-field.tsx  # chip-remove target
 src/components/month-calendar.tsx, booking-request-form.tsx      # instructional text sizes
 ```
+
+## Implementation (2026-07-02)
+
+**Approach**: rather than bumping the root `font-size` (already 16px — the "14px body" was really ~200 hardcoded `text-sm` usages), the Tailwind v4 type-scale tokens were remapped in `globals.css` `@theme`: `--text-xs` 12→13px, `--text-sm` 14→15px (with matching line-heights). One change lifts every `text-xs`/`text-sm` in the app; eyebrows and decorative micro-labels use arbitrary sizes (`text-[0.6875rem]` etc.) so they are untouched by design.
+
+**Key files**
+- [globals.css](../src/app/globals.css) — type-scale remap; `--foreground-subtle` darkened light-mode 0.62→0.55 oklch (measured 4.65:1 on ivory, was ~3.4:1) and brightened dark-mode 0.55→0.62 for parity.
+- [ui/button.tsx](../src/components/ui/button.tsx) — default h-8→h-10 (40px), sm h-7→h-9 + `text-[0.8rem]`→`text-sm`, lg h-9→h-11 (44px), icon sizes up one step; `xs` left as a deliberate dense-UI escape hatch.
+- [ui/input.tsx](../src/components/ui/input.tsx) — h-8→h-10.
+- Booking: [month-calendar.tsx](../src/app/(app)/properties/[slug]/calendar/_components/month-calendar.tsx) (instruction + Start Over `text-xs`→`text-sm`, month-nav buttons h-10, weekday/band micro-text → `text-xs`=13px), [booking-request-form.tsx](../src/app/(app)/properties/[slug]/calendar/_components/booking-request-form.tsx) (the four ~10.4px uppercase labels → standard `Label` sentence-case 15px, matching the profile-form convention; hints → `text-sm`).
+- Hints sweep: [welcome-flow.tsx](../src/app/welcome/welcome-flow.tsx), profile-edit/guest-profile forms, [photo-upload.tsx](../src/components/photo-upload.tsx), [google-photos-picker.tsx](../src/components/google-photos-picker.tsx), [contacts-editor.tsx](../src/app/(app)/properties/[slug]/edit/contacts-editor.tsx) label.
+- Chips: [people-picker.tsx](../src/components/authoring/people-picker.tsx) + [chip-list-field.tsx](../src/components/authoring/chip-list-field.tsx) remove targets `size-5`→`size-8` (measured 32×32, chip 42px tall).
+- Body ≥16px: [panel.tsx](../src/components/shell/panel.tsx) PanelDescription, [page-intro.tsx](../src/components/shell/page-intro.tsx) context, [activity-digest.tsx](../src/components/shell/activity-digest.tsx) titles, [markdown.tsx](../src/components/markdown.tsx) salon `prose-p`, help intro → `text-base` (their old `sm:text-[0.95rem]` overrides would have become *smaller* than the new `text-sm`).
+
+**Live-verified** (prod-data dev server, logged in as Dan): tap instruction 15px; ARRIVE/LAST NIGHT/GUEST COUNT/NOTES 15px sentence case; date/guest inputs + submit + month-nav all 40px; lg buttons 44px; weekday header 13px; eyebrows 11px unchanged; two-tap selection → "4 nights · arrive Jul 8, depart Jul 12" at 15px; no horizontal overflow at ~325px; homepage/property/calendar composed in both themes. `tsc`, `eslint`, `next build` green.
+
+**Decisions / follow-ups**
+- Booking-form labels dropped the uppercase-tracking micro style entirely (PRD's "text-sm min" + copy-style sentence-case rule) instead of keeping uppercase at 15px, which read as heavy.
+- Left small on purpose: admin table column headers, badges, status pills, nav section micro-labels, avatar initials, archive photo-count pill — decorative eyebrow class.
+- Follow-up worth a future pass: a few decorative micro-labels sit at `text-[0.6rem]` (9.6px — below the 11px eyebrow standard): nav dropdown section labels, help-page area chips, admin-booking-row status. Not instructional, but inconsistent.
+- The user-menu avatar button has an explicit `size-9` (36px) override — unchanged, pre-existing.
 
 ## Reviewer sign-off (I check these)
 - [ ] Nothing instructional (label, hint, tap-instruction) renders below 14px — verified with `getComputedStyle` live, not by eyeballing source.

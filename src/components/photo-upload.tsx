@@ -193,7 +193,7 @@ export function PhotoUpload({
         >
           {isBusy ? `Uploading ${status.current}/${status.total}…` : label}
         </Button>
-        <p className="text-[0.6875rem] text-foreground-subtle">
+        <p className="text-sm text-foreground-subtle">
           JPG, PNG, WebP, GIF, HEIC · up to {MAX_MB}MB each · large photos are
           optimized for fast loading
         </p>
