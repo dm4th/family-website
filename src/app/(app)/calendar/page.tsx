@@ -11,6 +11,8 @@ import {
 import { SubscribeToCalendar } from "@/components/subscribe-to-calendar";
 
 import { MonthCalendar, type CalendarBand } from "../properties/[slug]/calendar/_components/month-calendar";
+import { expandOccurrences } from "@/lib/reminders";
+import type { ReminderRecurrence } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +90,7 @@ export default async function UnifiedCalendarPage() {
     const person = b.profiles?.full_name ?? b.profiles?.email ?? "—";
     const guests = `${b.guest_count} guest${b.guest_count === 1 ? "" : "s"}`;
     return {
-      bookingId: b.id,
+      id: b.id,
       startIso: b.start_date,
       endIso: b.end_date,
       status: b.status as "approved" | "pending",
@@ -96,6 +98,36 @@ export default async function UnifiedCalendarPage() {
       label: `${name} · ${person} (${guests})`,
     };
   });
+
+  // Reminders across every property (PRD 32, slice 3). Guests get an empty list
+  // from RLS rather than a filter here, so there is nothing to forget to apply.
+  const { data: remindersRaw } = await supabase
+    .from("property_reminders")
+    .select("id, property_id, title, due_date, recurrence")
+    .order("due_date", { ascending: true });
+  type ReminderRow = {
+    id: string;
+    property_id: string;
+    title: string;
+    due_date: string;
+    recurrence: ReminderRecurrence;
+  };
+  const reminders = (remindersRaw ?? []) as ReminderRow[];
+
+  const windowStart = start.toISOString().slice(0, 10);
+  const windowEnd = end.toISOString().slice(0, 10);
+  const reminderBands: CalendarBand[] = reminders.flatMap((r) =>
+    expandOccurrences(r.due_date, r.recurrence, windowStart, windowEnd).map(
+      (iso) => ({
+        id: `reminder-${r.id}-${iso}`,
+        startIso: iso,
+        endIso: iso,
+        status: "approved" as const,
+        kind: "reminder" as const,
+        label: `${propertyName.get(r.property_id) ?? "—"} · ${r.title}`,
+      }),
+    ),
+  );
 
   return (
     <div className="flex flex-col gap-14">
@@ -116,7 +148,7 @@ export default async function UnifiedCalendarPage() {
         </LedgerPanel>
       )}
 
-      <MonthCalendar bands={bands} />
+      <MonthCalendar bands={[...bands, ...reminderBands]} />
 
       <LedgerPanel className="px-5 py-6 sm:px-6 sm:py-7">
         <div className="flex flex-wrap items-center gap-4">

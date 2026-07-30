@@ -2,10 +2,31 @@ import { NextResponse } from "next/server";
 import { createEvents, type EventAttributes } from "ics";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  DEFAULT_HORIZON_MONTHS,
+  expandOccurrences,
+  parseYmd,
+  todayIso,
+  type ReminderRecurrence,
+} from "@/lib/reminders";
 
 export const dynamic = "force-dynamic";
 
 type RouteParams = Promise<{ scope: string }>;
+
+/** What either auth path resolves to. */
+type FeedData = { bookings: FeedBooking[]; reminders: FeedReminder[] };
+
+/** A reminder as the feed needs it, from either auth path. */
+type FeedReminder = {
+  id: string;
+  title: string;
+  notes: string | null;
+  due_date: string;
+  recurrence: ReminderRecurrence;
+  propertyName: string;
+  propertyLocation: string | null;
+};
 
 // Normalized booking shape both auth paths reduce to before event building.
 type FeedBooking = {
@@ -56,7 +77,7 @@ async function loadByToken(
   supabase: Awaited<ReturnType<typeof createClient>>,
   scope: string,
   token: string,
-): Promise<FeedBooking[] | null> {
+): Promise<FeedData | null> {
   // A feed token is always a uuid. Reject anything else up front as
   // unauthorized — otherwise PostgREST tries to cast it and raises a 22P02
   // (invalid_text_representation), which would surface as a 500 to a poller
@@ -85,7 +106,7 @@ async function loadByToken(
     guest_name: string | null;
     guest_email: string;
   };
-  return ((data ?? []) as Row[]).map((r) => ({
+  const bookings = ((data ?? []) as Row[]).map((r) => ({
     id: r.id,
     start_date: r.start_date,
     end_date: r.end_date,
@@ -95,6 +116,34 @@ async function loadByToken(
     propertyLocation: r.property_location,
     guestName: r.guest_name ?? r.guest_email,
   }));
+
+  // Reminders come from their own SECURITY DEFINER function, which repeats the
+  // same token/deactivation checks and returns nothing at all for a guest.
+  // Best-effort: a failure here costs the reminders, not the bookings.
+  const { data: reminderData } = await supabase.rpc("ics_reminders_for_token", {
+    p_token: token,
+    p_scope: scope,
+  });
+  type ReminderRpcRow = {
+    id: string;
+    title: string;
+    notes: string | null;
+    due_date: string;
+    recurrence: ReminderRecurrence;
+    property_name: string;
+    property_location: string | null;
+  };
+  const reminders = ((reminderData ?? []) as ReminderRpcRow[]).map((r) => ({
+    id: r.id,
+    title: r.title,
+    notes: r.notes,
+    due_date: r.due_date,
+    recurrence: r.recurrence,
+    propertyName: r.property_name,
+    propertyLocation: r.property_location,
+  }));
+
+  return { bookings, reminders };
 }
 
 /**
@@ -104,7 +153,7 @@ async function loadByToken(
 async function loadByCookie(
   supabase: Awaited<ReturnType<typeof createClient>>,
   scope: string,
-): Promise<FeedBooking[] | null> {
+): Promise<FeedData | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -130,6 +179,8 @@ async function loadByCookie(
     .eq("status", "approved")
     .order("start_date", { ascending: true });
 
+  // Scoping a property once, up front: both bookings and reminders need it.
+  let scopedPropertyId: string | null = null;
   if (scope === "me") {
     query = query.eq("requested_by", user.id);
   } else if (scope !== "all") {
@@ -138,13 +189,14 @@ async function loadByCookie(
       .select("id")
       .eq("slug", scope)
       .single();
-    if (!property) return [];
+    if (!property) return { bookings: [], reminders: [] };
+    scopedPropertyId = property.id;
     query = query.eq("property_id", property.id);
   }
 
   const { data } = await query;
   const rows = (data ?? []) as unknown as Row[];
-  return rows.map((r) => ({
+  const bookings = rows.map((r) => ({
     id: r.id,
     start_date: r.start_date,
     end_date: r.end_date,
@@ -154,6 +206,43 @@ async function loadByCookie(
     propertyLocation: r.properties?.location ?? null,
     guestName: r.profiles?.full_name ?? r.profiles?.email ?? "—",
   }));
+
+  // "me" is a personal booking feed; a reminder belongs to a property, not to a
+  // person, so that scope carries none. Mirrors ics_reminders_for_token.
+  // Guests get an empty list from RLS.
+  let reminders: FeedReminder[] = [];
+  if (scope !== "me") {
+    type ReminderRow = {
+      id: string;
+      title: string;
+      notes: string | null;
+      due_date: string;
+      recurrence: ReminderRecurrence;
+      properties: { name: string; location: string | null } | null;
+    };
+    let reminderQuery = supabase
+      .from("property_reminders")
+      .select(
+        `id, title, notes, due_date, recurrence,
+         properties:property_id ( name, location )`,
+      )
+      .order("due_date", { ascending: true });
+    if (scopedPropertyId) {
+      reminderQuery = reminderQuery.eq("property_id", scopedPropertyId);
+    }
+    const { data: reminderData } = await reminderQuery;
+    reminders = ((reminderData ?? []) as unknown as ReminderRow[]).map((r) => ({
+      id: r.id,
+      title: r.title,
+      notes: r.notes,
+      due_date: r.due_date,
+      recurrence: r.recurrence,
+      propertyName: r.properties?.name ?? "Property",
+      propertyLocation: r.properties?.location ?? null,
+    }));
+  }
+
+  return { bookings, reminders };
 }
 
 export async function GET(
@@ -165,14 +254,15 @@ export async function GET(
   const supabase = await createClient();
 
   // Token authorizes cookieless pollers; otherwise fall back to the session.
-  const bookings = token
+  const feed = token
     ? await loadByToken(supabase, scope, token)
     : await loadByCookie(supabase, scope);
 
-  if (bookings === null) {
+  if (feed === null) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
+  const { bookings, reminders } = feed;
   const title = feedTitle(scope, bookings);
   const events: EventAttributes[] = bookings.map((b) => ({
     title: `${b.propertyName} | ${b.guestName}`,
@@ -188,6 +278,49 @@ export async function GET(
     calName: title,
     productId: "mathiesonfamily.app/ics",
   }));
+
+  // Reminders are emitted as one all-day VEVENT per occurrence rather than as a
+  // single event carrying an RRULE. That is deliberate: RFC 5545's monthly rule
+  // SKIPS months that have no such day, so a bill due the 31st would simply
+  // vanish in February in the subscriber's calendar while still showing on the
+  // site, which clamps. Expanding here with the same function the site uses
+  // means the two can't tell a member different things. The cost is a bounded
+  // handful of extra VEVENTs.
+  const from = todayIso();
+  const horizonAnchor = parseYmd(from);
+  const horizonEnd = horizonAnchor
+    ? `${horizonAnchor.year + Math.floor(DEFAULT_HORIZON_MONTHS / 12)}-${String(
+        horizonAnchor.month,
+      ).padStart(2, "0")}-${String(horizonAnchor.day).padStart(2, "0")}`
+    : from;
+  for (const r of reminders) {
+    for (const iso of expandOccurrences(
+      r.due_date,
+      r.recurrence,
+      from,
+      horizonEnd,
+    )) {
+      const day = toDateArray(iso);
+      events.push({
+        title: `${r.propertyName} | ${r.title}`,
+        start: day,
+        // All-day, single day. DTEND is exclusive in RFC 5545, so the duration
+        // says one day rather than computing tomorrow's date by hand.
+        duration: { days: 1 },
+        // Occurrence-scoped uid: each date is its own event to the subscriber,
+        // and re-fetching the feed updates them in place rather than duplicating.
+        uid: `reminder-${r.id}-${iso}@mathiesonfamily.app`,
+        description: r.notes ?? undefined,
+        location: r.propertyLocation ?? undefined,
+        status: "CONFIRMED",
+        // A bill due doesn't make anyone unavailable.
+        busyStatus: "FREE",
+        transp: "TRANSPARENT",
+        calName: title,
+        productId: "mathiesonfamily.app/ics",
+      });
+    }
+  }
 
   const { error, value } = createEvents(events);
   if (error || !value) {

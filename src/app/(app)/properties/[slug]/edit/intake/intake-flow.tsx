@@ -13,7 +13,7 @@ import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { FormStatus } from "@/components/form-status";
-import { ReviewShell } from "@/components/intake/review-shell";
+import { ReviewShell, ReviewSection } from "@/components/intake/review-shell";
 import type { IntakeProperty } from "@/components/intake/property-carry-fields";
 import { createClient } from "@/lib/supabase/client";
 import { prepareImageForUpload } from "@/lib/image-resize";
@@ -23,11 +23,13 @@ import {
   MAX_INTAKE_BYTES,
   generateIntakePath,
   isAllowedIntakeMime,
+  type CalendarExtraction,
   type ContactExtraction,
   type IntakeIntent,
   type NoteExtraction,
 } from "@/lib/intake/schema";
 import { extractIntake, refreshIntakeProperty } from "./actions";
+import { CalendarReview } from "./calendar-review";
 import { ContactReview } from "./contact-review";
 import { NoteReview } from "./note-review";
 
@@ -59,6 +61,16 @@ const KINDS: {
       "These are our best read of your document. Correct anything that looks wrong, then save.",
   },
   {
+    intent: "calendar",
+    title: "A due date to remember",
+    blurb:
+      "A bill or notice with a payment date on it. We'll pull out the date and what it's for, and offer to put it on the calendar.",
+    button: "Choose a Document",
+    reviewTitle: "Here's the date we found",
+    reviewDescription:
+      "Nothing goes on the calendar until you press Save. Check the date against the document first.",
+  },
+  {
     intent: "note",
     title: "A handwritten note",
     blurb:
@@ -79,13 +91,29 @@ type Phase =
       intent: "contact";
       extraction: ContactExtraction;
       sourceUrl: string | null;
+      storagePath: string;
     }
   | {
       name: "review";
       intent: "note";
       extraction: NoteExtraction;
       sourceUrl: string | null;
+      storagePath: string;
+    }
+  | {
+      name: "review";
+      intent: "calendar";
+      extraction: CalendarExtraction;
+      sourceUrl: string | null;
+      storagePath: string;
     };
+
+/** State of the "also look for a due date" offer on a contact/note result. */
+type CrossPhase =
+  | { name: "idle" }
+  | { name: "working" }
+  | { name: "error"; message: string }
+  | { name: "ready"; extraction: CalendarExtraction };
 
 export function IntakeFlow({
   property: initialProperty,
@@ -101,6 +129,14 @@ export function IntakeFlow({
   /** True while the property is being re-read after a save. */
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  /**
+   * The "one upload, two records" offer (PRD 32, slice 3): after a document has
+   * been read for its contact details or as a note, the member can ask us to
+   * look at the *same* upload again for a due date. It re-reads rather than
+   * extracting everything up front, so a member who only wanted a phone number
+   * never pays for a second read.
+   */
+  const [cross, setCross] = useState<CrossPhase>({ name: "idle" });
   /** Which card is working, for the status line. Not used to route the upload. */
   const [pending, setPending] = useState<IntakeIntent | null>(null);
 
@@ -169,21 +205,32 @@ export function IntakeFlow({
         setPhase({ name: "error", message: result.message });
         return;
       }
-      setPhase(
-        result.intent === "note"
-          ? {
-              name: "review",
-              intent: "note",
-              extraction: result.extraction,
-              sourceUrl: result.sourceUrl,
-            }
-          : {
-              name: "review",
-              intent: "contact",
-              extraction: result.extraction,
-              sourceUrl: result.sourceUrl,
-            },
-      );
+      setCross({ name: "idle" });
+      if (result.intent === "note") {
+        setPhase({
+          name: "review",
+          intent: "note",
+          extraction: result.extraction,
+          sourceUrl: result.sourceUrl,
+          storagePath,
+        });
+      } else if (result.intent === "calendar") {
+        setPhase({
+          name: "review",
+          intent: "calendar",
+          extraction: result.extraction,
+          sourceUrl: result.sourceUrl,
+          storagePath,
+        });
+      } else {
+        setPhase({
+          name: "review",
+          intent: "contact",
+          extraction: result.extraction,
+          sourceUrl: result.sourceUrl,
+          storagePath,
+        });
+      }
     } catch (error) {
       setPhase({
         name: "error",
@@ -214,6 +261,21 @@ export function IntakeFlow({
     }
   }
 
+  /** Re-read the document already in storage, this time for a due date. */
+  async function handleAlsoCheckDates(storagePath: string) {
+    setCross({ name: "working" });
+    const result = await extractIntake(property.id, storagePath, "calendar");
+    if (result.status === "error") {
+      setCross({ name: "error", message: result.message });
+      return;
+    }
+    if (result.intent !== "calendar") {
+      setCross({ name: "error", message: "We couldn't read that for dates." });
+      return;
+    }
+    setCross({ name: "ready", extraction: result.extraction });
+  }
+
   if (phase.name === "review") {
     const reviewKind =
       KINDS.find((k) => k.intent === phase.intent) ?? KINDS[0];
@@ -222,28 +284,50 @@ export function IntakeFlow({
         title={reviewKind.reviewTitle}
         description={reviewKind.reviewDescription}
         rawText={
-          phase.intent === "contact" ? phase.extraction.rawText : undefined
+          phase.intent === "contact" || phase.intent === "calendar"
+            ? phase.extraction.rawText
+            : undefined
         }
         sourceUrl={phase.sourceUrl}
       >
-        {phase.intent === "note" ? (
-          <NoteReview
+        {phase.intent === "calendar" ? (
+          <CalendarReview
             property={property}
             extraction={phase.extraction}
-            canManage={canManage}
             onStartOver={() => setPhase({ name: "idle" })}
-            onPropertySaved={handlePropertySaved}
-            propertyBusy={refreshing}
           />
+        ) : phase.intent === "note" ? (
+          <>
+            <NoteReview
+              property={property}
+              extraction={phase.extraction}
+              canManage={canManage}
+              onStartOver={() => setPhase({ name: "idle" })}
+              onPropertySaved={handlePropertySaved}
+              propertyBusy={refreshing}
+            />
+            <AlsoCheckDates
+              property={property}
+              cross={cross}
+              onCheck={() => void handleAlsoCheckDates(phase.storagePath)}
+            />
+          </>
         ) : (
-          <ContactReview
-            property={property}
-            extraction={phase.extraction}
-            canManage={canManage}
-            onStartOver={() => setPhase({ name: "idle" })}
-            onPropertySaved={handlePropertySaved}
-            propertyBusy={refreshing}
-          />
+          <>
+            <ContactReview
+              property={property}
+              extraction={phase.extraction}
+              canManage={canManage}
+              onStartOver={() => setPhase({ name: "idle" })}
+              onPropertySaved={handlePropertySaved}
+              propertyBusy={refreshing}
+            />
+            <AlsoCheckDates
+              property={property}
+              cross={cross}
+              onCheck={() => void handleAlsoCheckDates(phase.storagePath)}
+            />
+          </>
         )}
       </ReviewShell>
     );
@@ -287,6 +371,59 @@ export function IntakeFlow({
             : null}
       </FormStatus>
     </div>
+  );
+}
+
+/**
+ * "One upload, two records" (PRD 32, slice 3).
+ *
+ * Offered after a document has already been read some other way, because the
+ * file is still in storage and reading it again for a date costs a fraction of a
+ * cent. Deliberately a button rather than something we do automatically: a
+ * member who photographed a bill to get the plumber's number shouldn't be
+ * charged for a second read, or handed a calendar form they didn't ask for.
+ */
+function AlsoCheckDates({
+  property,
+  cross,
+  onCheck,
+}: {
+  property: IntakeProperty;
+  cross: CrossPhase;
+  onCheck: () => void;
+}) {
+  if (cross.name === "ready") {
+    return (
+      <CalendarReview
+        property={property}
+        extraction={cross.extraction}
+        // Already inside a review; "start over" here just hides the offer again
+        // rather than throwing away the contact form above it.
+        onStartOver={() => {}}
+      />
+    );
+  }
+
+  return (
+    <ReviewSection label="Also on this document">
+      <p className="text-base text-foreground-muted">
+        Does this document have a payment date on it? We can look, and offer to
+        put it on {property.name}&rsquo;s calendar.
+      </p>
+      <div className="flex items-center gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={cross.name === "working"}
+          onClick={onCheck}
+        >
+          {cross.name === "working" ? "Looking…" : "Check for a Due Date"}
+        </Button>
+        <FormStatus tone="error">
+          {cross.name === "error" ? cross.message : null}
+        </FormStatus>
+      </div>
+    </ReviewSection>
   );
 }
 

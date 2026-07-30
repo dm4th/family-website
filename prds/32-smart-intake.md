@@ -1,7 +1,7 @@
 # 32 — Smart Intake (Photo → Pre-filled Property & Calendar Details)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 03 (properties + `property_contacts` + `canManageProperty`), 05 (Supabase Storage upload), 06 (bookings/calendar + `events`), 27 (direct-write posture — AI never writes, only pre-fills)
-**Status**: ✅ slice 1 shipped ([PR #32](https://github.com/dm4th/family-website/pull/32), merged 2026-07-30). 🚧 slice 2 (handwritten notes) in review (2026-07-30). Slice 3 (calendar events) still 🟢 ready. **Dependency: server-side Claude vision (Anthropic API key), model `claude-haiku-4-5`.**
+**Status**: ✅ slices 1 & 2 shipped ([PR #32](https://github.com/dm4th/family-website/pull/32), [PR #33](https://github.com/dm4th/family-website/pull/33), both merged + reviewer-verified live on prod 2026-07-30). 🚧 slice 3 (calendar reminders) built 2026-07-30, in review. **Dependency: server-side Claude vision (Anthropic API key), model `claude-haiku-4-5`.** **Slice 3 also adds a `property_reminders` table + migration** — the "existing calendar/event create action" it was specified against did not exist (see its Implementation section).
 **Parallel-safe with**: most feature PRDs (adds a new intake route + one server action; touches the existing contacts / property / calendar forms only to accept pre-filled initial values).
 
 **Slices are sequenced and each ships behind Dan's review** (I review every slice PR before merge). The full three-slice build is written out below so the implementing agent has the complete trajectory up front — Slice 1's foundations (the extraction service, the review-and-save UI shell, the source-file store) are deliberately built to be reused by Slices 2 and 3. Build Slice 1 first, but build it knowing 2 and 3 are coming.
@@ -125,36 +125,46 @@ src/components/intake/review-shell.tsx           # reusable "read it, edit, conf
 
 ---
 
-## Slice 3 — Calendar events from due dates
+## Slice 3 — Property reminders + calendar events from due dates
 
-**What it does.** A bill (fresh or re-uploaded) → extract the **due date + amount + what it's for** → pre-fill a **calendar event** on the property, with an optional **recurrence** ("every month", "annually") → member reviews → Save. Turns "water bill due the 15th" into a reminder without hand-entering a date.
+> **Scope corrected at build time (2026-07-30).** The original spec said Save routes through "the existing calendar/event create action" — the build-time check the spec required found **no such action exists**. `bookings` is stays-only (start/end dates, guest counts, approval workflow — every calendar surface reads from it and nothing else), and `events` is, despite the name, the Family Legacy Timeline from [PRD 11] (`event_year NOT NULL`, no `property_id` — a utility bill filed there would land on the family history spine). Neither can absorb a due-date reminder. **Dan's call: build a property reminders model first, then the intake half on top.** That ordering preserves the core principle — intake stays a pre-fill over a normal, human-usable, gated feature; the AI never gets a write path of its own.
 
-**Why last.** It's the highest-value *different* target (deadlines slipping is the other big pain), but it points at the calendar/`events` model rather than property fields, so it's the cleanest thing to add once the property-details surface (Slices 1–2) is solid. It still reuses the whole pipeline — only a new schema + a review form on the existing calendar create path.
+**What it does.** Two halves, built in order:
 
-**Extraction target — a calendar event** (map to the existing `events` / booking-calendar model from [PRD 06]; confirm exact table + create action at build time):
+**Half A — property reminders (the calendar feature).** A first-class reminders model for property-scoped dates ("Water bill due Aug 15", "Chimney sweep in October"), usable entirely by hand with no intake involved:
+- New table (e.g. `property_reminders`): `property_id`, title, date, optional recurrence, optional notes/amount text, `created_by`, timestamps. RLS from day one, matching the wiki posture (members create/edit, guests read only what their property grant allows — mirror how `bookings` scopes).
+- A gated create/edit/delete Server Action with `recordRevision()` — the same audit posture as every other write.
+- Rendering on the **property calendar**, the **unified `/calendar`**, and the **ICS feed** (`/api/ics/[scope]`). ⚠️ The ICS function is post-PRD-25 security-sensitive: reminders in the feed must respect the same guest-collapse scoping the booking rows do.
+- **Production migration required** (the first since slice 1).
+
+**Half B — the intake layer (the original slice 3).** A bill → extract **due date + amount + what it's for** → pre-fill a reminder, with optional proposed recurrence → member reviews → Save through Half A's action:
 | Extracted from bill | Field |
 |---|---|
-| Due date | event date |
-| "Water bill", vendor | title / description ("Water bill due — PG&E") |
-| Amount due | included in description/notes (not a money column unless one exists) |
+| Due date | reminder date |
+| "Water bill", vendor | title ("Water bill due, PG&E") |
+| Amount due | notes text (not a money column) |
 | "monthly", "quarterly", "annual" billing | proposed recurrence (member confirms; default one-off if unsure) |
 
 **In scope**
-- New `calendar` intent + schema; new prompt path in `extractIntake`.
-- A calendar review form dropped into the shared review shell; Save routes through the **existing** calendar/event create action (unchanged, same gating + audit).
-- **From a Slice 1 or 2 result, offer both**: after a bill is read, if a due date was found, offer "also add a reminder to the calendar?" — so one upload can produce a contact *and* an event, each separately confirmed and saved. (This is the payoff of building the pipeline generically in Slice 1.)
+- Half A in full, as above.
+- New `calendar` intent + schema in the intent registry; a reminder review form in the shared review shell; Save routes through Half A's gated action.
+- **From a Slice 1 result, offer both**: after a bill is read, if a due date was found, offer "also add a reminder?" — one upload can produce a contact *and* a reminder, each separately confirmed and saved.
 - Recurrence: only propose it, never assume; a wrong recurrence must be one edit to fix or drop.
 
 **Out of scope**
-- Auto-creating events without confirmation (violates the core principle).
+- Auto-creating reminders without confirmation (violates the core principle).
 - Any payment/settlement/finance integration — this is a *reminder*, not a ledger.
+- Reminder notifications/emails (a natural later follow-on via the PRD-14 Resend plumbing, not this slice).
+- Touching `bookings` or the Legacy `events` table.
 
 **Verification**
-1. Bill with a clear due date → event pre-filled on the right date → Save → appears on the property + unified calendar.
-2. Recurring bill → recurrence proposed, editable, correct after Save; declining recurrence yields a one-off.
-3. One upload, two records — contact (Slice 1) **and** event, each confirmed separately, each with its own revision.
-4. No due date found → no event offered (no empty/garbage event).
-5. Abandon → zero events created. Guest blocked. Secret hygiene holds.
+1. **Half A stands alone**: a member hand-creates a reminder → appears on the property calendar, the unified calendar, and the ICS feed; edit + delete work; revision logged; guest sees only reminders for their granted property, and the ICS guest-collapse still holds (re-run the PRD-25 negative check with a guest token).
+2. Bill with a clear due date → reminder pre-filled on the right date → Save → appears on all three calendar surfaces.
+3. Recurring bill → recurrence proposed, editable, correct after Save; declining recurrence yields a one-off.
+4. One upload, two records — contact (Slice 1) **and** reminder, each confirmed separately, each with its own revision.
+5. No due date found → no reminder offered (no empty/garbage reminder).
+6. Abandon → zero reminders created. Guest blocked. Secret hygiene holds.
+7. Migration applied to prod + RLS suite green before the intake half is live-walked.
 
 ---
 
@@ -353,8 +363,135 @@ Fixed by re-reading the property after any save (`refreshIntakeProperty`, read-o
 
 **Verified live** (localhost, production Supabase, on Loon-A-See): before the first save the How-To form carried the page-load guidelines; after saving Guidelines it carried the newly stored text, `\r\n` line endings and all, confirming the value came back from the database rather than from client state. Loon-A-See's guidelines were then restored byte-for-byte to their original value, and `how_to`, `description`, and `location` were never touched.
 
+**Save path — walked live by the reviewer post-merge (2026-07-30, production deploy `ded12a8`, on Loon-A-See).** All three destinations exercised end-to-end with a synthetic handwritten note, in the exact sequence the review bug would have broken:
+- **Transcription was word-perfect** — every line, including "plumber → Jim Farrow 207-555-0143". The unconditional "Please check this against the photo" warning rendered, and the source-photo link was present.
+- **The reverting sequence passed.** Saved Guidelines ("Saved to Loon-A-See."), then immediately saved How-To. A fresh reload read both fields from the database: guidelines held the original text **plus** all three new rules, how-to held the original **plus** the shut-off / gate code / furnace lines. Pre-fix, the guidelines addition would have been silently reverted; the fix holds in production.
+- **Contact saved digit-exact**: Plumber / Jim Farrow / 207-555-0143, with the parenthetical ("call before 4, no weekends") correctly routed into notes.
+- **Cleanup:** guidelines and how-to restored byte-for-byte to their originals, the test contact deleted via the confirm dialog, address untouched throughout; a fresh reload confirmed the property back in its original state. The walk's intake source object + provenance row remain (retention follow-up below).
+
 **Follow-ups**
 
 - Retention/GC for the `intake` bucket and `intake_documents` is now overdue: three test rows across two slices, no way to see or remove them in the app.
 - The `guidelines` vs `how_to` split is a judgement call the model gets right about 80% of the time and the member fixes in a second. If it annoys anyone, the fix is one screen showing both boxes side by side rather than a better prompt.
 - Confidence calibration on the note intent is worth re-testing whenever the prompt or model changes; today it's uniformly `high` and carries no information.
+
+---
+
+### Slice 3 — calendar events from due dates (built 2026-07-30)
+
+**The premise didn't hold, and that changed the shape of the slice.**
+
+Slice 3 was specified as "Save routes through the **existing** calendar/event
+create action (unchanged, same gating + audit)". There is no such action. The
+PRD flagged this ("confirm exact table + create action at build time") and the
+check came back negative:
+
+- **`bookings`** are stays: `start_date`/`end_date`, `guest_count`,
+  `requested_by`, a pending/approved/declined workflow. Every calendar surface
+  (property calendar, unified `/calendar`, the ICS feed) reads this table and
+  only this table. A bill due date is not a stay and has none of those fields.
+- **`events`**, despite the name, is the Family Legacy Timeline (PRD 11):
+  `event_year` NOT NULL, no `property_id`, rendered as narrative anchors on the
+  family history spine. Filing "Water bill due" there would put a utility bill
+  on the family timeline.
+
+So the slice became two pieces, in this order: build the reminder model as
+ordinary property data a member can add by hand, then let Smart Intake pre-fill
+it like any other form. Dan chose this over descoping. **The AI-never-writes
+principle is unchanged** — intake is a consumer of `addPropertyReminder`, with
+no privileges the manual form doesn't have.
+
+**Key files — the reminder model (part 1)**
+
+- [supabase/migrations/20260730000002_property_reminders.sql](../supabase/migrations/20260730000002_property_reminders.sql)
+  — `property_reminders` table, RLS, and `ics_reminders_for_token()`.
+- [src/lib/reminders.ts](../src/lib/reminders.ts) — recurrence expansion, pure.
+- [src/app/(app)/properties/[slug]/reminders/actions.ts](../src/app/(app)/properties/[slug]/reminders/actions.ts)
+  — the gated write path (create / update / delete, each with `recordRevision`).
+- [src/components/reminders/reminder-fields.tsx](../src/components/reminders/reminder-fields.tsx)
+  — the editable fields, shared by the manual form and the intake review form.
+- [src/app/(app)/properties/[slug]/calendar/_components/reminders-panel.tsx](../src/app/(app)/properties/[slug]/calendar/_components/reminders-panel.tsx)
+  — list, add, edit, remove on the property calendar.
+- [src/lib/use-notify-on-save.ts](../src/lib/use-notify-on-save.ts) — slice 2's
+  one-shot save signal, moved out of `property-carry-fields.tsx` (re-exported
+  there) now that a second feature needs it.
+
+**Key files — the intake intent (part 2)**
+
+- `calendar` intent added to `INTAKE_INTENTS`, with `CALENDAR_EXTRACTION_*` and
+  `parseCalendarExtraction` in [src/lib/intake/schema.ts](../src/lib/intake/schema.ts);
+  one more entry in the `INTENTS` registry in
+  [src/lib/intake/extract.ts](../src/lib/intake/extract.ts). The pipeline itself
+  is untouched from slice 1, as designed.
+- [src/app/(app)/properties/[slug]/edit/intake/calendar-review.tsx](../src/app/(app)/properties/[slug]/edit/intake/calendar-review.tsx)
+  — the review form.
+- [evals/intake/make-bills-dated.py](../evals/intake/make-bills-dated.py) +
+  [eval-calendar.mts](../evals/intake/eval-calendar.mts) +
+  [results-calendar-2026-07-30.md](../evals/intake/results-calendar-2026-07-30.md).
+
+**Decisions made during the build**
+
+- **Not a ledger.** No amount column, no paid/unpaid state. An amount is free
+  text inside `notes`, the way it would be written on a calendar square. PRD 32
+  puts payments out of scope and a money column would imply arithmetic we never
+  do.
+- **Repeats are a rule, not rows.** One recurring reminder is one row, expanded
+  on demand. Materializing would mean guessing how far ahead to write and would
+  turn "fix the date" into "fix it in eighty places".
+- **Month-end clamping, and the feed expands rather than emitting an RRULE.**
+  A bill due the 31st has no 31st of February. RFC 5545's monthly rule *skips*
+  such months; we clamp to the 28th, because a member who set "the 31st" means
+  end of month and a reminder that silently vanishes is worse than one arriving
+  two days early. To stop the site and a subscriber's phone applying different
+  rules, the ICS feed emits one VEVENT per expanded occurrence over a 24-month
+  horizon, from the same function the calendar renders from.
+- **Guests see no reminders at all** — stricter than `property_contacts`, which
+  a granted guest can read. A contact is "who to call about the boiler"; a
+  reminder is "premium due the 15th, $2,400, policy 88-42213". Enforced in RLS,
+  and `ics_reminders_for_token` returns early for a guest at any scope rather
+  than filtering, so the feed can't become the way around it.
+- **One upload, two records** (a PRD in-scope item) is a re-read, not a bigger
+  schema: after a bill has been read for its contact details or as a note, a
+  button re-reads the *same stored file* with the calendar intent. It costs a
+  third of a cent and only when asked, so a member who wanted a phone number
+  isn't charged for a calendar form they didn't want. The `intake_documents`
+  insert became an upsert (`storage_path` is unique) to allow the second pass.
+- **Reminders are drawn as bronze markers, never filled bands.** "The house is
+  occupied" and "a bill is due" must not look alike on a calendar square.
+
+**Verification**
+
+- **Recurrence math is checked directly** ([evals/reminders/recurrence-check.mts](../evals/reminders/recurrence-check.mts),
+  26 checks): month-end clamping, leap years, windows starting mid-repeat,
+  occurrences before the due date, malformed input. It caught a real bug on
+  first run — the jump-to-window optimization counted months where it should
+  have counted occurrences, so quarterly and annual reminders skipped far past
+  the window and returned nothing. Monthly (step 1) hid it.
+- **Extraction eval: 36 extractions, ~$0.0033/doc, 3.4s median.** 81% correct,
+  14% correct restraint, one missed, **one fabrication**. Restraint was perfect:
+  the paid receipt produced zero reminders in all six runs at every photo
+  quality (PRD verification #4, measured).
+- The fabrication was a **wrong year** (2025 for 2026) on a degraded invoice
+  printing `Due: 08/14` with the year only in the statement date. That's the
+  worst shape a date error takes: day and month right, so it reads as correct.
+  **Mitigation shipped** — the review form flags any proposed date already in
+  the past and asks the member to check the year. Flagged, never dropped:
+  entering a genuinely overdue bill is a real thing.
+- **Confidence is informative on this intent**, unlike slice 2: all 36 "high"
+  rows were right and every error fell on a "medium" row. The review form's
+  confidence-gated wording is therefore kept, where slice 2's had to be
+  unconditional.
+
+**Follow-ups**
+
+- Recurrence overreach: the property-tax notice was labelled "annually" in 3 of
+  12 rows on a page that never says it repeats. Bounded (the form states the
+  proposed repeat and how to drop it, and nothing saves unconfirmed) and left
+  alone rather than over-fitting the prompt to one synthetic document.
+- A reminder has no "done" state, so a one-off in the past simply reads as
+  past. If the family wants to tick things off, that's a real feature, not a
+  tweak.
+- No reminder appears on the property's main page or on the home dashboard yet
+  — only on the two calendars and the feed.
+- The `intake` bucket retention/cleanup follow-up from slices 1 and 2 still
+  stands and is now the oldest open item on this PRD.

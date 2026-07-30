@@ -12,12 +12,23 @@ import {
 } from "date-fns";
 
 export type CalendarBand = {
-  bookingId: string;
+  id: string;
   startIso: string; // YYYY-MM-DD, inclusive (first stay night)
-  endIso: string; // YYYY-MM-DD, EXCLUSIVE (checkout — not painted)
+  /**
+   * YYYY-MM-DD, EXCLUSIVE (checkout — not painted). Ignored when
+   * `kind: "reminder"`, which occupies only `startIso`.
+   */
+  endIso: string;
   status: "approved" | "pending";
   tone?: string; // optional CSS color, used by unified /calendar
   label?: string;
+  /**
+   * What this band represents. Stays are ranges painted as a solid block;
+   * reminders (PRD 32, slice 3) are single dated obligations and are drawn as a
+   * small bronze marker instead, so "the house is occupied" and "a bill is due"
+   * can never be mistaken for one another at a glance.
+   */
+  kind?: "booking" | "reminder";
 };
 
 /**
@@ -120,13 +131,19 @@ export function MonthCalendar({
   // so the band stops short of that day.
   const bandsByDay = useMemo(() => {
     const map = new Map<string, CalendarBand[]>();
+    const put = (key: string, b: CalendarBand) => {
+      const arr = map.get(key) ?? [];
+      arr.push(b);
+      map.set(key, arr);
+    };
     for (const b of bands) {
-      for (const d of eachStayNight(b.startIso, b.endIso)) {
-        const key = toIso(d);
-        const arr = map.get(key) ?? [];
-        arr.push(b);
-        map.set(key, arr);
+      // A reminder is a single square, not a range — it has no checkout day to
+      // stop short of.
+      if (b.kind === "reminder") {
+        put(b.startIso, b);
+        continue;
       }
+      for (const d of eachStayNight(b.startIso, b.endIso)) put(toIso(d), b);
     }
     return map;
   }, [bands]);
@@ -221,24 +238,43 @@ export function MonthCalendar({
                 </span>
               </div>
               <div className="mt-1 flex flex-col gap-0.5">
-                {cellBands.slice(0, 3).map((b) => (
-                  <div
-                    key={b.bookingId + iso}
-                    className={
-                      b.status === "approved"
-                        ? "truncate rounded-sm px-1 py-0.5 text-xs text-accent-operations-foreground"
-                        : "truncate rounded-sm border border-dashed border-accent-bronze/60 px-1 py-0.5 text-xs text-foreground-muted"
-                    }
-                    style={
-                      b.status === "approved"
-                        ? { backgroundColor: b.tone ?? "var(--accent-operations)" }
-                        : undefined
-                    }
-                    title={b.label}
-                  >
-                    {b.label ?? (b.status === "approved" ? "booked" : "pending")}
-                  </div>
-                ))}
+                {cellBands.slice(0, 3).map((b) => {
+                  // Reminders read as a marked note against the day, never as a
+                  // filled block — a bill due on the 15th must not look like the
+                  // house being occupied on the 15th.
+                  if (b.kind === "reminder") {
+                    return (
+                      <div
+                        key={b.id + iso}
+                        className="truncate rounded-sm border-l-2 border-accent-bronze bg-accent-bronze/10 px-1 py-0.5 text-xs text-foreground"
+                        title={b.label}
+                      >
+                        {b.label ?? "Due"}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div
+                      key={b.id + iso}
+                      className={
+                        b.status === "approved"
+                          ? "truncate rounded-sm px-1 py-0.5 text-xs text-accent-operations-foreground"
+                          : "truncate rounded-sm border border-dashed border-accent-bronze/60 px-1 py-0.5 text-xs text-foreground-muted"
+                      }
+                      style={
+                        b.status === "approved"
+                          ? {
+                              backgroundColor:
+                                b.tone ?? "var(--accent-operations)",
+                            }
+                          : undefined
+                      }
+                      title={b.label}
+                    >
+                      {b.label ?? (b.status === "approved" ? "booked" : "pending")}
+                    </div>
+                  );
+                })}
                 {cellBands.length > 3 && (
                   <span className="text-xs text-foreground-subtle">
                     +{cellBands.length - 3} more

@@ -9,6 +9,7 @@ import {
   isAllowedIntakeMime,
   isIntakeIntent,
   isValidIntakePath,
+  type CalendarExtraction,
   type ContactExtraction,
   type IntakeIntent,
   type NoteExtraction,
@@ -84,6 +85,12 @@ export type ExtractIntakeState =
       status: "ok";
       intent: "note";
       extraction: NoteExtraction;
+      sourceUrl: string | null;
+    }
+  | {
+      status: "ok";
+      intent: "calendar";
+      extraction: CalendarExtraction;
       sourceUrl: string | null;
     }
   | { status: "error"; message: string };
@@ -173,14 +180,25 @@ export async function extractIntake(
   // original can be re-opened if a pre-filled field looks wrong. Written after
   // a successful read and best-effort — a failure here costs us the audit line,
   // not the member's work.
-  const { error: recordError } = await supabase.from("intake_documents").insert({
-    property_id: propertyId,
-    storage_path: storagePath,
-    content_type: contentType,
-    byte_size: file.size,
-    intent,
-    uploaded_by: viewer.userId,
-  });
+  //
+  // Upsert rather than insert, because slice 3 lets a member read one upload a
+  // second way ("also check this bill for a due date") and `storage_path` is
+  // unique. The row records that this document was read for this property, which
+  // stays true; it keeps the intent of the first read rather than growing a row
+  // per pass.
+  const { error: recordError } = await supabase
+    .from("intake_documents")
+    .upsert(
+      {
+        property_id: propertyId,
+        storage_path: storagePath,
+        content_type: contentType,
+        byte_size: file.size,
+        intent,
+        uploaded_by: viewer.userId,
+      },
+      { onConflict: "storage_path", ignoreDuplicates: true },
+    );
   if (recordError) {
     console.error("[intake] could not record source document", recordError);
   }
@@ -194,12 +212,27 @@ export async function extractIntake(
   const sourceUrl = signed?.signedUrl ?? null;
 
   // Narrowed by intent so each caller gets the extraction type it expects.
-  return result.intent === "note"
-    ? { status: "ok", intent: "note", extraction: result.extraction, sourceUrl }
-    : {
+  switch (result.intent) {
+    case "note":
+      return {
+        status: "ok",
+        intent: "note",
+        extraction: result.extraction,
+        sourceUrl,
+      };
+    case "calendar":
+      return {
+        status: "ok",
+        intent: "calendar",
+        extraction: result.extraction,
+        sourceUrl,
+      };
+    default:
+      return {
         status: "ok",
         intent: "contact",
         extraction: result.extraction,
         sourceUrl,
       };
+  }
 }

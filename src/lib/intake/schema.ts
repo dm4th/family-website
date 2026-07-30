@@ -10,9 +10,16 @@
 // 3 adds "calendar" here — the pipeline around this file is deliberately
 // intent-driven so a new target adds a schema and a review form, not a new path.
 
-export type IntakeIntent = "contact" | "note";
+import {
+  RECURRENCE_VALUES,
+  isReminderRecurrence,
+  parseYmd,
+  type ReminderRecurrence,
+} from "@/lib/reminders";
 
-export const INTAKE_INTENTS: IntakeIntent[] = ["contact", "note"];
+export type IntakeIntent = "contact" | "note" | "calendar";
+
+export const INTAKE_INTENTS: IntakeIntent[] = ["contact", "note", "calendar"];
 
 export function isIntakeIntent(value: unknown): value is IntakeIntent {
   return (
@@ -86,6 +93,45 @@ export type NoteExtraction = {
 
 /** Ceiling on offered contacts. A note listing more than this is really a list. */
 export const MAX_SUGGESTED_CONTACTS = 6;
+
+// --- Calendar intent (slice 3) ---------------------------------------------
+
+/**
+ * A dated obligation read off a bill, offered as a pre-filled reminder.
+ *
+ * `dueDate` is the whole point, so it is the one thing that is not optional: a
+ * suggestion whose date we can't resolve to a real calendar day is dropped in
+ * `parseCalendarExtraction` rather than offered with a blank box. "No due date
+ * found means no reminder offered" is a PRD requirement, and the alternative —
+ * a half-filled form that looks like we found something — is worse than nothing
+ * for a member who is trusting the read.
+ *
+ * `amount` is deliberately a string, not a number: it is displayed and stored as
+ * text in the reminder's notes. Reminders are not a ledger (PRD 32 puts
+ * payments explicitly out of scope), and parsing "$1,204.55" into a float would
+ * imply an arithmetic we never do.
+ */
+export type SuggestedReminder = {
+  title: string | null;
+  dueDate: string; // YYYY-MM-DD, already validated against the real calendar
+  amount: string | null;
+  notes: string | null;
+  recurrence: ReminderRecurrence;
+  confidence: FieldConfidence;
+};
+
+export type CalendarExtraction = {
+  reminders: SuggestedReminder[];
+  /** The model's plain-text read, for the "what did it see?" panel. */
+  rawText: string;
+};
+
+/**
+ * Ceiling on offered reminders. A bill has one due date; an installment notice
+ * might list four. More than that and we're reading a statement of account, not
+ * a thing to be reminded about.
+ */
+export const MAX_SUGGESTED_REMINDERS = 4;
 
 // --- Upload guardrails -----------------------------------------------------
 
@@ -316,6 +362,88 @@ Transcribe it, then sort what it says into the places it belongs. Rules:
 - Leave a section null when the note simply doesn't cover it. An empty section is a correct answer, not a failure.
 - Do not describe the image, add commentary, or return anything outside the schema.`;
 
+/**
+ * The calendar schema. Keeps `rawText` (unlike the note intent) because a bill
+ * is dense and mostly irrelevant: the member is confirming three or four values
+ * pulled out of a page of small print, and wants to see what we read them from.
+ */
+export const CALENDAR_EXTRACTION_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    reminders: {
+      type: "array",
+      // No `maxItems` — structured outputs reject it on an array with a 400.
+      // Capped for real in `parseCalendarExtraction`. (Same finding as slice 2.)
+      description: `Dates this document says something must be paid or done by. An empty array if it shows no due date at all. At most ${MAX_SUGGESTED_REMINDERS}.`,
+      items: {
+        type: "object",
+        properties: {
+          title: {
+            type: ["string", "null"],
+            description:
+              'What the payment is for, in two or three words a family would recognise: "Water bill", "Home insurance", "Property tax". Not the full vendor name, and not the word "Bill" on its own.',
+          },
+          dueDate: {
+            type: ["string", "null"],
+            description:
+              "The due date as YYYY-MM-DD. If the document prints a day and month but no year, work the year out from the statement or billing date printed on the same document. If you cannot establish the year that way, return null rather than assuming the current one. Return null if no due date is shown.",
+          },
+          amount: {
+            type: ["string", "null"],
+            description:
+              'The amount due, exactly as printed including the currency symbol, e.g. "$412.30". Null if no amount is shown.',
+          },
+          notes: {
+            type: ["string", "null"],
+            description:
+              "The account or policy number and the billing period, in one short plain-text line. Do not repeat the amount here.",
+          },
+          recurrence: {
+            type: "string",
+            enum: RECURRENCE_VALUES,
+            description:
+              'How often this recurs, but ONLY if the document says so — "monthly statement", "quarterly premium", "annual renewal". If it does not say, answer "none". Do not infer a repeat from the kind of bill it appears to be.',
+          },
+          confidence: {
+            type: "string",
+            enum: ["high", "medium", "low"],
+            description:
+              "How sure you are of the date above specifically. Use low for anything you had to work out rather than read.",
+          },
+        },
+        required: [
+          "title",
+          "dueDate",
+          "amount",
+          "notes",
+          "recurrence",
+          "confidence",
+        ],
+        additionalProperties: false,
+      },
+    },
+    rawText: {
+      type: "string",
+      description:
+        "Your plain-text read of the document, so a person can check your work. Keep it under 2000 characters.",
+    },
+  },
+  required: ["reminders", "rawText"],
+  additionalProperties: false,
+} as const;
+
+export const CALENDAR_EXTRACTION_PROMPT = `You are reading a photograph or scan of a household bill, statement, or notice for a family's property records.
+
+Find the dates by which something must be paid or done, so a family member can confirm them and put them on the calendar. Rules:
+
+- A due date is a deadline the document sets. A statement date, a billing period, a meter reading date, and a "payments received by" date are NOT due dates. If the document sets no deadline, return an empty list. That is a correct answer.
+- Give the date as YYYY-MM-DD. If the year is not printed next to the day and month, work it out from the statement or billing date on the same document. If you cannot, return null for the date rather than guessing a year, and do not fall back to the current year.
+- Never invent a date, an amount, or an account number. Copy what is printed.
+- Only set a recurrence if the document itself says the charge repeats. "Monthly statement" or "annual premium" is evidence; a water bill merely looking like a water bill is not. When in doubt answer "none" — a member can set a repeat in one click, but a repeat nobody asked for puts a wrong entry on the calendar every month.
+- Title it the way a family would say it out loud: "Water bill", not "Municipal Water & Sewer Authority Consolidated Statement".
+- Be honest with confidence, and use "low" for any date you worked out rather than read directly.
+- Do not describe the image, add commentary, or return anything outside the schema.`;
+
 // --- Validation ------------------------------------------------------------
 
 const MAX_FIELD_CHARS = 500;
@@ -419,4 +547,57 @@ export function parseNoteExtraction(raw: unknown): NoteExtraction {
     suggestedHowTo: readField(record.suggestedHowTo, MAX_PROSE_CHARS),
     suggestedContacts,
   };
+}
+
+/**
+ * The calendar-intent counterpart. Same posture again: validate, don't trust.
+ *
+ * The date check is the substance of this one. `parseYmd` rejects anything that
+ * isn't a real calendar day, which catches both the obvious garbage ("next
+ * Tuesday", "03/15") and the plausible garbage that matters more — "2027-02-30",
+ * a well-formed string naming a day that doesn't exist. A suggestion that fails
+ * it is dropped rather than offered with an empty date box, because a reminder
+ * with no date is not a reminder, and half-filling the form would present a
+ * failed read as a successful one.
+ */
+export function parseCalendarExtraction(raw: unknown): CalendarExtraction {
+  const record = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+
+  const rawReminders = Array.isArray(record.reminders)
+    ? record.reminders.slice(0, MAX_SUGGESTED_REMINDERS)
+    : [];
+
+  const reminders = rawReminders
+    .map((entry): SuggestedReminder | null => {
+      const r = (entry && typeof entry === "object" ? entry : {}) as Record<
+        string,
+        unknown
+      >;
+      const dueDate = readString(r.dueDate, 10);
+      if (!dueDate || !parseYmd(dueDate)) return null;
+
+      const recurrence: ReminderRecurrence = isReminderRecurrence(r.recurrence)
+        ? r.recurrence
+        : "none";
+
+      return {
+        title: readString(r.title, MAX_FIELD_CHARS),
+        dueDate,
+        amount: readString(r.amount, MAX_FIELD_CHARS),
+        notes: readString(r.notes, MAX_FIELD_CHARS),
+        recurrence,
+        confidence: readConfidence(r.confidence),
+      };
+    })
+    .filter((r): r is SuggestedReminder => r !== null);
+
+  const rawText =
+    typeof record.rawText === "string"
+      ? record.rawText.slice(0, MAX_RAW_TEXT_CHARS)
+      : "";
+
+  return { reminders, rawText };
 }

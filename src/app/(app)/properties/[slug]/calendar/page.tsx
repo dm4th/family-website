@@ -19,6 +19,11 @@ import { BookingRequestForm } from "./_components/booking-request-form";
 import { AdminBookingRow } from "./_components/admin-booking-row";
 import { OwnBookingCancel } from "./_components/own-booking-cancel";
 import { MonthCalendar, type CalendarBand } from "./_components/month-calendar";
+import {
+  RemindersPanel,
+  type ReminderRow,
+} from "./_components/reminders-panel";
+import { expandOccurrences } from "@/lib/reminders";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +105,7 @@ export default async function PropertyCalendarPage({
     const busyBands: CalendarBand[] = (
       (busy ?? []) as { start_date: string; end_date: string }[]
     ).map((r, i) => ({
-      bookingId: `busy-${i}`,
+      id: `busy-${i}`,
       startIso: r.start_date,
       endIso: r.end_date,
       status: "approved" as const,
@@ -171,7 +176,7 @@ export default async function PropertyCalendarPage({
     (b) => b.status === "approved" || b.status === "pending",
   );
   const bands: CalendarBand[] = visibleBookings.map((b) => ({
-    bookingId: b.id,
+    id: b.id,
     startIso: b.start_date,
     endIso: b.end_date,
     status: b.status as "approved" | "pending",
@@ -180,6 +185,33 @@ export default async function PropertyCalendarPage({
   const pendingBands = bookings
     .filter((b) => b.status === "pending")
     .map((b) => ({ startIso: b.start_date, endIso: b.end_date }));
+
+  // Reminders (PRD 32, slice 3). Guests never reach this code — the guest
+  // branch returned above — and RLS refuses them the rows besides.
+  const { data: remindersRaw } = await supabase
+    .from("property_reminders")
+    .select("id, title, notes, due_date, recurrence")
+    .eq("property_id", property.id)
+    .order("due_date", { ascending: true });
+  const reminders = (remindersRaw ?? []) as ReminderRow[];
+
+  // One stored reminder can occupy many squares in the visible window, so the
+  // rule is expanded here rather than stored expanded. Same function the feed
+  // uses, so the site and a subscribed calendar can't disagree about the date.
+  const windowStart = start.toISOString().slice(0, 10);
+  const windowEnd = end.toISOString().slice(0, 10);
+  const reminderBands: CalendarBand[] = reminders.flatMap((r) =>
+    expandOccurrences(r.due_date, r.recurrence, windowStart, windowEnd).map(
+      (iso) => ({
+        id: `reminder-${r.id}-${iso}`,
+        startIso: iso,
+        endIso: iso,
+        status: "approved" as const,
+        kind: "reminder" as const,
+        label: r.title,
+      }),
+    ),
+  );
 
   const peakRanges = (property.peak_period_ranges ?? []) as PeakPeriodRange[];
   const pending = bookings.filter((b) => b.status === "pending");
@@ -252,7 +284,10 @@ export default async function PropertyCalendarPage({
         <div className="flex flex-col gap-8">
           <BookingRequestForm
             propertyId={property.id}
-            bands={bands}
+            // Reminders ride along on the same grid so a member picking dates
+            // can see the bill that lands mid-stay. They're display-only here;
+            // booking conflict math runs off `pendingBands` and the server.
+            bands={[...bands, ...reminderBands]}
             maxGuests={property.max_guests ?? null}
             peakRanges={peakRanges}
             pendingBands={pendingBands}
@@ -260,6 +295,14 @@ export default async function PropertyCalendarPage({
         </div>
 
         <aside className="flex flex-col gap-10 lg:sticky lg:top-24 lg:self-start">
+          <LedgerPanel className="px-0 py-0 sm:px-0 sm:py-0">
+            <RemindersPanel
+              propertyId={property.id}
+              propertySlug={property.slug}
+              reminders={reminders}
+            />
+          </LedgerPanel>
+
           <LedgerPanel className="px-0 py-0 sm:px-0 sm:py-0">
             <div className="border-b border-border px-5 py-4 sm:px-6">
               <Eyebrow>Your bookings</Eyebrow>

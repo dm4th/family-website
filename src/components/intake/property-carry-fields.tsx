@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-
 /**
  * Hidden inputs that carry a property's untouched fields through a partial edit.
  *
@@ -30,29 +28,14 @@ import { useEffect, useRef } from "react";
  */
 
 /**
- * Fire `onSaved` exactly once, the first time a form reports a successful save.
- *
  * The carry fields above solve half the whole-form problem: a partial submit
- * sends the fields it isn't editing. This solves the other half. A review
- * session can hold more than one form pointed at `updateProperty` — a note that
- * fills both guidelines and how-to renders two — and each carries the values it
- * had when the page rendered. Without a refresh between saves, the second save
- * carries page-load values and reverts the first, with a "Saved" confirmation on
- * screen for both.
- *
- * Fires once via a ref rather than depending on the callback's identity, so a
- * caller passing an inline function can't turn this into a refetch loop.
+ * sends the fields it isn't editing. `useNotifyOnSave` solves the other half —
+ * telling the parent to re-read the property so the *next* form carries what's
+ * actually stored. It moved to `@/lib/use-notify-on-save` when slice 3's
+ * reminder forms needed the same one-shot signal; re-exported here so intake's
+ * review forms keep importing the pair from one place.
  */
-function useNotifyOnSave(saved: boolean, onSaved: () => void) {
-  const notified = useRef(false);
-  useEffect(() => {
-    if (!saved || notified.current) return;
-    notified.current = true;
-    onSaved();
-  }, [saved, onSaved]);
-}
-
-export { useNotifyOnSave };
+export { useNotifyOnSave } from "@/lib/use-notify-on-save";
 
 export type IntakeProperty = {
   id: string;
