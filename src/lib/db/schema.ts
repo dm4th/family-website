@@ -783,3 +783,38 @@ export const propertyGuests = pgTable(
 
 export type PropertyGuest = typeof propertyGuests.$inferSelect;
 export type NewPropertyGuest = typeof propertyGuests.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// intake_documents — provenance index for Smart Intake (PRD 32).
+//
+// One row per document that was *read* by the vision model, whether or not the
+// member went on to save anything from it. It carries no extracted content —
+// just enough to re-open the original from the private `intake` bucket when a
+// pre-filled field looked wrong.
+// ----------------------------------------------------------------------------
+export const intakeDocuments = pgTable(
+  "intake_documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    storagePath: text("storage_path").notNull().unique(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    /** Which extraction schema was applied: "contact" today. */
+    intent: text("intent").notNull(),
+    uploadedBy: uuid("uploaded_by")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("intake_documents_property_idx").on(table.propertyId, table.createdAt),
+  ],
+);
+
+export type IntakeDocument = typeof intakeDocuments.$inferSelect;
+export type NewIntakeDocument = typeof intakeDocuments.$inferInsert;
