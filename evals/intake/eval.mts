@@ -21,7 +21,7 @@
 // fabrication tests.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { extractContactFromDocument } from "@/lib/intake/extract";
+import { extractFromDocument } from "@/lib/intake/extract";
 import type { ContactFieldKey, FieldConfidence } from "@/lib/intake/schema";
 
 const MODELS = ["claude-sonnet-5", "claude-haiku-4-5"] as const;
@@ -177,7 +177,11 @@ for (const j of jobs) {
   const bytes = new Uint8Array(readFileSync(file));
   process.env.INTAKE_MODEL = j.model;
   const t0 = Date.now();
-  const r = await extractContactFromDocument({ bytes, contentType: "image/jpeg" });
+  const r = await extractFromDocument({
+    bytes,
+    contentType: "image/jpeg",
+    intent: "contact",
+  });
   const secs = (Date.now() - t0) / 1000;
   done++;
   if (!r.ok) {

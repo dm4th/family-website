@@ -51,7 +51,7 @@ export default async function PropertyIntakePage({
         mode="operations"
         eyebrow="Add from a photo"
         title={property.name}
-        context="Photograph a bill or statement and we'll fill in the contact details for you to check."
+        context="Photograph a bill or a handwritten note and we'll fill in the details for you to check."
       />
 
       <LedgerPanel className="max-w-3xl">

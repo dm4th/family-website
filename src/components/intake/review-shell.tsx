@@ -21,11 +21,14 @@ export function ReviewShell({
   title,
   description,
   rawText,
+  sourceUrl,
   children,
 }: {
   title: string;
   description: string;
   rawText?: string;
+  /** Short-lived signed link to the uploaded document, when we have one. */
+  sourceUrl?: string | null;
   children: React.ReactNode;
 }) {
   return (
@@ -39,6 +42,21 @@ export function ReviewShell({
           Check every field before you save. Nothing is saved until you press
           Save, and leaving this page saves nothing.
         </p>
+        {sourceUrl ? (
+          <p className="text-sm">
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-4"
+            >
+              Open the photo you uploaded
+            </a>{" "}
+            <span className="text-foreground-subtle">
+              (opens in a new tab, so you can check it against what we read)
+            </span>
+          </p>
+        ) : null}
       </header>
 
       {children}

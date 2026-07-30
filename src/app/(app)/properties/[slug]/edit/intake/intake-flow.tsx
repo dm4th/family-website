@@ -1,16 +1,20 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
-import Link from "next/link";
+/**
+ * The Smart Intake pipeline (PRD 32): pick what you're photographing, upload it,
+ * we read it, you review and save.
+ *
+ * The pipeline is intent-driven and shared. Each intent contributes a prompt and
+ * schema (`src/lib/intake/schema.ts`) and a review form; upload, downscaling,
+ * storage, extraction, and the review framing are common to all of them.
+ */
+
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { FormStatus } from "@/components/form-status";
-import {
-  ReviewField,
-  ReviewSection,
-  ReviewShell,
-} from "@/components/intake/review-shell";
+import { ReviewShell } from "@/components/intake/review-shell";
+import type { IntakeProperty } from "@/components/intake/property-carry-fields";
 import { createClient } from "@/lib/supabase/client";
 import { prepareImageForUpload } from "@/lib/image-resize";
 import {
@@ -20,47 +24,88 @@ import {
   generateIntakePath,
   isAllowedIntakeMime,
   type ContactExtraction,
+  type IntakeIntent,
+  type NoteExtraction,
 } from "@/lib/intake/schema";
-import { extractIntake } from "./actions";
-import {
-  addPropertyContact,
-  type ContactFormState,
-} from "../../contacts/actions";
-import { updateProperty, type PropertyFormState } from "../../actions";
+import { extractIntake, refreshIntakeProperty } from "./actions";
+import { ContactReview } from "./contact-review";
+import { NoteReview } from "./note-review";
+
+export type { IntakeProperty };
 
 const MAX_MB = Math.round(MAX_INTAKE_BYTES / 1024 / 1024);
 
-export type IntakeProperty = {
-  id: string;
-  slug: string;
-  name: string;
-  location: string | null;
-  address: string | null;
-  description: string | null;
-  how_to: string | null;
-  guidelines: string | null;
-  amenities: string[];
-  status: string;
-  max_guests: number | null;
-};
+/**
+ * The two things a member can photograph, in their words rather than ours. The
+ * choice is explicit because it changes what we ask the model to look for: a
+ * bill has a vendor and an account number, a note has instructions and people.
+ */
+const KINDS: {
+  intent: IntakeIntent;
+  title: string;
+  blurb: string;
+  button: string;
+  reviewTitle: string;
+  reviewDescription: string;
+}[] = [
+  {
+    intent: "contact",
+    title: "A bill or statement",
+    blurb:
+      "A utility bill, an insurance statement, or a tax notice. We'll pull out the company, the phone number, and the account number.",
+    button: "Choose a Bill",
+    reviewTitle: "Here's what we read",
+    reviewDescription:
+      "These are our best read of your document. Correct anything that looks wrong, then save.",
+  },
+  {
+    intent: "note",
+    title: "A handwritten note",
+    blurb:
+      "Notes about how the place works, who to call, or what guests should know. We'll type it up for you to check.",
+    button: "Choose a Note",
+    reviewTitle: "Here's what we read",
+    reviewDescription:
+      "Handwriting is the hardest thing for us to read, so please go through this against the photo before you save anything.",
+  },
+];
 
 type Phase =
   | { name: "idle" }
   | { name: "working"; message: string }
   | { name: "error"; message: string }
-  | { name: "review"; extraction: ContactExtraction };
+  | {
+      name: "review";
+      intent: "contact";
+      extraction: ContactExtraction;
+      sourceUrl: string | null;
+    }
+  | {
+      name: "review";
+      intent: "note";
+      extraction: NoteExtraction;
+      sourceUrl: string | null;
+    };
 
 export function IntakeFlow({
-  property,
+  property: initialProperty,
   canManage,
 }: {
   property: IntakeProperty;
   canManage: boolean;
 }) {
+  // Held in state, not read straight from the prop, because a review session can
+  // save more than once and the forms below carry the property's other fields
+  // through each submit. See `refreshIntakeProperty` for why that matters.
+  const [property, setProperty] = useState(initialProperty);
+  /** True while the property is being re-read after a save. */
+  const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  /** Which card is working, for the status line. Not used to route the upload. */
+  const [pending, setPending] = useState<IntakeIntent | null>(null);
 
-  async function handleFile(file: File) {
+  async function handleFile(file: File, forIntent: IntakeIntent) {
+    setPending(forIntent);
     if (file.size > MAX_INTAKE_BYTES) {
       setPhase({
         name: "error",
@@ -77,7 +122,7 @@ export function IntakeFlow({
       return;
     }
 
-    setPhase({ name: "working", message: "Uploading your document…" });
+    setPhase({ name: "working", message: "Uploading your photo…" });
 
     try {
       const isPdf = file.type.toLowerCase() === "application/pdf";
@@ -95,7 +140,7 @@ export function IntakeFlow({
           });
       const body = prepared ? prepared.display : file;
       const contentType = prepared ? prepared.contentType : "application/pdf";
-      const storagePath = generateIntakePath(isPdf ? "bill.pdf" : "bill.jpg");
+      const storagePath = generateIntakePath(isPdf ? "doc.pdf" : "doc.jpg");
 
       // Direct browser → Storage upload, bypassing the Server Action body limit
       // that breaks file uploads in production.
@@ -111,14 +156,34 @@ export function IntakeFlow({
         return;
       }
 
-      setPhase({ name: "working", message: "Reading your document…" });
+      setPhase({
+        name: "working",
+        message:
+          forIntent === "note"
+            ? "Reading the handwriting…"
+            : "Reading your document…",
+      });
 
-      const result = await extractIntake(property.id, storagePath);
+      const result = await extractIntake(property.id, storagePath, forIntent);
       if (result.status === "error") {
         setPhase({ name: "error", message: result.message });
         return;
       }
-      setPhase({ name: "review", extraction: result.extraction });
+      setPhase(
+        result.intent === "note"
+          ? {
+              name: "review",
+              intent: "note",
+              extraction: result.extraction,
+              sourceUrl: result.sourceUrl,
+            }
+          : {
+              name: "review",
+              intent: "contact",
+              extraction: result.extraction,
+              sourceUrl: result.sourceUrl,
+            },
+      );
     } catch (error) {
       setPhase({
         name: "error",
@@ -130,23 +195,56 @@ export function IntakeFlow({
     }
   }
 
+  /**
+   * Called by any review form that just wrote to the property. Pulls the row
+   * back so the *other* forms carry what's actually stored rather than what was
+   * there when the page loaded.
+   */
+  async function handlePropertySaved() {
+    // Sibling forms are held while this is in flight. Without it, a member who
+    // presses the second Save inside the refresh round-trip submits the same
+    // stale carry values the refresh exists to replace — a narrower version of
+    // exactly the bug being fixed.
+    setRefreshing(true);
+    try {
+      const fresh = await refreshIntakeProperty(property.id);
+      if (fresh) setProperty(fresh);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   if (phase.name === "review") {
+    const reviewKind =
+      KINDS.find((k) => k.intent === phase.intent) ?? KINDS[0];
     return (
       <ReviewShell
-        title="Here's what we read"
-        description="These are our best read of your document. Correct anything that looks wrong, then save."
-        rawText={phase.extraction.rawText}
+        title={reviewKind.reviewTitle}
+        description={reviewKind.reviewDescription}
+        rawText={
+          phase.intent === "contact" ? phase.extraction.rawText : undefined
+        }
+        sourceUrl={phase.sourceUrl}
       >
-        <ContactReviewForm
-          property={property}
-          extraction={phase.extraction}
-          onStartOver={() => setPhase({ name: "idle" })}
-        />
-        <AddressReviewForm
-          property={property}
-          extraction={phase.extraction}
-          canManage={canManage}
-        />
+        {phase.intent === "note" ? (
+          <NoteReview
+            property={property}
+            extraction={phase.extraction}
+            canManage={canManage}
+            onStartOver={() => setPhase({ name: "idle" })}
+            onPropertySaved={handlePropertySaved}
+            propertyBusy={refreshing}
+          />
+        ) : (
+          <ContactReview
+            property={property}
+            extraction={phase.extraction}
+            canManage={canManage}
+            onStartOver={() => setPhase({ name: "idle" })}
+            onPropertySaved={handlePropertySaved}
+            propertyBusy={refreshing}
+          />
+        )}
       </ReviewShell>
     );
   }
@@ -157,42 +255,29 @@ export function IntakeFlow({
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
         <h2 className="font-display text-xl leading-tight text-foreground">
-          Add a contact from a bill
+          What are you photographing?
         </h2>
         <p className="text-base text-foreground-muted">
-          Take a photo of a utility bill, an insurance statement, or a tax
-          notice. We&rsquo;ll read the company, phone number, and account number off
-          it and show them to you to check. Nothing is saved until you press
-          Save.
+          We&rsquo;ll read it and show you what we found, so you only have to
+          check it rather than type it. Nothing is saved until you press Save.
         </p>
       </header>
 
-      <div className="rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 px-5 py-8 text-center">
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
-          className="sr-only"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void handleFile(file);
-            e.target.value = "";
-          }}
-        />
-        <div className="flex flex-col items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-          >
-            {busy ? "Working…" : "Choose a Photo or PDF"}
-          </Button>
-          <p className="text-sm text-foreground-subtle">
-            JPG, PNG, or PDF · up to {MAX_MB}MB
-          </p>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {KINDS.map((k) => (
+          <KindCard
+            key={k.intent}
+            kind={k}
+            busy={busy}
+            working={busy && pending === k.intent}
+            onFile={(file) => void handleFile(file, k.intent)}
+          />
+        ))}
       </div>
+
+      <p className="text-sm text-foreground-subtle">
+        JPG, PNG, or PDF · up to {MAX_MB}MB
+      </p>
 
       <FormStatus tone={phase.name === "error" ? "error" : "info"}>
         {phase.name === "error"
@@ -205,246 +290,55 @@ export function IntakeFlow({
   );
 }
 
-const contactInitial: ContactFormState = { status: "idle" };
-
-function ContactReviewForm({
-  property,
-  extraction,
-  onStartOver,
-}: {
-  property: IntakeProperty;
-  extraction: ContactExtraction;
-  onStartOver: () => void;
-}) {
-  // The unchanged, already-gated add action (PRD 27). Intake only supplies the
-  // initial values in the fields below.
-  const action = addPropertyContact.bind(null, property.id, property.slug);
-  const [state, formAction, isPending] = useActionState(action, contactInitial);
-
-  const { fields } = extraction;
-
-  if (state.status === "saved") {
-    return (
-      <ReviewSection label="Contact">
-        <p className="text-base text-foreground">
-          Saved. The contact is now on {property.name}.
-        </p>
-        <div className="flex flex-wrap items-center gap-4">
-          <Button type="button" variant="outline" onClick={onStartOver}>
-            Read Another Document
-          </Button>
-          <Link
-            href={`/properties/${property.slug}/edit`}
-            className="text-base text-foreground underline underline-offset-4"
-          >
-            Back to editing
-          </Link>
-        </div>
-      </ReviewSection>
-    );
-  }
-
-  return (
-    <ReviewSection label="Contact">
-      <form action={formAction} className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <ReviewField
-            label="Label"
-            htmlFor="intake-label"
-            confidence={fields.label.confidence}
-            hint="What kind of contact this is."
-          >
-            <Input
-              id="intake-label"
-              name="label"
-              required
-              disabled={isPending}
-              defaultValue={fields.label.value ?? ""}
-              placeholder="Electric utility / Insurance / Plumber…"
-            />
-          </ReviewField>
-          <ReviewField
-            label="Name"
-            htmlFor="intake-name"
-            confidence={fields.name.confidence}
-          >
-            <Input
-              id="intake-name"
-              name="name"
-              disabled={isPending}
-              defaultValue={fields.name.value ?? ""}
-            />
-          </ReviewField>
-          <ReviewField
-            label="Phone"
-            htmlFor="intake-phone"
-            confidence={fields.phone.confidence}
-          >
-            <Input
-              id="intake-phone"
-              name="phone"
-              type="tel"
-              disabled={isPending}
-              defaultValue={fields.phone.value ?? ""}
-            />
-          </ReviewField>
-          <ReviewField
-            label="Email"
-            htmlFor="intake-email"
-            confidence={fields.email.confidence}
-          >
-            <Input
-              id="intake-email"
-              name="email"
-              type="email"
-              disabled={isPending}
-              defaultValue={fields.email.value ?? ""}
-            />
-          </ReviewField>
-          <ReviewField
-            label="Notes"
-            htmlFor="intake-notes"
-            confidence={fields.notes.confidence}
-            className="sm:col-span-2"
-            hint="Account number, billing period, amount due."
-          >
-            <Input
-              id="intake-notes"
-              name="notes"
-              disabled={isPending}
-              defaultValue={fields.notes.value ?? ""}
-            />
-          </ReviewField>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button type="button" variant="ghost" onClick={onStartOver}>
-            Start Over
-          </Button>
-          <div className="flex items-center gap-3">
-            <FormStatus tone="error">
-              {state.status === "error" ? state.message : null}
-            </FormStatus>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving…" : "Save Contact"}
-            </Button>
-          </div>
-        </div>
-      </form>
-    </ReviewSection>
-  );
-}
-
-const propertyInitial: PropertyFormState = { status: "idle" };
-
 /**
- * The secondary target: fill in the property's address when the bill clearly
- * shows a service address and we don't have one yet. Offered, never assumed.
+ * One choice, with its own file input.
  *
- * `updateProperty` takes the whole property form and writes every field it
- * reads, so the fields the member isn't editing here ride along as hidden
- * inputs carrying their current values. Getting that wrong would blank a
- * description on an address save, so the set below tracks the action's reads
- * exactly: `peak_period_ranges` is genuinely optional (the action preserves it
- * when absent), while `status` and `max_guests` are only preserved for members
- * who can't change them, which is why they're sent when `canManage` is true.
+ * Each card owning an input is what keeps the intent unambiguous: the handler
+ * that fires is the one belonging to the card the member pressed, so the choice
+ * travels with the file rather than through a piece of state set a moment
+ * earlier and read a moment later.
  */
-function AddressReviewForm({
-  property,
-  extraction,
-  canManage,
+function KindCard({
+  kind,
+  busy,
+  working,
+  onFile,
 }: {
-  property: IntakeProperty;
-  extraction: ContactExtraction;
-  canManage: boolean;
+  kind: (typeof KINDS)[number];
+  busy: boolean;
+  working: boolean;
+  onFile: (file: File) => void;
 }) {
-  const action = updateProperty.bind(null, property.id);
-  const [state, formAction, isPending] = useActionState(action, propertyInitial);
-  const [dismissed, setDismissed] = useState(false);
-
-  const proposed = extraction.fields.address;
-
-  // Nothing to offer if the bill didn't show an address, or if this property
-  // already has one. We never overwrite an address a person entered.
-  if (!proposed.value || property.address || dismissed) return null;
-
-  if (state.status === "saved") {
-    return (
-      <ReviewSection label="Property address">
-        <p className="text-base text-foreground">
-          Saved. {property.name} now has an address.
-        </p>
-      </ReviewSection>
-    );
-  }
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   return (
-    <ReviewSection label="Property address">
-      <p className="text-base text-foreground-muted">
-        This property doesn&rsquo;t have an address yet, and the document seems to
-        show one. Save it?
-      </p>
-      <form action={formAction} className="flex flex-col gap-4">
-        <input type="hidden" name="name" value={property.name} />
-        <input type="hidden" name="location" value={property.location ?? ""} />
-        <input
-          type="hidden"
-          name="description"
-          value={property.description ?? ""}
-        />
-        <input type="hidden" name="how_to" value={property.how_to ?? ""} />
-        <input
-          type="hidden"
-          name="guidelines"
-          value={property.guidelines ?? ""}
-        />
-        <input
-          type="hidden"
-          name="amenities"
-          value={property.amenities.join("\n")}
-        />
-        {canManage ? (
-          <>
-            <input type="hidden" name="status" value={property.status} />
-            <input
-              type="hidden"
-              name="max_guests"
-              value={property.max_guests ?? ""}
-            />
-          </>
-        ) : null}
-
-        <ReviewField
-          label="Address"
-          htmlFor="intake-address"
-          confidence={proposed.confidence}
+    <div className="flex flex-col gap-3 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-5">
+      <h3 className="font-display text-lg leading-tight text-foreground">
+        {kind.title}
+      </h3>
+      <p className="flex-1 text-base text-foreground-muted">{kind.blurb}</p>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+        className="sr-only"
+        aria-label={kind.button}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onFile(file);
+          e.target.value = "";
+        }}
+      />
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => inputRef.current?.click()}
         >
-          <Input
-            id="intake-address"
-            name="address"
-            disabled={isPending}
-            defaultValue={proposed.value}
-          />
-        </ReviewField>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setDismissed(true)}
-          >
-            Not This One
-          </Button>
-          <div className="flex items-center gap-3">
-            <FormStatus tone="error">
-              {state.status === "error" ? state.message : null}
-            </FormStatus>
-            <Button type="submit" variant="outline" disabled={isPending}>
-              {isPending ? "Saving…" : "Save Address"}
-            </Button>
-          </div>
-        </div>
-      </form>
-    </ReviewSection>
+          {working ? "Working…" : kind.button}
+        </Button>
+      </div>
+    </div>
   );
 }

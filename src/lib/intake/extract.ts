@@ -14,10 +14,36 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   CONTACT_EXTRACTION_JSON_SCHEMA,
   CONTACT_EXTRACTION_PROMPT,
+  NOTE_EXTRACTION_JSON_SCHEMA,
+  NOTE_EXTRACTION_PROMPT,
   isAllowedIntakeMime,
   parseContactExtraction,
+  parseNoteExtraction,
   type ContactExtraction,
+  type IntakeIntent,
+  type NoteExtraction,
 } from "@/lib/intake/schema";
+
+/**
+ * The intent registry: prompt, schema, and validator per target. Adding slice
+ * 3's calendar intent should be one more entry here plus a review form, not a
+ * new code path.
+ */
+const INTENTS = {
+  contact: {
+    prompt: CONTACT_EXTRACTION_PROMPT,
+    schema: CONTACT_EXTRACTION_JSON_SCHEMA,
+    parse: parseContactExtraction,
+  },
+  note: {
+    prompt: NOTE_EXTRACTION_PROMPT,
+    schema: NOTE_EXTRACTION_JSON_SCHEMA,
+    parse: parseNoteExtraction,
+  },
+} as const satisfies Record<
+  IntakeIntent,
+  { prompt: string; schema: object; parse: (raw: unknown) => unknown }
+>;
 
 /**
  * Chosen by eval, not by tier instinct — see `evals/intake/`. Across 96
@@ -65,8 +91,28 @@ export type ExtractionUsage = {
   estimatedCostUsd: number;
 };
 
-export type ExtractionResult =
-  | { ok: true; extraction: ContactExtraction; usage: ExtractionUsage }
+/** What each intent hands back, so callers get a typed result per intent. */
+export type ExtractionByIntent = {
+  contact: ContactExtraction;
+  note: NoteExtraction;
+};
+
+/**
+ * Distributed over the intent so that a caller holding an unnarrowed
+ * `ExtractionResult` gets a proper discriminated union: checking `intent`
+ * narrows `extraction` to that intent's shape.
+ */
+type ExtractionSuccess<I extends IntakeIntent> = I extends IntakeIntent
+  ? {
+      ok: true;
+      intent: I;
+      extraction: ExtractionByIntent[I];
+      usage: ExtractionUsage;
+    }
+  : never;
+
+export type ExtractionResult<I extends IntakeIntent = IntakeIntent> =
+  | ExtractionSuccess<I>
   | { ok: false; message: string };
 
 let cachedClient: Anthropic | null = null;
@@ -93,16 +139,17 @@ export function isIntakeConfigured(): boolean {
 }
 
 /**
- * Read a bill/statement/note and return vendor contact fields.
+ * Read a document and return pre-fill values for the given intent.
  *
  * One call per upload — no retry loop. A bad read is a two-second edit in the
  * review form, which is cheaper (and more honest) than silently paying for a
  * second opinion the member never asked for.
  */
-export async function extractContactFromDocument(opts: {
+export async function extractFromDocument<I extends IntakeIntent>(opts: {
   bytes: Uint8Array;
   contentType: string;
-}): Promise<ExtractionResult> {
+  intent: I;
+}): Promise<ExtractionResult<I>> {
   const client = getClient();
   if (!client) {
     return {
@@ -121,6 +168,7 @@ export async function extractContactFromDocument(opts: {
   }
 
   const model = process.env.INTAKE_MODEL ?? DEFAULT_MODEL;
+  const intent = INTENTS[opts.intent];
   const data = Buffer.from(opts.bytes).toString("base64");
 
   // PDFs travel as a document block, images as an image block. Both go before
@@ -163,13 +211,13 @@ export async function extractContactFromDocument(opts: {
         ...(supportsEffort(model) ? { effort: "low" as const } : {}),
         format: {
           type: "json_schema",
-          schema: CONTACT_EXTRACTION_JSON_SCHEMA,
+          schema: intent.schema,
         },
       },
       messages: [
         {
           role: "user",
-          content: [source, { type: "text", text: CONTACT_EXTRACTION_PROMPT }],
+          content: [source, { type: "text", text: intent.prompt }],
         },
       ],
     });
@@ -212,14 +260,18 @@ export async function extractContactFromDocument(opts: {
     // Spend watch (PRD 32 guardrail). Tokens and cost only — never the
     // document, the extracted values, or the key.
     console.info(
-      `[intake] extraction complete: ${inputTokens} in / ${outputTokens} out tokens, ~$${estimatedCostUsd.toFixed(4)}`,
+      `[intake] ${opts.intent} extraction complete: ${inputTokens} in / ${outputTokens} out tokens, ~$${estimatedCostUsd.toFixed(4)}`,
     );
 
+    // The registry pairs each intent's schema with the validator that returns
+    // that intent's shape, so this is sound; TypeScript can't follow the
+    // pairing through the indexed lookup, hence the one assertion.
     return {
       ok: true,
-      extraction: parseContactExtraction(parsed),
+      intent: opts.intent,
+      extraction: intent.parse(parsed),
       usage: { inputTokens, outputTokens, estimatedCostUsd },
-    };
+    } as ExtractionResult<I>;
   } catch (error) {
     // Deliberately vague to the member, specific in the server log. An SDK
     // error can carry request context we don't want on a family member's

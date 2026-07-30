@@ -5,11 +5,21 @@
 // the model gives back.
 //
 // One schema per intent. Slice 1 ships "contact" (a vendor off a bill, plus the
-// service address when one is clearly present). Slices 2 and 3 add "note" and
-// "calendar" here — the pipeline around this file is deliberately intent-driven
-// so they only add a schema and a review form, not a new path.
+// service address when one is clearly present); slice 2 adds "note" (Dad's
+// handwriting, routed by the member into guidelines / how-to / contacts). Slice
+// 3 adds "calendar" here — the pipeline around this file is deliberately
+// intent-driven so a new target adds a schema and a review form, not a new path.
 
-export type IntakeIntent = "contact";
+export type IntakeIntent = "contact" | "note";
+
+export const INTAKE_INTENTS: IntakeIntent[] = ["contact", "note"];
+
+export function isIntakeIntent(value: unknown): value is IntakeIntent {
+  return (
+    typeof value === "string" &&
+    (INTAKE_INTENTS as string[]).includes(value)
+  );
+}
 
 /**
  * How sure the model is about a single field. The UI flags anything below
@@ -45,6 +55,37 @@ export const CONTACT_FIELD_KEYS: ContactFieldKey[] = [
   "notes",
   "address",
 ];
+
+// --- Note intent (slice 2) -------------------------------------------------
+
+/**
+ * A person the note mentions, offered as a pre-filled contact. One confidence
+ * for the whole suggestion rather than per field: on a handwritten note the
+ * whole line is legible or it isn't, and a five-way confidence breakdown on
+ * something we're only *offering* is more noise than help.
+ */
+export type SuggestedContact = {
+  label: string | null;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  confidence: FieldConfidence;
+};
+
+export type NoteExtraction = {
+  /** The model's cleaned-up read of the whole note. The member edits this directly. */
+  transcription: ExtractedField;
+  /** Rules and expectations for people staying, if the note holds any. */
+  suggestedGuidelines: ExtractedField;
+  /** Practical operating instructions (water shut-off, gate code, heat). */
+  suggestedHowTo: ExtractedField;
+  /** People named with enough detail to be worth offering as contacts. */
+  suggestedContacts: SuggestedContact[];
+};
+
+/** Ceiling on offered contacts. A note listing more than this is really a list. */
+export const MAX_SUGGESTED_CONTACTS = 6;
 
 // --- Upload guardrails -----------------------------------------------------
 
@@ -183,26 +224,125 @@ Pull out the vendor's contact details so a family member can confirm them and sa
 - Put the account or policy number, the billing period, and the amount due together in "notes" as one short plain-text line.
 - Do not describe the image, add commentary, or return anything outside the schema.`;
 
+/**
+ * The note schema. No `rawText` here, unlike the contact intent: on a note the
+ * transcription *is* the raw read, so asking for both would pay twice for the
+ * same output tokens and give the member two texts to reconcile.
+ */
+export const NOTE_EXTRACTION_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    transcription: FIELD_SCHEMA(
+      "Your best plain-text read of the whole note, line by line, keeping the writer's own words and order. Use [?] in place of a word you genuinely cannot make out. Never leave this null; if the page is unreadable, say so in the text and mark confidence low.",
+    ),
+    suggestedGuidelines: FIELD_SCHEMA(
+      'The parts of the note that are rules or expectations for people staying, e.g. "no shoes upstairs", "strip the beds before you leave". Null if the note has none. Copy the writer\'s wording.',
+    ),
+    suggestedHowTo: FIELD_SCHEMA(
+      'The parts of the note that explain how to operate the place, e.g. "water shut-off is at the road", "gate code is round back", "flip the breaker in the shed". Null if the note has none. Copy the writer\'s wording.',
+    ),
+    suggestedContacts: {
+      type: "array",
+      // No `maxItems` here: structured outputs reject it on an array with a 400
+      // ("For 'array' type, property 'maxItems' is not supported"), which fails
+      // the whole request rather than the one constraint. The cap is stated in
+      // the description for the model and enforced for real in
+      // `parseNoteExtraction`, which is where it needs to be trustworthy anyway.
+      // "With a phone number or an email" is a deliberate hard requirement, not
+      // a preference. Measured on a real handwritten document that names people
+      // but lists no way to reach them, a looser rule ("a name and a clear
+      // trade") produced confident contacts off misread surnames — four
+      // different readings of the same name across runs. A name we can't reach
+      // isn't a useful contact record anyway, so requiring a number costs
+      // nothing and removes the whole failure mode.
+      description: `People or companies the note names AND gives a phone number or an email address for. Do not include someone the note merely mentions with no way to contact them. An empty array if the note names nobody reachable. At most ${MAX_SUGGESTED_CONTACTS}.`,
+      items: {
+        type: "object",
+        properties: {
+          label: {
+            type: ["string", "null"],
+            description:
+              'What they do, in two or three words: "Plumber", "Snow removal", "Caretaker".',
+          },
+          name: {
+            type: ["string", "null"],
+            description: "Their name or company as written.",
+          },
+          phone: {
+            type: ["string", "null"],
+            description: "Their phone number exactly as written, or null.",
+          },
+          email: {
+            type: ["string", "null"],
+            description: "Their email address, or null.",
+          },
+          notes: {
+            type: ["string", "null"],
+            description:
+              "Anything else the note says about them, in one short line.",
+          },
+          confidence: {
+            type: "string",
+            enum: ["high", "medium", "low"],
+            description:
+              "How sure you are of this whole suggestion. Use low for anything you had to guess at.",
+          },
+        },
+        required: ["label", "name", "phone", "email", "notes", "confidence"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: [
+    "transcription",
+    "suggestedGuidelines",
+    "suggestedHowTo",
+    "suggestedContacts",
+  ],
+  additionalProperties: false,
+} as const;
+
+export const NOTE_EXTRACTION_PROMPT = `You are reading a photograph of a handwritten or typed note about a family's holiday property. It was probably written quickly, for the writer's own use, and may be untidy.
+
+Transcribe it, then sort what it says into the places it belongs. Rules:
+
+- Transcribe what is on the page. Keep the writer's own words, spelling, and order. Do not tidy their phrasing, expand their abbreviations, or add anything they did not write.
+- Where a word is genuinely illegible, write [?] rather than guessing. One honest [?] is far more useful than a plausible wrong word, because a person is about to read this against the original.
+- Handwriting is hard. Be honest with confidence and use "low" freely. "Medium" or "low" costs the reader a second look; a wrong "high" costs them a wrong record.
+- Never invent a phone number, an email address, or a name. If you cannot read a digit, leave the whole number null rather than filling the gap.
+- Only offer someone as a contact if the note gives a phone number or an email for them. A name with no way to reach it is not a contact.
+- A line can belong in more than one place: a note that says "gate code 4417, tell the plumber Jim 555-1234" gives you a how-to line AND a contact.
+- "Guidelines" is what people staying are asked to do; "how to" is how the building works. When a line could be either, put it in the one it fits best and don't repeat it in both.
+- Leave a section null when the note simply doesn't cover it. An empty section is a correct answer, not a failure.
+- Do not describe the image, add commentary, or return anything outside the schema.`;
+
 // --- Validation ------------------------------------------------------------
 
 const MAX_FIELD_CHARS = 500;
 const MAX_RAW_TEXT_CHARS = 4000;
 
-function readField(raw: unknown): ExtractedField {
+/** Prose fields (a transcription, a block of guidelines) need far more room
+ * than a phone number, so the cap is per-call rather than global. */
+const MAX_PROSE_CHARS = 4000;
+
+function readField(raw: unknown, maxChars = MAX_FIELD_CHARS): ExtractedField {
   if (!raw || typeof raw !== "object") {
     return { value: null, confidence: "low" };
   }
   const record = raw as Record<string, unknown>;
-  const rawValue = record.value;
-  const value =
-    typeof rawValue === "string" && rawValue.trim().length > 0
-      ? rawValue.trim().slice(0, MAX_FIELD_CHARS)
-      : null;
-  const confidence =
-    record.confidence === "high" || record.confidence === "medium"
-      ? record.confidence
-      : "low";
+  const value = readString(record.value, maxChars);
+  const confidence = readConfidence(record.confidence);
   return { value, confidence };
+}
+
+function readString(raw: unknown, maxChars: number): string | null {
+  return typeof raw === "string" && raw.trim().length > 0
+    ? raw.trim().slice(0, maxChars)
+    : null;
+}
+
+function readConfidence(raw: unknown): FieldConfidence {
+  return raw === "high" || raw === "medium" ? raw : "low";
 }
 
 /**
@@ -233,4 +373,50 @@ export function parseContactExtraction(raw: unknown): ContactExtraction {
       : "";
 
   return { fields, rawText };
+}
+
+/**
+ * The note-intent counterpart. Same posture as `parseContactExtraction`: this is
+ * the only place model output crosses into our UI, so it validates rather than
+ * trusts. Unknown keys are dropped, which is what keeps the privileged property
+ * columns (status / max_guests / peak / hero) unreachable from a document — the
+ * shape below is the complete set of things a note can ever propose.
+ */
+export function parseNoteExtraction(raw: unknown): NoteExtraction {
+  const record = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+
+  const rawContacts = Array.isArray(record.suggestedContacts)
+    ? record.suggestedContacts.slice(0, MAX_SUGGESTED_CONTACTS)
+    : [];
+
+  const suggestedContacts = rawContacts
+    .map((entry): SuggestedContact => {
+      const c = (entry && typeof entry === "object" ? entry : {}) as Record<
+        string,
+        unknown
+      >;
+      return {
+        label: readString(c.label, MAX_FIELD_CHARS),
+        name: readString(c.name, MAX_FIELD_CHARS),
+        phone: readString(c.phone, MAX_FIELD_CHARS),
+        email: readString(c.email, MAX_FIELD_CHARS),
+        notes: readString(c.notes, MAX_FIELD_CHARS),
+        confidence: readConfidence(c.confidence),
+      };
+    })
+    // Enforced here as well as asked for in the schema, because the prompt is a
+    // request and this is a guarantee. A "contact" with no phone and no email is
+    // a name we misread off a page, offered to a member as though it were a
+    // record worth keeping.
+    .filter((c) => c.phone || c.email);
+
+  return {
+    transcription: readField(record.transcription, MAX_PROSE_CHARS),
+    suggestedGuidelines: readField(record.suggestedGuidelines, MAX_PROSE_CHARS),
+    suggestedHowTo: readField(record.suggestedHowTo, MAX_PROSE_CHARS),
+    suggestedContacts,
+  };
 }
