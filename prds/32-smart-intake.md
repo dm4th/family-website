@@ -197,9 +197,16 @@ src/components/intake/review-shell.tsx           # reusable "read it, edit, conf
 - **HEIC is rejected at the picker** with a plain-language message rather than failing server-side. iOS converts to JPEG on upload in practice, so this should stay rare.
 - **Provenance is property-scoped, not record-scoped.** `intake_documents` records that a document was read for a property, by whom, and when. Linking a row to the *specific* contact it produced would mean touching `addPropertyContact`, which the no-new-write-path rule forbids.
 
-**Cost**
+**Cost (measured 2026-07-30)**
 
-The wrapper logs `[intake] extraction complete: <in> / <out> tokens, ~$<usd>` per extraction — tokens and estimate only, never the document or the extracted values. At Sonnet-5 rates ($3/$15 per Mtok) a downscaled single-page bill should land in the low single-digit tenths of a cent. **Not yet measured against a real document** — no `ANTHROPIC_API_KEY` was configured at build time. Record the first real numbers here.
+The wrapper logs `[intake] extraction complete: <in> / <out> tokens, ~$<usd>` per extraction — tokens and estimate only, never the document or the extracted values.
+
+| Document | Tokens in / out | Cost | Latency |
+|---|---|---|---|
+| One-page PDF bill | 3,874 / 475 | **$0.019** | 11.4s |
+| Small degraded JPEG (201×260) | 2,121 / 342 | **$0.012** | ~9s |
+
+**About 2 cents per document, not the tenths of a cent estimated up front** — a page renders to a lot of image tokens regardless of file size. Still cheap in absolute terms (Dad photographing 50 bills is about a dollar), but worth knowing before anything encourages bulk use. The 9-11 second latency is the more user-visible cost; the "Reading your document…" state carries it, but a progress hint would help if this gets slower.
 
 **Verification status**
 
@@ -207,7 +214,23 @@ Passing: build clean, typecheck clean, lint clean. Secret hygiene verified by sc
 
 Migration applied to the remote database 2026-07-30 via `supabase db push`. The RLS checks then ran green against it (all 10): member insert allowed; guest insert blocked 42501; a member attributing an upload to someone else blocked 42501; member reads the trail, guest reads zero; guest reads zero objects in the `intake` bucket; bucket `public = false`; 3 table policies, 3 storage policies, RLS enabled. Everything ran inside one transaction that was rolled back, so no fixtures persisted. Note `psql` wasn't available, so these were driven through the repo's `postgres` client rather than `supabase/tests/prd32-smart-intake.sql` directly — the checked-in SQL file mirrors them and is still worth running on a machine with `psql` (its T4 expects 1 where the scripted run expected 2, because the SQL version rolls back its own insert first).
 
-**Still unrun**: the happy path, the address fill, the bad-read path, and the abandon-writes-nothing path. `ANTHROPIC_API_KEY` is set in Vercel and deployed, so these are testable on the deployed site with a real bill; there is no key in `.env.local`, so the vision call cannot run locally.
+**Live run against the real vision call, 2026-07-30** (localhost dev server, production Supabase, signed in as Dan). Two synthetic documents: a clean one-page PG&E-style PDF, then the same page rendered down to a 201×260 quality-15 JPEG to force a bad read.
+
+| PRD case | Result |
+|---|---|
+| 1. Happy path | **Partial.** Read cleanly: label "Electric utility" (the kind, not the company, as prompted), name "Pacific Gas & Electric Company", phone, email, and notes carrying account number + billing period + amount due on one line. The Save step was deliberately not exercised — see below. |
+| 2. Address fill | **Offered correctly.** It returned the *service* address (418 Loon Lake Road, Rangeley ME) and not the vendor's Sacramento PO Box, which is the discriminating case the prompt targets. The section appeared because the property has no address. Accept not exercised. |
+| 3. Bad read is editable | **Passed, and the most informative run.** All five fields flagged: two "Please check" (medium), three "Hard to read, please check" (low). Email correctly came back null rather than invented. Notes were hedged and wrong ("around Jul 21-Aug 20; approx $149.30" against an actual Jun 10-Jul 9 / $164.38) — flagged low, which is exactly the case review-before-save exists for. No address was offered, so a shaky read produced no garbage address section. |
+| 4. No silent writes | **Passed.** After both extractions: 0 contacts, 0 revisions, property `address` still null. Only the provenance row and the stored file, as designed. |
+| 5. Guest blocked | **Passed** at the RLS layer (above); route and action gates verified by reading. |
+| 6. Privileged fields untouched | **Passed** by construction (schema whitelist) and confirmed in the rendered form: only label/name/phone/email/notes/address inputs exist. |
+| 7. Secret hygiene | **Passed.** No `ANTHROPIC_API_KEY` or `anthropic` reference in `.next/static`. |
+
+Both test documents and their provenance rows were deleted afterwards; production is back to zero intake rows and zero intake objects. The storage delete was performed through the app's own owner-delete policy, which incidentally verifies that policy too.
+
+**One behaviour worth watching:** on the degraded image the model still produced the correct PG&E customer-service number, almost certainly by pattern-completing a well-known value rather than reading it. It was flagged low, so the design holds, but it's a reminder that a confident-looking familiar value can be a guess. Nothing to fix; worth knowing.
+
+**Still unrun**: pressing Save on either form. Both write to the family's live database (a real contact plus a revision, or a real address change), and the standing rule for local testing is that it hits production and should stay read-only. The save path is the least novel part of the slice — it is the unchanged `addPropertyContact` / `updateProperty` action that the rest of the app already exercises — but it should be walked once on a preview deploy or against a throwaway property before this merges.
 
 **Follow-ups**
 
