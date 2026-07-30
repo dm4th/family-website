@@ -199,14 +199,19 @@ src/components/intake/review-shell.tsx           # reusable "read it, edit, conf
 
 **Cost (measured 2026-07-30)**
 
-The wrapper logs `[intake] extraction complete: <in> / <out> tokens, ~$<usd>` per extraction — tokens and estimate only, never the document or the extracted values.
+The wrapper logs `[intake] extraction complete: <in> / <out> tokens, ~$<usd>` per extraction — tokens and estimate only, never the document or the extracted values. Rates are keyed by model so the log stays honest if `INTAKE_MODEL` changes.
 
-| Document | Tokens in / out | Cost | Latency |
-|---|---|---|---|
-| One-page PDF bill | 3,874 / 475 | **$0.019** | 11.4s |
-| Small degraded JPEG (201×260) | 2,121 / 342 | **$0.012** | ~9s |
+**As shipped (Haiku 4.5, 1500px): about $0.004 per document, ~5s.** Across the 48-extraction eval its mean was $0.0042 / 4.9s. Dad photographing his whole backlog of 200 documents costs under a dollar.
 
-**About 2 cents per document, not the tenths of a cent estimated up front** — a page renders to a lot of image tokens regardless of file size. Still cheap in absolute terms (Dad photographing 50 bills is about a dollar), but worth knowing before anything encourages bulk use. The 9-11 second latency is the more user-visible cost; the "Reading your document…" state carries it, but a progress hint would help if this gets slower.
+Getting there took two corrections to the first estimate:
+
+| Step | Cost per document |
+|---|---|
+| First measurement (Sonnet 5, 2048px JPEG) | $0.0258 |
+| Drop the image cap to 1500px | $0.0200 |
+| Switch to Haiku 4.5 after the eval | **$0.0042** |
+
+The original pre-build guess of "low single-digit tenths of a cent" was wrong for the right reason: a page renders to image tokens roughly regardless of file size, so the cost floor is set by pixel area and by the output length, not by how big the upload is.
 
 **Cost investigation (2026-07-30).** Same bill run across models and resolutions, against the extraction wrapper directly (no app, no writes):
 
@@ -243,7 +248,7 @@ The `brutal` condition (420px, heavy blur — past any real upload) found where 
 
 The one real difference is that Sonnet's confidence signal carries more information: it used `medium`/`low` on 34% of fields against Haiku's 4%. But Sonnet over-flags — 43 `low` ratings, only 1 of them actually wrong — so a third of fields on a clean bill would show "Please check", which is how a flag becomes noise and gets ignored. Haiku marked one wrong value `high` (1 of 138).
 
-**Conclusion: the original rejection was not supported.** Haiku 4.5 is 4.2x cheaper, faster, equally accurate at realistic quality, and fails more visibly at unrealistic quality. Revisit when slice 2 lands — the handwriting evidence rests on a single document and is the thinnest part of the corpus.
+**Conclusion: the original rejection was not supported.** Haiku 4.5 is 4.2x cheaper, faster, equally accurate at realistic quality, and fails more visibly at unrealistic quality. **Shipped as the default**, with `INTAKE_MODEL` set to it in Vercel and locally as well. Revisit when slice 2 lands — the handwriting evidence rests on a single document and is the thinnest part of the corpus.
 
 Not pursued: trimming the `rawText` cap to cut output tokens. Output is ~460 tokens (~$0.007) and rawText is the "show what we read" disclosure that makes a bad extraction auditable. Saving ~$0.002 by degrading that trade is the wrong side of the deal.
 

@@ -20,23 +20,43 @@ import {
 } from "@/lib/intake/schema";
 
 /**
- * Sonnet-class vision, per the PRD's pre-flight decision: it reads photographed
- * bills and handwriting well at a few tenths of a cent per document, which
- * matters when the whole point is that Dad uploads a stack of them. Override
- * with INTAKE_MODEL to try a different tier without a code change.
+ * Chosen by eval, not by tier instinct — see `evals/intake/`. Across 96
+ * extractions over six documents and four degradation levels, Haiku matched
+ * Sonnet on accuracy at realistic photo quality (68% correct, 29% correct
+ * restraint each), fabricated slightly less, and neither model ever invented a
+ * phone number or email on a document that had none. Past realistic quality
+ * Sonnet fabricated *more*, and fabricated plausibly ("415 Loon Lake Road"
+ * against a true 418), which is the shape that survives a human skim.
+ *
+ * At roughly a quarter of the cost and faster, this is the better default for a
+ * feature whose whole point is that Dad uploads a stack of documents.
+ *
+ * Override with INTAKE_MODEL to try another tier without a code change. Re-run
+ * the eval before changing this permanently — the handwriting evidence rests on
+ * a single document, which is the thinnest part of that corpus.
  */
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "claude-haiku-4-5";
 
-// Per-million-token rates for the default model, used only to log an estimated
-// spend. Wrong-but-close is fine here; it exists to answer "is this costing us
-// cents or dollars?" without a billing dashboard round-trip.
+// Per-million-token rates, used only to log an estimated spend — enough to
+// answer "is this costing us cents or dollars?" without a billing dashboard
+// round-trip. Keyed by model so the log doesn't silently misreport when
+// INTAKE_MODEL points somewhere else; an unknown model falls back to the
+// priciest entry so the estimate errs high rather than low.
 //
-// These are Sonnet 5's steady-state rates. Introductory pricing ($2/$10) runs
-// through 2026-08-31, so the logged figure currently overstates the real bill
-// by about a third. Deliberately the conservative direction. If INTAKE_MODEL
-// points somewhere else, the log is an over-estimate for cheaper models.
-const INPUT_COST_PER_MTOK = 3;
-const OUTPUT_COST_PER_MTOK = 15;
+// Sonnet 5 is listed at its steady-state rate. Its introductory pricing
+// ($2/$10) runs through 2026-08-31.
+const MODEL_RATES: Record<string, { input: number; output: number }> = {
+  "claude-haiku-4-5": { input: 1, output: 5 },
+  "claude-sonnet-5": { input: 3, output: 15 },
+  "claude-opus-5": { input: 5, output: 25 },
+};
+
+function ratesFor(model: string): { input: number; output: number } {
+  return (
+    MODEL_RATES[model] ??
+    Object.values(MODEL_RATES).reduce((a, b) => (b.output > a.output ? b : a))
+  );
+}
 
 export type ExtractionUsage = {
   inputTokens: number;
@@ -184,9 +204,10 @@ export async function extractContactFromDocument(opts: {
 
     const inputTokens = response.usage.input_tokens;
     const outputTokens = response.usage.output_tokens;
+    const rates = ratesFor(model);
     const estimatedCostUsd =
-      (inputTokens / 1_000_000) * INPUT_COST_PER_MTOK +
-      (outputTokens / 1_000_000) * OUTPUT_COST_PER_MTOK;
+      (inputTokens / 1_000_000) * rates.input +
+      (outputTokens / 1_000_000) * rates.output;
 
     // Spend watch (PRD 32 guardrail). Tokens and cost only — never the
     // document, the extracted values, or the key.
