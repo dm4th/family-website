@@ -224,9 +224,26 @@ Two findings, one acted on and one deliberately not:
 
 1. **Resolution was free money, so the cap dropped to 1500px** (`INTAKE_MAX_DIMENSION`). The upload was being downscaled to the photo archive's 2048, which is sized for viewing photos, not for reading a page once. 1500px cut the image path from $0.026 to $0.020 with identical extraction. 1000px and below also read this bill correctly but leave no headroom for the harder inputs the feature exists for (handwriting, creases, angled photos), so 1500 is the balance. Verified end-to-end after the change: 4309 input tokens, every field still correct.
 
-2. **Haiku 4.5 is 5.6x cheaper and was rejected anyway.** On the clean bill it read everything correctly. On the *degraded* bill it reported `high` confidence on a phone number it got wrong (1-800-752-4213 against an actual 800-743-5000), while Sonnet marked every field on that same input `medium` or `low`. The entire safety argument for this feature is that a shaky read announces itself so the reviewer's eye lands there; a model that is confidently wrong breaks that, and it breaks it hardest on exactly the handwriting slice 2 targets. Not worth 1.5 cents a document. `INTAKE_MODEL` is still there if a future clean-document-only path wants it.
+2. **Haiku 4.5 was rejected on one sample, then the rejection was overturned by a proper eval.** The initial call was made on a single degraded image where Haiku reported `high` confidence on a phone number it got wrong. A 96-extraction eval over six documents and four degradation levels ([evals/intake](../evals/intake/README.md)) did not reproduce that as a pattern — see the model-choice section below.
 
 Also fixed while measuring: `output_config.effort` was hardcoded, and **Haiku rejects that parameter with a 400**, so `INTAKE_MODEL` could not actually point at a cheaper model. Now sent only for models that support it (`supportsEffort`).
+
+**Model choice, settled by eval (2026-07-30).** Harness and full results in [evals/intake](../evals/intake/README.md). 6 documents (3 synthetic US bills with exact ground truth, 3 real public-domain scans that carry no phone or email at all) × 4 degradation levels × 2 runs × 2 models = 96 extractions.
+
+At realistic photo quality the two models are indistinguishable on accuracy:
+
+| | correct | restraint | missed | fabricated | cost | latency |
+|---|---|---|---|---|---|---|
+| Sonnet 5 | 68% | 29% | 0% | 3% (4) | $0.0175 | 6.4s |
+| Haiku 4.5 | 68% | 29% | 1% | 1% (2) | **$0.0042** | 4.9s |
+
+All six "fabrications" on both sides were misspellings of one cursive surname on the 1860 handwritten bill (Belair / Bilain / Bellenir / Bellew for "Belain") — near-misses, not inventions. **Neither model invented a phone number or an email address once in 36 opportunities** on documents that had none.
+
+The `brutal` condition (420px, heavy blur — past any real upload) found where they break, and the result argues *for* Haiku rather than against it: Sonnet fabricated more (25% vs 19%) and, more importantly, fabricated **plausibly** — "415 Loon Lake Road" against a true 418, "$212.46" against $213.46, "(207) 555-0189" against 555-0184. Those survive a skim. Haiku's failures were obvious ("Sugarville, MN"), and it declined to answer far more often (42% missed vs 17%). Even there, neither invented a phone or email on the documents that had none.
+
+The one real difference is that Sonnet's confidence signal carries more information: it used `medium`/`low` on 34% of fields against Haiku's 4%. But Sonnet over-flags — 43 `low` ratings, only 1 of them actually wrong — so a third of fields on a clean bill would show "Please check", which is how a flag becomes noise and gets ignored. Haiku marked one wrong value `high` (1 of 138).
+
+**Conclusion: the original rejection was not supported.** Haiku 4.5 is 4.2x cheaper, faster, equally accurate at realistic quality, and fails more visibly at unrealistic quality. Revisit when slice 2 lands — the handwriting evidence rests on a single document and is the thinnest part of the corpus.
 
 Not pursued: trimming the `rawText` cap to cut output tokens. Output is ~460 tokens (~$0.007) and rawText is the "show what we read" disclosure that makes a bad extraction auditable. Saving ~$0.002 by degrading that trade is the wrong side of the deal.
 
