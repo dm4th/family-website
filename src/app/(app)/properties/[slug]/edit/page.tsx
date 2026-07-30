@@ -165,7 +165,7 @@ export default async function PropertyEditPage({
           </p>
           {intakeReady ? (
             <p className="text-sm text-foreground-muted">
-              Working from a paper bill?{" "}
+              Working from a paper bill or a handwritten note?{" "}
               <Link
                 href={`/properties/${property.slug}/edit/intake`}
                 className="text-foreground underline underline-offset-4"

@@ -3,9 +3,13 @@
 Answers one question: **which vision model should read a photographed bill**, given
 that a family member reviews every field before anything is saved.
 
-Re-run this before changing `INTAKE_MODEL`, and again when slice 2 (handwritten
-notes) lands — the handwriting evidence here rests on a single document and is
-the weakest part of the corpus.
+Re-run this before changing `INTAKE_MODEL`.
+
+**There are two evals here.** This one settles the model. The second,
+[eval-notes.mts](eval-notes.mts), asks whether slice 2's handwritten-note intent
+is safe to ship — different question, different scoring, same wrapper. See
+[results-notes-2026-07-30.md](results-notes-2026-07-30.md). Run both after any
+change to a prompt, a schema, or the model.
 
 ## Why the obvious metric is the wrong one
 
@@ -69,7 +73,7 @@ done
 npx tsx --env-file=.env.local evals/intake/eval.mts
 ```
 
-Calls the real `extractContactFromDocument` wrapper, so it exercises the shipped
+Calls the real `extractFromDocument` wrapper, so it exercises the shipped
 prompt and schema. Touches no database and writes nothing to Supabase. Costs
 roughly $1 per full run.
 

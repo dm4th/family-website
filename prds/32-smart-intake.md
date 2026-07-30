@@ -1,7 +1,7 @@
 # 32 — Smart Intake (Photo → Pre-filled Property & Calendar Details)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 03 (properties + `property_contacts` + `canManageProperty`), 05 (Supabase Storage upload), 06 (bookings/calendar + `events`), 27 (direct-write posture — AI never writes, only pre-fills)
-**Status**: 🚧 slice 1 in review ([PR #32](https://github.com/dm4th/family-website/pull/32), 2026-07-30) — slices 2 and 3 still 🟢 ready. **New dependency: server-side Claude vision (Anthropic API key).**
+**Status**: ✅ slice 1 shipped ([PR #32](https://github.com/dm4th/family-website/pull/32), merged 2026-07-30). 🚧 slice 2 (handwritten notes) in review (2026-07-30). Slice 3 (calendar events) still 🟢 ready. **Dependency: server-side Claude vision (Anthropic API key), model `claude-haiku-4-5`.**
 **Parallel-safe with**: most feature PRDs (adds a new intake route + one server action; touches the existing contacts / property / calendar forms only to accept pre-filled initial values).
 
 **Slices are sequenced and each ships behind Dan's review** (I review every slice PR before merge). The full three-slice build is written out below so the implementing agent has the complete trajectory up front — Slice 1's foundations (the extraction service, the review-and-save UI shell, the source-file store) are deliberately built to be reused by Slices 2 and 3. Build Slice 1 first, but build it knowing 2 and 3 are coming.
@@ -274,11 +274,78 @@ Both test documents and their provenance rows were deleted afterwards; productio
 
 **One behaviour worth watching:** on the degraded image the model still produced the correct PG&E customer-service number, almost certainly by pattern-completing a well-known value rather than reading it. It was flagged low, so the design holds, but it's a reminder that a confident-looking familiar value can be a guess. Nothing to fix; worth knowing.
 
-**Still unrun**: pressing Save on either form. Both write to the family's live database (a real contact plus a revision, or a real address change), and the standing rule for local testing is that it hits production and should stay read-only. The save path is the least novel part of the slice — it is the unchanged `addPropertyContact` / `updateProperty` action that the rest of the app already exercises — but it should be walked once on a preview deploy or against a throwaway property before this merges.
+**Save path — walked live by the reviewer post-merge (2026-07-30, production, signed in as Dan).** The one gap the build left open is now closed. On the real deployment, on `Loon-A-See`:
+- **Save Contact passed.** A synthetic Lakeshore Water District bill read cleanly (label "Water utility", name, phone, email, notes = account + period + amount on one line), Save landed the contact on the property, and a fresh reload confirmed all five fields persisted. `addPropertyContact` runs `recordRevision` in the same call, so the revision was written too.
+- **Save Address passed, and preserved every other field.** The service address ("27 Birch Hollow Road", correctly chosen over the vendor's PO Box) saved via the hidden-input round-trip, and a fresh reload confirmed **Location, Description, Status (Active), Max guests, and the 06-01 → 08-31 peak window were all untouched** — the coupling in the follow-up below is correct in practice, not just in theory.
+- **Cleanup:** because this ran on a real property, the test address was cleared back to empty and the test contact deleted (via the PRD-30 confirm dialog); the property is fully restored. Not cleaned: the one intake source object + `intake_documents` row the extraction left behind — there's no UI to remove those yet, which is exactly the retention follow-up below.
 
 **Follow-ups**
 
-- The address form's hidden-field set is coupled to `updateProperty`'s reads. If that action gains a field, this form silently starts blanking it. Worth a narrower `updatePropertyAddress` action, or a shared "current values" helper both forms use.
+- ~~The address form's hidden-field set is coupled to `updateProperty`'s reads.~~ **Closed in slice 2** by `PropertyCarryFields`, which owns the carry set in one place for all three intake forms.
 - Source documents are never garbage-collected. A member who abandons review still leaves a file in the bucket and a row in `intake_documents`. Fine at family scale; wants a retention story eventually.
-- `intake_documents` has no UI. The rows are written and readable but nothing surfaces "re-open the original" yet. Slice 2 is the natural home for that, since re-reading a handwritten note is exactly when you want it.
+- ~~`intake_documents` has no UI.~~ **Partly closed in slice 2**: the review screen now links to the uploaded document via a 30-minute signed URL. There's still no way to browse or delete past uploads.
 - One extraction per upload, no retry. If real-world reads turn out to be flaky, a member-triggered "Read It Again" is the right shape, not an automatic retry.
+
+### Slice 2 — handwritten notes → property notes / free-form (built 2026-07-30)
+
+**What shipped.** The intake page now opens with a choice: *A bill or statement* or *A handwritten note*. The note path transcribes the page, shows the transcription as the hero of the review screen next to a link back to the photo, and offers three kinds of destination the member routes by hand: `properties.guidelines`, `properties.how_to`, and any people the note names with a number. Each destination saves separately through its own existing gated action, with its own revision. Nothing auto-routes.
+
+**Key files**
+
+```
+src/lib/intake/schema.ts                             # + note intent: types, JSON schema, prompt, parseNoteExtraction
+src/lib/intake/extract.ts                            # generalised to extractFromDocument({intent}); INTENTS registry
+src/app/(app)/properties/[slug]/edit/intake/
+  actions.ts                                         # + intent arg, + short-lived signed URL for the source document
+  intake-flow.tsx                                    # kind picker; one file input per kind; dispatches by intent
+  note-review.tsx                                    # NEW — transcription panel + routed destinations
+  contact-review.tsx                                 # NEW — slice 1's forms, moved out of intake-flow
+src/components/intake/property-carry-fields.tsx      # NEW — the updateProperty carry set, in one place
+src/components/intake/review-shell.tsx               # + sourceUrl link
+evals/intake/make-notes.py, eval-notes.mts           # NEW — note-intent eval + corpus
+evals/intake/results-notes-2026-07-30.md             # NEW — results
+```
+
+**Decisions made during the build**
+
+- **Existing prose is merged into the box, not appended behind a mode toggle.** Where a property already has guidelines, the textarea opens with the existing text plus the new lines underneath. There is no hidden "append or replace" choice: what the member sees in the box is exactly what saves, which is the only version safe to press Save on without reading the small print.
+- **A suggested contact must have a phone number or an email.** Enforced in `parseNoteExtraction`, not just asked for in the prompt. This came directly from the eval — see below.
+- **The "please check this" warning on a note is unconditional**, not confidence-driven, because measurement showed the confidence signal doesn't discriminate on this intent.
+- **`PropertyCarryFields`** replaces slice 1's hand-rolled hidden inputs and is now the single place that has to track `updateProperty`'s field list. Slice 2 would otherwise have been the third copy.
+- **One file input per kind card.** The first cut shared one input and set the intent in state just before clicking it; giving each card its own input makes the choice travel with the file instead of through state set a moment earlier.
+- **No `rawText` on the note schema.** The transcription *is* the raw read, so asking for both would pay twice for the same tokens and give the member two texts to reconcile.
+
+**Cost.** ~$0.004 per note and ~4.4s on `claude-haiku-4-5` — the same as slice 1's bill reading.
+
+**The eval caught two things that would have shipped** (full write-up: [evals/intake/results-notes-2026-07-30.md](../evals/intake/results-notes-2026-07-30.md))
+
+1. **The note intent was entirely broken.** All 30 extractions failed with a 400: structured outputs reject `maxItems` on an array. The contact schema has no arrays, so slice 1 never hit it. Without the eval this would have shipped as a feature that failed on every upload.
+2. **Contacts were being invented off unreachable names.** On the 1860 handwritten bill the model returned confident contacts named "Trumlodge", "Brimblade", "Bellamy" — four readings of one surname across runs, off a document with no phone number anywhere. Requiring a phone or email took that from 33% fabricated to 100% restraint.
+
+**Results after both fixes: zero fabrications in 126 scored fields.** Transcription 24/24, contact phones 24/24 digit-exact, no misses, and no degradation between clean / phone / poor photos. The 12 remaining "misroutes" are real lines filed under the other heading ("Ruth has the spare key" as a how-to rather than a guideline) — arguable both ways, visible and editable before saving.
+
+**The confidence signal does not work on this intent.** All 126 fields came back `high`, including while the model read the same name four different ways. After the fixes none of those are wrong, so it's uninformative rather than misleading, but the review screen deliberately does not depend on it: the "check this against the photo" warning always renders, and the phone field always carries the "handwritten numbers are easy to misread" hint. A flag that never fires is worse than no flag, because its absence reads as reassurance.
+
+**Verification status**
+
+Typecheck, lint, and production build clean. Secret hygiene re-verified: no `ANTHROPIC_API_KEY` or `@anthropic-ai` reference in `.next/static`.
+
+**Live run, 2026-07-30** (localhost dev server, production Supabase, signed in as Dan), uploading a degraded handwritten note through the note path:
+
+| PRD case | Result |
+|---|---|
+| 1. Legible note → clean transcription, sensible destinations | **Passed.** Full transcription rendered; guidelines got "No shoes upstairs / Strip the beds", how-to got the water shut-off and gate code. Both boxes opened with the property's existing text preserved above the new lines. |
+| 2. Note naming a person + phone → contact offered | **Passed.** "Plumber / Jim Farrow / 207-555-0143", digit-exact, bound to the unchanged `addPropertyContact`. |
+| 3. Messy handwriting still editable, flags visible | **Passed.** Warning renders unconditionally; every destination is a normal editable field. |
+| 4. Abandon → zero writes | **Passed.** After the extraction: 0 contacts on the property, and zero revisions written after the extraction timestamp. |
+| 5. Source document link | **Passed.** The signed URL returns the image (200); the same object unsigned returns 400, so the bucket is still private. |
+| 6. Guest blocked | Unchanged from slice 1 — same route gate, same action check, same RLS, all verified there. Slice 2 adds no new entry point. |
+| 7. Secret hygiene | **Passed.** |
+
+**Not cleaned up:** the storage object from this test was deleted through the app's own owner-delete policy, but its `intake_documents` row is still present — the delete was blocked by a local permission guard. One orphaned row (`intent = 'note'`, storage path `b2/b2c1e714-…`), plus the `contact` row the reviewer's slice 1 walk left. Both are harmless provenance rows pointing at deleted objects, and both are the retention follow-up below made concrete.
+
+**Follow-ups**
+
+- Retention/GC for the `intake` bucket and `intake_documents` is now overdue: three test rows across two slices, no way to see or remove them in the app.
+- The `guidelines` vs `how_to` split is a judgement call the model gets right about 80% of the time and the member fixes in a second. If it annoys anyone, the fix is one screen showing both boxes side by side rather than a better prompt.
+- Confidence calibration on the note intent is worth re-testing whenever the prompt or model changes; today it's uniformly `high` and carries no information.
