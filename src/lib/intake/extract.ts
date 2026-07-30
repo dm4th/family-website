@@ -30,6 +30,11 @@ const DEFAULT_MODEL = "claude-sonnet-5";
 // Per-million-token rates for the default model, used only to log an estimated
 // spend. Wrong-but-close is fine here; it exists to answer "is this costing us
 // cents or dollars?" without a billing dashboard round-trip.
+//
+// These are Sonnet 5's steady-state rates. Introductory pricing ($2/$10) runs
+// through 2026-08-31, so the logged figure currently overstates the real bill
+// by about a third. Deliberately the conservative direction. If INTAKE_MODEL
+// points somewhere else, the log is an over-estimate for cheaper models.
 const INPUT_COST_PER_MTOK = 3;
 const OUTPUT_COST_PER_MTOK = 15;
 
@@ -51,6 +56,15 @@ function getClient(): Anthropic | null {
   if (!apiKey) return null;
   cachedClient ??= new Anthropic({ apiKey });
   return cachedClient;
+}
+
+/**
+ * The `effort` knob exists on the Opus 4.5+ / Sonnet 4.6+ tiers but not on
+ * Haiku, which rejects the request outright rather than ignoring the field.
+ * Kept as a denylist so an unrecognised newer model gets effort by default.
+ */
+function supportsEffort(model: string): boolean {
+  return !/haiku|sonnet-4-5/.test(model);
 }
 
 /** Whether the feature is configured at all. Drives the UI's entry point. */
@@ -86,6 +100,7 @@ export async function extractContactFromDocument(opts: {
     };
   }
 
+  const model = process.env.INTAKE_MODEL ?? DEFAULT_MODEL;
   const data = Buffer.from(opts.bytes).toString("base64");
 
   // PDFs travel as a document block, images as an image block. Both go before
@@ -115,13 +130,17 @@ export async function extractContactFromDocument(opts: {
 
   try {
     const response = await client.messages.create({
-      model: process.env.INTAKE_MODEL ?? DEFAULT_MODEL,
+      model,
       max_tokens: 4000,
-      // Low effort is right for transcription: the work is reading what's on
-      // the page, not reasoning about it, and it keeps latency in the range
-      // where "reading your document…" stays a short wait.
       output_config: {
-        effort: "low",
+        // Low effort is right for transcription: the work is reading what's on
+        // the page, not reasoning about it, and it keeps latency in the range
+        // where "reading your document…" stays a short wait.
+        //
+        // Not every model accepts `effort` — Haiku rejects the whole request
+        // with a 400 — so it's omitted rather than hardcoded. Without this,
+        // pointing INTAKE_MODEL at a cheaper model fails outright.
+        ...(supportsEffort(model) ? { effort: "low" as const } : {}),
         format: {
           type: "json_schema",
           schema: CONTACT_EXTRACTION_JSON_SCHEMA,

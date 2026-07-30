@@ -57,6 +57,18 @@ export const INTAKE_BUCKET = "intake";
 export const MAX_INTAKE_BYTES = 10 * 1024 * 1024;
 
 /**
+ * Long-edge cap for an intake photo, deliberately smaller than the photo
+ * archive's 2048.
+ *
+ * Vision cost is driven by pixel area, and measured on a real bill the 2048px
+ * upload cost roughly a third more than the same page at 1500px with no
+ * difference in what was read. Going lower still (1000px) also read correctly
+ * but leaves no headroom for the harder inputs this feature exists for:
+ * handwriting, creased paper, a photo taken at an angle. 1500 is the balance.
+ */
+export const INTAKE_MAX_DIMENSION = 1500;
+
+/**
  * Types the vision model can actually read. HEIC is deliberately absent: iOS
  * converts to JPEG on upload in practice, and a HEIC that slips through would
  * fail server-side with a confusing error rather than a clear one here.

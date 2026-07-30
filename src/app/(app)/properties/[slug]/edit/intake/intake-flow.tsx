@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { prepareImageForUpload } from "@/lib/image-resize";
 import {
   INTAKE_BUCKET,
+  INTAKE_MAX_DIMENSION,
   MAX_INTAKE_BYTES,
   generateIntakePath,
   isAllowedIntakeMime,
@@ -82,9 +83,16 @@ export function IntakeFlow({
       const isPdf = file.type.toLowerCase() === "application/pdf";
 
       // Photos get downscaled in the browser first (same helper the photo
-      // archive uses). A 9MB phone original becomes a sub-1MB JPEG, which the
-      // model reads just as well and uploads far faster on a home connection.
-      const prepared = isPdf ? null : await prepareImageForUpload(file);
+      // archive uses). A 9MB phone original becomes a small JPEG, which the
+      // model reads just as well, uploads far faster on a home connection, and
+      // costs meaningfully less to read. No thumbnail: nothing renders these
+      // in a grid.
+      const prepared = isPdf
+        ? null
+        : await prepareImageForUpload(file, {
+            maxEdge: INTAKE_MAX_DIMENSION,
+            withThumb: false,
+          });
       const body = prepared ? prepared.display : file;
       const contentType = prepared ? prepared.contentType : "application/pdf";
       const storagePath = generateIntakePath(isPdf ? "bill.pdf" : "bill.jpg");

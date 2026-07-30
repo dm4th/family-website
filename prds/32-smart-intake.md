@@ -208,6 +208,28 @@ The wrapper logs `[intake] extraction complete: <in> / <out> tokens, ~$<usd>` pe
 
 **About 2 cents per document, not the tenths of a cent estimated up front** — a page renders to a lot of image tokens regardless of file size. Still cheap in absolute terms (Dad photographing 50 bills is about a dollar), but worth knowing before anything encourages bulk use. The 9-11 second latency is the more user-visible cost; the "Reading your document…" state carries it, but a progress hint would help if this gets slower.
 
+**Cost investigation (2026-07-30).** Same bill run across models and resolutions, against the extraction wrapper directly (no app, no writes):
+
+| Model | Input | Tokens in/out | Cost | Accuracy |
+|---|---|---|---|---|
+| Sonnet 5 | JPEG 2048 (original path) | 6259 / 468 | $0.0258 | all correct |
+| Sonnet 5 | JPEG 1500 | 4309 / 472 | **$0.0200** | all correct |
+| Sonnet 5 | JPEG 1000 | 3049 / 448 | $0.0159 | all correct |
+| Sonnet 5 | JPEG 750 | 2608 / 463 | $0.0148 | all correct |
+| Sonnet 5 | PDF | 3874 / 465 | $0.0186 | all correct |
+| Haiku 4.5 | JPEG 2048 | 3204 / 273 | **$0.0046** | all correct |
+| Haiku 4.5 | PDF | 3469 / 262 | $0.0048 | all correct |
+
+Two findings, one acted on and one deliberately not:
+
+1. **Resolution was free money, so the cap dropped to 1500px** (`INTAKE_MAX_DIMENSION`). The upload was being downscaled to the photo archive's 2048, which is sized for viewing photos, not for reading a page once. 1500px cut the image path from $0.026 to $0.020 with identical extraction. 1000px and below also read this bill correctly but leave no headroom for the harder inputs the feature exists for (handwriting, creases, angled photos), so 1500 is the balance. Verified end-to-end after the change: 4309 input tokens, every field still correct.
+
+2. **Haiku 4.5 is 5.6x cheaper and was rejected anyway.** On the clean bill it read everything correctly. On the *degraded* bill it reported `high` confidence on a phone number it got wrong (1-800-752-4213 against an actual 800-743-5000), while Sonnet marked every field on that same input `medium` or `low`. The entire safety argument for this feature is that a shaky read announces itself so the reviewer's eye lands there; a model that is confidently wrong breaks that, and it breaks it hardest on exactly the handwriting slice 2 targets. Not worth 1.5 cents a document. `INTAKE_MODEL` is still there if a future clean-document-only path wants it.
+
+Also fixed while measuring: `output_config.effort` was hardcoded, and **Haiku rejects that parameter with a 400**, so `INTAKE_MODEL` could not actually point at a cheaper model. Now sent only for models that support it (`supportsEffort`).
+
+Not pursued: trimming the `rawText` cap to cut output tokens. Output is ~460 tokens (~$0.007) and rawText is the "show what we read" disclosure that makes a bad extraction auditable. Saving ~$0.002 by degrading that trade is the wrong side of the deal.
+
 **Verification status**
 
 Passing: build clean, typecheck clean, lint clean. Secret hygiene verified by scanning `.next/static` after a production build for `ANTHROPIC_API_KEY` / `anthropic` — no hits, so the key and the SDK never reach a client bundle. Privileged fields are unreachable by construction: `parseContactExtraction` drops every key outside `CONTACT_FIELD_KEYS`, so status / max_guests / peak / hero can't be proposed. Guest lockout is enforced at three layers (route `notFound`, `extractIntake` rejection, RLS).
