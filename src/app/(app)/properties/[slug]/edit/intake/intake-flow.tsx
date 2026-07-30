@@ -310,6 +310,7 @@ export function IntakeFlow({
               property={property}
               cross={cross}
               onCheck={() => void handleAlsoCheckDates(phase.storagePath)}
+              onDismiss={() => setCross({ name: "idle" })}
             />
           </>
         ) : (
@@ -326,6 +327,7 @@ export function IntakeFlow({
               property={property}
               cross={cross}
               onCheck={() => void handleAlsoCheckDates(phase.storagePath)}
+              onDismiss={() => setCross({ name: "idle" })}
             />
           </>
         )}
@@ -387,19 +389,23 @@ function AlsoCheckDates({
   property,
   cross,
   onCheck,
+  onDismiss,
 }: {
   property: IntakeProperty;
   cross: CrossPhase;
   onCheck: () => void;
+  /** Puts the offer back to its button. Never discards the review above it. */
+  onDismiss: () => void;
 }) {
   if (cross.name === "ready") {
     return (
       <CalendarReview
         property={property}
         extraction={cross.extraction}
-        // Already inside a review; "start over" here just hides the offer again
-        // rather than throwing away the contact form above it.
-        onStartOver={() => {}}
+        // Collapses this section back to the offer. It must NOT reset the whole
+        // flow the way the top-level review's "start over" does — the contact or
+        // note form sitting above this one may be unsaved.
+        onStartOver={onDismiss}
       />
     );
   }
