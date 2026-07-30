@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canManageProperty } from "@/lib/property-auth";
 import { resolveViewer } from "@/lib/guest";
+import { isIntakeConfigured } from "@/lib/intake/extract";
 import { LedgerPanel, PageIntro } from "@/components/shell";
 import { PropertyEditForm } from "./property-edit-form";
 import { ContactsEditor } from "./contacts-editor";
@@ -37,6 +38,10 @@ export default async function PropertyEditPage({
   if (error || !property) notFound();
 
   const { ok: canManage, isSiteAdmin } = await canManageProperty(property.id);
+
+  // Only advertise Smart Intake (PRD 32) when the vision call is actually
+  // configured, so the link never leads to a dead end.
+  const intakeReady = isIntakeConfigured();
 
   const { data: contacts } = await supabase
     .from("property_contacts")
@@ -158,6 +163,18 @@ export default async function PropertyEditPage({
           <p className="text-xs text-foreground-subtle">
             Caretakers, vendors, emergency numbers.
           </p>
+          {intakeReady ? (
+            <p className="text-sm text-foreground-muted">
+              Working from a paper bill?{" "}
+              <Link
+                href={`/properties/${property.slug}/edit/intake`}
+                className="text-foreground underline underline-offset-4"
+              >
+                Add from a Photo
+              </Link>{" "}
+              and we&rsquo;ll fill in the details for you to check.
+            </p>
+          ) : null}
         </header>
         <ContactsEditor
           propertyId={property.id}

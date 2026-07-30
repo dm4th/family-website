@@ -81,8 +81,17 @@ async function encodeAt(
  * thumbnail. On any decode/encode failure (or an intentionally passed-through
  * format) returns the original File as `display` with `thumb: null` so the
  * upload still succeeds.
+ *
+ * `opts.maxEdge` overrides the display cap, and `opts.withThumb: false` skips
+ * the companion encode. Smart Intake (PRD 32) uses both: its upload is read by
+ * a vision model and then filed away, so it wants a smaller long edge (image
+ * tokens, and therefore cost, scale with pixel area) and has no grid tile to
+ * render a thumbnail into.
  */
-export async function prepareImageForUpload(file: File): Promise<PreparedUpload> {
+export async function prepareImageForUpload(
+  file: File,
+  opts?: { maxEdge?: number; withThumb?: boolean },
+): Promise<PreparedUpload> {
   const fallback: PreparedUpload = {
     display: file,
     thumb: null,
@@ -102,9 +111,16 @@ export async function prepareImageForUpload(file: File): Promise<PreparedUpload>
   }
 
   try {
-    const display = await encodeAt(bitmap, DISPLAY_MAX_DIMENSION, DISPLAY_QUALITY);
+    const display = await encodeAt(
+      bitmap,
+      opts?.maxEdge ?? DISPLAY_MAX_DIMENSION,
+      DISPLAY_QUALITY,
+    );
     if (!display) return fallback;
-    const thumb = await encodeAt(bitmap, THUMB_MAX_DIMENSION, THUMB_QUALITY);
+    const thumb =
+      opts?.withThumb === false
+        ? null
+        : await encodeAt(bitmap, THUMB_MAX_DIMENSION, THUMB_QUALITY);
     return {
       display,
       thumb,
