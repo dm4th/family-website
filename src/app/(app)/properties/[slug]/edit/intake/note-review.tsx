@@ -25,6 +25,7 @@ import { FormStatus } from "@/components/form-status";
 import { ReviewField, ReviewSection } from "@/components/intake/review-shell";
 import {
   PropertyCarryFields,
+  useNotifyOnSave,
   type CarryableField,
   type IntakeProperty,
 } from "@/components/intake/property-carry-fields";
@@ -47,11 +48,17 @@ export function NoteReview({
   extraction,
   canManage,
   onStartOver,
+  onPropertySaved,
+  propertyBusy,
 }: {
   property: IntakeProperty;
   extraction: NoteExtraction;
   canManage: boolean;
   onStartOver: () => void;
+  /** Fired after any write to the property, so the other forms re-read it. */
+  onPropertySaved: () => void;
+  /** True while that re-read is in flight; holds the other property forms. */
+  propertyBusy: boolean;
 }) {
   const { transcription, suggestedGuidelines, suggestedHowTo } = extraction;
 
@@ -94,6 +101,8 @@ export function NoteReview({
         fieldLabel="Guidelines"
         proposed={suggestedGuidelines}
         blurb="Rules and expectations for people staying."
+        onSaved={onPropertySaved}
+        busy={propertyBusy}
       />
 
       <NarrativeForm
@@ -104,6 +113,8 @@ export function NoteReview({
         fieldLabel="How to"
         proposed={suggestedHowTo}
         blurb="Practical instructions: where the water shut-off is, gate codes, heating."
+        onSaved={onPropertySaved}
+        busy={propertyBusy}
       />
 
       {extraction.suggestedContacts.map((contact, index) => (
@@ -183,6 +194,8 @@ function NarrativeForm({
   fieldLabel,
   proposed,
   blurb,
+  onSaved,
+  busy,
 }: {
   property: IntakeProperty;
   canManage: boolean;
@@ -191,11 +204,16 @@ function NarrativeForm({
   fieldLabel: string;
   proposed: ExtractedField;
   blurb: string;
+  onSaved: () => void;
+  busy: boolean;
 }) {
   const action = updateProperty.bind(null, property.id);
   const [state, formAction, isPending] = useActionState(action, propertyInitial);
   const [dismissed, setDismissed] = useState(false);
+  useNotifyOnSave(state.status === "saved", onSaved);
 
+  // Read at render, so a sibling form's save (which refreshes the property
+  // upstream) is reflected here rather than frozen at page load.
   const existing = property[field];
 
   // Nothing to offer if the note had nothing for this field.
@@ -259,7 +277,7 @@ function NarrativeForm({
             <FormStatus tone="error">
               {state.status === "error" ? state.message : null}
             </FormStatus>
-            <Button type="submit" variant="outline" disabled={isPending}>
+            <Button type="submit" variant="outline" disabled={isPending || busy}>
               {isPending ? "Saving…" : `Save ${fieldLabel}`}
             </Button>
           </div>

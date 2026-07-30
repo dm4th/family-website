@@ -18,6 +18,7 @@ import { FormStatus } from "@/components/form-status";
 import { ReviewField, ReviewSection } from "@/components/intake/review-shell";
 import {
   PropertyCarryFields,
+  useNotifyOnSave,
   type IntakeProperty,
 } from "@/components/intake/property-carry-fields";
 import type { ContactExtraction } from "@/lib/intake/schema";
@@ -35,11 +36,17 @@ export function ContactReview({
   extraction,
   canManage,
   onStartOver,
+  onPropertySaved,
+  propertyBusy,
 }: {
   property: IntakeProperty;
   extraction: ContactExtraction;
   canManage: boolean;
   onStartOver: () => void;
+  /** Fired after any write to the property, so sibling forms re-read it. */
+  onPropertySaved: () => void;
+  /** True while that re-read is in flight; holds the other property forms. */
+  propertyBusy: boolean;
 }) {
   return (
     <>
@@ -52,6 +59,8 @@ export function ContactReview({
         property={property}
         extraction={extraction}
         canManage={canManage}
+        onSaved={onPropertySaved}
+        busy={propertyBusy}
       />
     </>
   );
@@ -197,14 +206,19 @@ function AddressReviewForm({
   property,
   extraction,
   canManage,
+  onSaved,
+  busy,
 }: {
   property: IntakeProperty;
   extraction: ContactExtraction;
   canManage: boolean;
+  onSaved: () => void;
+  busy: boolean;
 }) {
   const action = updateProperty.bind(null, property.id);
   const [state, formAction, isPending] = useActionState(action, propertyInitial);
   const [dismissed, setDismissed] = useState(false);
+  useNotifyOnSave(state.status === "saved", onSaved);
 
   const proposed = extraction.fields.address;
 
@@ -260,7 +274,7 @@ function AddressReviewForm({
             <FormStatus tone="error">
               {state.status === "error" ? state.message : null}
             </FormStatus>
-            <Button type="submit" variant="outline" disabled={isPending}>
+            <Button type="submit" variant="outline" disabled={isPending || busy}>
               {isPending ? "Saving…" : "Save Address"}
             </Button>
           </div>

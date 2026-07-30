@@ -21,6 +21,58 @@ import {
  */
 const SOURCE_URL_TTL_SECONDS = 60 * 30;
 
+/**
+ * The property columns the intake forms carry through a partial `updateProperty`
+ * submit. Mirrors `IntakeProperty` in `property-carry-fields.tsx`.
+ */
+const CARRY_COLUMNS =
+  "id, slug, name, location, address, description, how_to, guidelines, amenities, status, max_guests";
+
+export type IntakePropertySnapshot = {
+  id: string;
+  slug: string;
+  name: string;
+  location: string | null;
+  address: string | null;
+  description: string | null;
+  how_to: string | null;
+  guidelines: string | null;
+  amenities: string[];
+  status: string;
+  max_guests: number | null;
+};
+
+/**
+ * Re-read the property after a save. Read-only; writes nothing.
+ *
+ * This exists because `updateProperty` is a whole-form action and a review
+ * session can hold more than one form pointed at it — a note that fills both
+ * guidelines and how-to renders two. Each form carries the fields it isn't
+ * editing as hidden inputs, so without this the second save would carry the
+ * values from page load and quietly revert the first save, with a "Saved"
+ * confirmation on screen for both.
+ *
+ * Refetching rather than having each form report what it wrote is the safer
+ * shape: a form added later can't reintroduce the bug by forgetting to
+ * report a field, because the server is the one being asked.
+ */
+export async function refreshIntakeProperty(
+  propertyId: string,
+): Promise<IntakePropertySnapshot | null> {
+  const viewer = await resolveViewer();
+  if (!viewer || viewer.isGuest) return null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("properties")
+    .select(CARRY_COLUMNS)
+    .eq("id", propertyId)
+    .maybeSingle();
+  if (error || !data) return null;
+
+  return { ...data, amenities: data.amenities ?? [] } as IntakePropertySnapshot;
+}
+
 export type ExtractIntakeState =
   | {
       status: "ok";

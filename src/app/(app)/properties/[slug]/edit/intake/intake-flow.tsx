@@ -27,7 +27,7 @@ import {
   type IntakeIntent,
   type NoteExtraction,
 } from "@/lib/intake/schema";
-import { extractIntake } from "./actions";
+import { extractIntake, refreshIntakeProperty } from "./actions";
 import { ContactReview } from "./contact-review";
 import { NoteReview } from "./note-review";
 
@@ -88,12 +88,18 @@ type Phase =
     };
 
 export function IntakeFlow({
-  property,
+  property: initialProperty,
   canManage,
 }: {
   property: IntakeProperty;
   canManage: boolean;
 }) {
+  // Held in state, not read straight from the prop, because a review session can
+  // save more than once and the forms below carry the property's other fields
+  // through each submit. See `refreshIntakeProperty` for why that matters.
+  const [property, setProperty] = useState(initialProperty);
+  /** True while the property is being re-read after a save. */
+  const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   /** Which card is working, for the status line. Not used to route the upload. */
   const [pending, setPending] = useState<IntakeIntent | null>(null);
@@ -189,6 +195,25 @@ export function IntakeFlow({
     }
   }
 
+  /**
+   * Called by any review form that just wrote to the property. Pulls the row
+   * back so the *other* forms carry what's actually stored rather than what was
+   * there when the page loaded.
+   */
+  async function handlePropertySaved() {
+    // Sibling forms are held while this is in flight. Without it, a member who
+    // presses the second Save inside the refresh round-trip submits the same
+    // stale carry values the refresh exists to replace — a narrower version of
+    // exactly the bug being fixed.
+    setRefreshing(true);
+    try {
+      const fresh = await refreshIntakeProperty(property.id);
+      if (fresh) setProperty(fresh);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   if (phase.name === "review") {
     const reviewKind =
       KINDS.find((k) => k.intent === phase.intent) ?? KINDS[0];
@@ -207,6 +232,8 @@ export function IntakeFlow({
             extraction={phase.extraction}
             canManage={canManage}
             onStartOver={() => setPhase({ name: "idle" })}
+            onPropertySaved={handlePropertySaved}
+            propertyBusy={refreshing}
           />
         ) : (
           <ContactReview
@@ -214,6 +241,8 @@ export function IntakeFlow({
             extraction={phase.extraction}
             canManage={canManage}
             onStartOver={() => setPhase({ name: "idle" })}
+            onPropertySaved={handlePropertySaved}
+            propertyBusy={refreshing}
           />
         )}
       </ReviewShell>

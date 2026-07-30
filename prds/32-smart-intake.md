@@ -312,6 +312,7 @@ evals/intake/results-notes-2026-07-30.md             # NEW — results
 - **A suggested contact must have a phone number or an email.** Enforced in `parseNoteExtraction`, not just asked for in the prompt. This came directly from the eval — see below.
 - **The "please check this" warning on a note is unconditional**, not confidence-driven, because measurement showed the confidence signal doesn't discriminate on this intent.
 - **`PropertyCarryFields`** replaces slice 1's hand-rolled hidden inputs and is now the single place that has to track `updateProperty`'s field list. Slice 2 would otherwise have been the third copy.
+- **The property is re-read from the server after every save** (`refreshIntakeProperty` + `useNotifyOnSave`). Carrying fields solves half the whole-form problem; this solves the other half. See the review fix below.
 - **One file input per kind card.** The first cut shared one input and set the intent in state just before clicking it; giving each card its own input makes the choice travel with the file instead of through state set a moment earlier.
 - **No `rawText` on the note schema.** The transcription *is* the raw read, so asking for both would pay twice for the same tokens and give the member two texts to reconcile.
 
@@ -343,6 +344,14 @@ Typecheck, lint, and production build clean. Secret hygiene re-verified: no `ANT
 | 7. Secret hygiene | **Passed.** |
 
 **Not cleaned up:** the storage object from this test was deleted through the app's own owner-delete policy, but its `intake_documents` row is still present — the delete was blocked by a local permission guard. One orphaned row (`intent = 'note'`, storage path `b2/b2c1e714-…`), plus the `contact` row the reviewer's slice 1 walk left. Both are harmless provenance rows pointing at deleted objects, and both are the retention follow-up below made concrete.
+
+**Review fix: two `updateProperty` forms in one session (caught in review, fixed before merge)**
+
+A note that fills both Guidelines and How-To renders two forms pointed at `updateProperty`. Each carried the values it had *at page load*, so saving the second silently reverted the first, with a "Saved" confirmation on screen for both. Slice 1 never hit it because its pair was an insert plus a single `updateProperty` form; slice 2 is the first time two coexist. It's the same failure family `PropertyCarryFields` exists to prevent, but stale in *time* rather than in *field list*.
+
+Fixed by re-reading the property after any save (`refreshIntakeProperty`, read-only, guest-rejected) rather than having each form report what it wrote. Refetching is the safer shape: a form added later can't reintroduce the bug by forgetting to report a field, because the server is what's being asked. Sibling Save buttons are disabled while the re-read is in flight, so a fast second click can't submit the stale carry values either.
+
+**Verified live** (localhost, production Supabase, on Loon-A-See): before the first save the How-To form carried the page-load guidelines; after saving Guidelines it carried the newly stored text, `\r\n` line endings and all, confirming the value came back from the database rather than from client state. Loon-A-See's guidelines were then restored byte-for-byte to their original value, and `how_to`, `description`, and `location` were never touched.
 
 **Follow-ups**
 
