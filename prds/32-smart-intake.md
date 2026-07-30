@@ -1,7 +1,7 @@
 # 32 — Smart Intake (Photo → Pre-filled Property & Calendar Details)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 03 (properties + `property_contacts` + `canManageProperty`), 05 (Supabase Storage upload), 06 (bookings/calendar + `events`), 27 (direct-write posture — AI never writes, only pre-fills)
-**Status**: 🚧 slice 1 in review (2026-07-30) — slices 2 and 3 still 🟢 ready. **New dependency: server-side Claude vision (Anthropic API key).**
+**Status**: 🚧 slice 1 in review ([PR #32](https://github.com/dm4th/family-website/pull/32), 2026-07-30) — slices 2 and 3 still 🟢 ready. **New dependency: server-side Claude vision (Anthropic API key).**
 **Parallel-safe with**: most feature PRDs (adds a new intake route + one server action; touches the existing contacts / property / calendar forms only to accept pre-filled initial values).
 
 **Slices are sequenced and each ships behind Dan's review** (I review every slice PR before merge). The full three-slice build is written out below so the implementing agent has the complete trajectory up front — Slice 1's foundations (the extraction service, the review-and-save UI shell, the source-file store) are deliberately built to be reused by Slices 2 and 3. Build Slice 1 first, but build it knowing 2 and 3 are coming.
