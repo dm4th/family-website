@@ -9,7 +9,7 @@
  * storage, extraction, and the review framing are common to all of them.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { FormStatus } from "@/components/form-status";
@@ -202,6 +202,22 @@ export function IntakeFlow({
   const [cross, setCross] = useState<CrossPhase>({ name: "idle" });
   /** Which card is working, for the status line. Not used to route the upload. */
   const [pending, setPending] = useState<DocumentIntent | null>(null);
+
+  // A drop that misses a card must not make the browser navigate away to the
+  // file, taking an in-progress review (and its unsaved forms) with it. The
+  // cards call preventDefault themselves and receive their drops first; this
+  // only neutralises everywhere else on the page.
+  useEffect(() => {
+    function swallow(e: DragEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener("dragover", swallow);
+    window.addEventListener("drop", swallow);
+    return () => {
+      window.removeEventListener("dragover", swallow);
+      window.removeEventListener("drop", swallow);
+    };
+  }, []);
 
   async function handleFile(file: File, forIntent: DocumentIntent) {
     setPending(forIntent);
@@ -544,6 +560,10 @@ export function IntakeFlow({
 
       <p className="text-sm text-foreground-subtle">
         JPG, PNG, or PDF · up to {MAX_MB}MB
+        <span className="hidden [@media(pointer:fine)]:inline">
+          {" "}
+          · drag a file onto a card or use its button
+        </span>
       </p>
 
       <FormStatus tone={phase.name === "error" ? "error" : "info"}>
@@ -621,6 +641,11 @@ function AlsoCheckDates({
  * that fires is the one belonging to the card the member pressed, so the choice
  * travels with the file rather than through a piece of state set a moment
  * earlier and read a moment later.
+ *
+ * The same reasoning is why drag-and-drop lands on the card, not the page: a
+ * dropped bill still has to say what it is, and the card it was dropped on is
+ * that answer. A page-wide drop zone would need a "what was that?" step after
+ * the drop, which is the file picker with extra steps.
  */
 function KindCard({
   kind,
@@ -634,9 +659,50 @@ function KindCard({
   onFile: (file: File) => void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /**
+   * Depth-counted rather than boolean: dragenter/dragleave also fire on every
+   * child element crossed, so a plain flag flickers off while the cursor moves
+   * across the card's own text.
+   */
+  const dragDepth = useRef(0);
+  const [dragOver, setDragOver] = useState(false);
+
+  function fileFromDrop(dt: DataTransfer): File | null {
+    // Only the first file: one card is one document, same as the picker.
+    return dt.files?.[0] ?? null;
+  }
 
   return (
-    <div className="flex flex-col gap-3 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-5">
+    <div
+      className={`flex flex-col gap-3 rounded-md border border-dashed p-5 transition-colors ${
+        dragOver && !busy
+          ? "border-accent-bronze bg-accent-bronze/10"
+          : "border-accent-bronze/40 bg-surface/60"
+      }`}
+      onDragEnter={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        dragDepth.current += 1;
+        setDragOver(true);
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = busy ? "none" : "copy";
+      }}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDragOver(false);
+        if (busy) return;
+        const file = fileFromDrop(e.dataTransfer);
+        if (file) onFile(file);
+      }}
+    >
       <h3 className="font-display text-lg leading-tight text-foreground">
         {kind.title}
       </h3>
@@ -653,7 +719,7 @@ function KindCard({
           e.target.value = "";
         }}
       />
-      <div>
+      <div className="flex items-baseline gap-3">
         <Button
           type="button"
           variant="outline"
@@ -662,6 +728,14 @@ function KindCard({
         >
           {working ? "Working…" : kind.button}
         </Button>
+        {/* Drag-and-drop needs a mouse or trackpad; on touch screens the hint
+            would name a gesture the device can't make. */}
+        <span
+          className="hidden text-sm text-foreground-subtle [@media(pointer:fine)]:inline"
+          aria-hidden="true"
+        >
+          {dragOver && !busy ? "Drop it here" : "or drop a file here"}
+        </span>
       </div>
     </div>
   );
