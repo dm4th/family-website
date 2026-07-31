@@ -27,6 +27,11 @@ export function intakeKindLabel(intent: string): string {
       return "Handwritten note";
     case "calendar":
       return "Due date";
+    case "dictation":
+      // Not a document at all — a stored transcript of what someone said (PRD
+      // 34). It sits in the same bucket with the same row so the panel can see,
+      // open, and remove it like everything else.
+      return "Spoken note";
     default:
       return "Bill or statement";
   }

@@ -4,16 +4,19 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { resolveViewer } from "@/lib/guest";
-import { extractFromDocument } from "@/lib/intake/extract";
+import { extractFromDictation, extractFromDocument } from "@/lib/intake/extract";
 import {
   INTAKE_BUCKET,
+  MAX_DICTATION_CHARS,
   MAX_INTAKE_BYTES,
+  generateIntakeTextPath,
   isAllowedIntakeMime,
-  isIntakeIntent,
+  isDocumentIntent,
   isValidIntakePath,
   type CalendarExtraction,
   type ContactExtraction,
-  type IntakeIntent,
+  type DictationExtraction,
+  type DocumentIntent,
   type NoteExtraction,
 } from "@/lib/intake/schema";
 
@@ -112,9 +115,12 @@ export type ExtractIntakeState =
 export async function extractIntake(
   propertyId: string,
   storagePath: string,
-  intent: IntakeIntent,
+  intent: DocumentIntent,
 ): Promise<ExtractIntakeState> {
-  if (!isIntakeIntent(intent)) {
+  // Document intents only. `dictation` reads text, not an uploaded file, and
+  // has its own action below — routing it through here would hand the vision
+  // path a `.txt` and fail on the MIME check with a confusing message.
+  if (!isDocumentIntent(intent)) {
     return { status: "error", message: "We don't know how to read that." };
   }
 
@@ -237,6 +243,124 @@ export async function extractIntake(
         sourceUrl,
       };
   }
+}
+
+// --- Dictation: speaking instead of typing (PRD 34) ------------------------
+
+export type ExtractDictationState =
+  | {
+      status: "ok";
+      extraction: DictationExtraction;
+      sourceUrl: string | null;
+    }
+  | { status: "error"; message: string };
+
+/**
+ * Tidy a spoken session into proposals. **Writes nothing the member has to live
+ * with**, exactly like `extractIntake`.
+ *
+ * The one thing it stores is the raw transcript, as a `.txt` in the same private
+ * bucket the photos go to, with the same provenance row. That is what makes the
+ * retention promise hold for voice: a member who wants to check what was filled
+ * in against what they actually said can open it, and PRD 33's delete path
+ * removes it with no knowledge that it isn't an image.
+ *
+ * Stored *before* the model call, not after. The transcript is the member's own
+ * words, and it is the thing worth keeping even when the tidy-up fails —
+ * storing it afterwards would lose it in exactly the case they most need it.
+ */
+export async function extractDictation(
+  propertyId: string,
+  text: string,
+): Promise<ExtractDictationState> {
+  const viewer = await resolveViewer();
+  if (!viewer) {
+    return { status: "error", message: "Please sign in and try again." };
+  }
+  if (viewer.isGuest) {
+    return { status: "error", message: "Guests can't add property details." };
+  }
+
+  const transcript = text.trim();
+  if (!transcript) {
+    return {
+      status: "error",
+      message: "There's nothing here yet. Say or type something first.",
+    };
+  }
+  if (transcript.length > MAX_DICTATION_CHARS) {
+    return {
+      status: "error",
+      message:
+        "That's more than we can take in one go. Save what you have in a few shorter goes instead.",
+    };
+  }
+
+  const supabase = await createClient();
+
+  const { data: property } = await supabase
+    .from("properties")
+    .select("id, slug")
+    .eq("id", propertyId)
+    .maybeSingle<{ id: string; slug: string }>();
+  if (!property) {
+    return { status: "error", message: "That property couldn't be found." };
+  }
+
+  const body = new Blob([transcript], { type: "text/plain" });
+  const storagePath = generateIntakeTextPath();
+  const { error: uploadError } = await supabase.storage
+    .from(INTAKE_BUCKET)
+    .upload(storagePath, body, { contentType: "text/plain", upsert: false });
+
+  // Uploaded from the server rather than the browser, unlike the photo path.
+  // Text this size is nowhere near the Server Action body limit that forced
+  // photos to go direct, and doing it here means the transcript and the row
+  // that indexes it are written by the same caller.
+  if (uploadError) {
+    console.error("[intake] could not store dictation transcript", uploadError);
+    return {
+      status: "error",
+      message: "We couldn't save what you said. Please try again.",
+    };
+  }
+
+  const { error: recordError } = await supabase.from("intake_documents").insert({
+    property_id: propertyId,
+    storage_path: storagePath,
+    content_type: "text/plain",
+    byte_size: body.size,
+    intent: "dictation",
+    uploaded_by: viewer.userId,
+  });
+  if (recordError) {
+    // The object is stored but unindexed, which is the orphan PRD 33 exists to
+    // prevent — so take it back out rather than leave something in the bucket
+    // that no panel can show and no member can delete.
+    console.error("[intake] could not record dictation", recordError);
+    await supabase.storage.from(INTAKE_BUCKET).remove([storagePath]);
+    return {
+      status: "error",
+      message: "We couldn't save what you said. Please try again.",
+    };
+  }
+
+  const result = await extractFromDictation({ text: transcript });
+  if (!result.ok) {
+    return { status: "error", message: result.message };
+  }
+
+  const { data: signed } = await supabase.storage
+    .from(INTAKE_BUCKET)
+    .createSignedUrl(storagePath, SOURCE_URL_TTL_SECONDS);
+
+  revalidatePath(`/properties/${property.slug}/edit/intake`);
+
+  return {
+    status: "ok",
+    extraction: result.extraction,
+    sourceUrl: signed?.signedUrl ?? null,
+  };
 }
 
 // --- Retention: seeing and removing what's been read (PRD 33) --------------
