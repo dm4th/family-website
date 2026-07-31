@@ -1,7 +1,7 @@
 # 34 — Intake Entry & Dictation (Speak or Photograph, Then Review)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 32 (Smart Intake pipeline — INTENTS registry, review idiom, gated saves), 33 (retention panel shares the intake page)
-**Status**: 🚧 in review (2026-07-31) — PR #36, opened **unwalked**. Both slices built, build-green, eval clean (44 extractions, zero fabrications); no dictation exercised against prod. No migration needed.
+**Status**: ✅ shipped (PR #36 merged `8fdfe33` 2026-07-31; reviewer live-walked the full voice path on prod same day — see Verification)
 **Parallel-safe with**: most feature PRDs (touches the property edit entry point + the intake surface; nothing else).
 
 ---
@@ -98,7 +98,7 @@ No migration expected: `intake_documents.intent` is a text column and the bucket
 - [x] Entry band follows house restraint (no gradients/icon circles; Title Case; `Button` default size = 40px) and is absent when intake is unconfigured.
 - [x] Web Speech is enhancement-only: absent ≠ broken, present ≠ auto-submit.
 - [x] No new guest-reachable surface; `extractDictation` rejects guests at the top, the page still 404s them.
-- [ ] **Live walk: not done.** One dictation session on prod producing a page edit + a contact + a reminder, then deleted from the retention panel.
+- [x] Live walk: one dictation session on prod producing page edits + a contact + a reminder, then deleted from the retention panel (2026-07-31, reviewer).
 
 ## Implementation
 
@@ -136,10 +136,19 @@ No migration expected: `intake_documents.intent` is a text column and the bucket
 - `npx tsc --noEmit` clean · `npx eslint` clean on touched paths · `npm run build` green.
 - **Eval: 44 extractions, 314 scored fields, zero fabrications** (`evals/intake/results-dictation-2026-07-31.md`). 36/36 sessions naming nobody reachable produced zero contacts; 32/32 naming no day produced zero reminders, including "soon", "before winter", and a date already past. All 14 stated dates resolved correctly across four forms of expression, every one with `spokenAs` populated. Self-correction handled ("four four one seven no wait... four four seven one" → 4471). ~$0.0034 and 2.4s per dictation.
 - The eval's own first run reported 4 fabrications that turned out to be scorer artifacts; the fix was to the scorer, never to the prompt or schema, and the whole progression is written up in the results file rather than quietly overwritten.
-- **Not walked live.** No dictation has been run against prod, so the recipe's steps 2, 4, and 6 (happy path end to end, the transcript appearing in "Documents We've Read" as a Spoken note, guest 404) are unverified outside the build.
+- **Reviewer live walk on prod (2026-07-31):**
+  - **Entry band** renders first on the edit page, both doors present, colon copy (post-fix) confirmed live; "Add by Voice" lands directly on the capture screen via `?mode=voice`.
+  - **Full dictation session**: a deliberately messy 517-char transcript (filler, a self-correction, four topics) came back correctly tidied — the self-correction resolved to what the speaker settled on ("turn it right" kept, the false start dropped), rules routed to guidelines, the shut-off to how-to, and the plow guy offered as a contact with his number digit-exact.
+  - **Date resolution live**: "the fifteenth" spoken on July 31 resolved to 2026-08-15 (the *next* fifteenth) with the `spokenAs` quote rendered beside the date box; a second session's "every month" produced the recurrence with its own disclosure line. Saved reminder confirmation reported the saved values.
+  - **Saves**: guidelines + how-to appends (existing text preserved above the new lines), a contact, and a monthly reminder all landed through the gated actions — six revision rows recorded, matching every save and the cleanup deletes.
+  - **Progress line** counted correctly, ending at "2 of 2 updates saved" on the second session.
+  - **Retention seam (the PRD 33 meet)**: both sessions appeared in "Documents We've Read" as **Spoken note** with byte sizes; Open returned the *raw* transcript verbatim (the member's literal words, not the tidied version); both deleted cleanly through the panel — object + row together, verified at zero at the DB.
+  - One session's transcript was stored and listed even though its review was abandoned (browser tab closed mid-walk) — inadvertently proving the stored-before-the-model-call design and the retention panel's purpose in one stroke.
+  - Guest 404 verified by inspection only (route guard unchanged from PRD 32/33; no walkable guest account state changed this PRD).
 
 **Follow-ups**
 
 - Server-side audio transcription stays out, per pre-flight — revisit only if keyboard dictation genuinely fails the family.
 - "Tidy This Up" on hand-typed fields elsewhere is the natural follow-on and remains a separate PRD.
 - The `how_to` / `guidelines` split is a judgement call the model gets differently from a person about a quarter of the time. Every instance is visible and editable before saving, so it is a cost rather than a defect, but if it grates in real use the fix is a "move this to the other section" control rather than a better prompt.
+- **Copy nits found on the live walk** (cosmetic, shared-component wording that predates dictation): the review shell's source link says "Open the photo you uploaded" and the reminder section label says "Reminder found on this document" even for a spoken session; and the capture screen's "Tap the microphone on your keyboard" guidance is mobile-truthful but desktop-vague (desktops have OS dictation — fn-fn on macOS, Win+H on Windows — not a keyboard mic button; the Web Speech "Use the Microphone" button does show on desktop Chrome). Worth a small copy pass: source-aware link/label text and a device-aware capture hint.
