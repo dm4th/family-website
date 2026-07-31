@@ -20,7 +20,14 @@ import type { ReminderRecurrence } from "@/lib/db/schema";
 
 export type ReminderFormState =
   | { status: "idle" }
-  | { status: "saved" }
+  /**
+   * `saved` carries back what was actually written, so a confirmation can name
+   * it rather than repeat what the caller *proposed*. This matters on the intake
+   * review screen: a member correcting a misread date is the entire point of
+   * that form, and a message built from the model's suggestion would cheerfully
+   * confirm the date they just fixed.
+   */
+  | { status: "saved"; saved?: { title: string; dueDate: string } }
   | { status: "deleted" }
   | { status: "error"; message: string };
 
@@ -117,7 +124,10 @@ export async function addPropertyReminder(
   });
 
   revalidateReminder(propertySlug);
-  return { status: "saved" };
+  return {
+    status: "saved",
+    saved: { title: input.title, dueDate: input.due_date },
+  };
 }
 
 export async function updatePropertyReminder(
@@ -162,7 +172,10 @@ export async function updatePropertyReminder(
   });
 
   revalidateReminder(propertySlug);
-  return { status: "saved" };
+  return {
+    status: "saved",
+    saved: { title: input.title, dueDate: input.due_date },
+  };
 }
 
 export async function deletePropertyReminder(

@@ -120,11 +120,17 @@ function SuggestedReminderForm({
   const what = reminder.title ?? "this bill";
 
   if (state.status === "saved") {
+    // Named from what the server actually wrote, never from `reminder` (the
+    // model's proposal). Correcting a misread date is the whole reason this
+    // screen exists, and a confirmation built from the suggestion would happily
+    // read back the date the member just fixed.
+    const savedTitle = state.saved?.title ?? what;
+    const savedDate = state.saved?.dueDate ?? reminder.dueDate;
     return (
       <ReviewSection label="Reminder">
         <p className="text-base text-foreground">
-          Saved. {what} is on {property.name}&rsquo;s calendar for{" "}
-          {formatDueDate(reminder.dueDate)}.
+          Saved. {savedTitle} is on {property.name}&rsquo;s calendar for{" "}
+          {formatDueDate(savedDate)}.
         </p>
         <div>
           <Link
