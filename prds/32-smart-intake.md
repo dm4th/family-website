@@ -1,7 +1,7 @@
 # 32 — Smart Intake (Photo → Pre-filled Property & Calendar Details)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 03 (properties + `property_contacts` + `canManageProperty`), 05 (Supabase Storage upload), 06 (bookings/calendar + `events`), 27 (direct-write posture — AI never writes, only pre-fills)
-**Status**: ✅ slices 1 & 2 shipped ([PR #32](https://github.com/dm4th/family-website/pull/32), [PR #33](https://github.com/dm4th/family-website/pull/33), both merged + reviewer-verified live on prod 2026-07-30). 🚧 slice 3 (calendar reminders) built 2026-07-30, in review. **Dependency: server-side Claude vision (Anthropic API key), model `claude-haiku-4-5`.** **Slice 3 also adds a `property_reminders` table + migration** — the "existing calendar/event create action" it was specified against did not exist (see its Implementation section).
+**Status**: ✅ slices 1 & 2 shipped ([PR #32](https://github.com/dm4th/family-website/pull/32), [PR #33](https://github.com/dm4th/family-website/pull/33), both merged + reviewer-verified live on prod 2026-07-30). 🚧 slice 3 (calendar reminders) built + walked live on prod 2026-07-31, in review. **Dependency: server-side Claude vision (Anthropic API key), model `claude-haiku-4-5`.** **Slice 3 also adds a `property_reminders` table + migration** — the "existing calendar/event create action" it was specified against did not exist (see its Implementation section).
 **Parallel-safe with**: most feature PRDs (adds a new intake route + one server action; touches the existing contacts / property / calendar forms only to accept pre-filled initial values).
 
 **Slices are sequenced and each ships behind Dan's review** (I review every slice PR before merge). The full three-slice build is written out below so the implementing agent has the complete trajectory up front — Slice 1's foundations (the extraction service, the review-and-save UI shell, the source-file store) are deliberately built to be reused by Slices 2 and 3. Build Slice 1 first, but build it knowing 2 and 3 are coming.
@@ -482,8 +482,51 @@ no privileges the manual form doesn't have.
   confidence-gated wording is therefore kept, where slice 2's had to be
   unconditional.
 
+**Live walk (2026-07-31, localhost against production Supabase, on Loon-A-See)**
+
+Migration applied to prod by Dan first. Every surface exercised end to end:
+
+- **Hand-added a reminder** due 2026-08-31, repeating monthly, deliberately on a
+  month end so clamping ran for real rather than only in the checks.
+- **The feed proved the clamping decision.** `/api/ics/loon-a-see` returned 24
+  VEVENTs, **no RRULE**, expanding to `20260930`, `20261130`, **`20270228`**,
+  and **`20280229`** — February clamped, leap February respected, and the 31st
+  recovered every month that has one, with no drift. An RRULE would have skipped
+  February entirely. Each event is a valid all-day `DTSTART` + `DURATION:P1D`,
+  `TRANSP:TRANSPARENT` so a bill doesn't mark anyone busy.
+- **Both calendars** render it as a bronze marker (never a filled band): on the
+  property calendar at Aug 31 and the clamped Sep 30, and on the unified calendar
+  labelled "Loon-A-See · …".
+- **Read a real bill for its due date.** The quarterly water bill pre-filled
+  title "Water bill", due 2026-07-20, recurrence `quarterly`, notes
+  "$96.20 · Account 4471-B, quarter ending June 30, 2026" — matching the answer
+  key. **The past-date flag fired** (that bill was due 11 days before the walk),
+  and correctly stayed silent on a second bill dated in the future.
+- **RLS holds:** an unauthenticated PostgREST read of `property_reminders`
+  returns 401.
+- **Cleanup:** all three test reminders removed through the app's own confirm
+  dialog; the property calendar, the unified calendar, and the feed all verified
+  empty afterwards (the feed needs a cache-busting fetch — it sets
+  `private, max-age=300`).
+
+**A bug the walk caught that the checks could not.** The review screen built its
+"Saved." confirmation from the *extraction* rather than from what was written, so
+editing a misread date before saving produced a confirmation naming the value the
+member had just corrected. The database was right the whole time; the message was
+wrong. Fixed by returning the written values from the action and rendering from
+those — the same "ask the server what happened" reasoning as the slice 2 review
+fix. Re-verified by editing both title and date and reading the confirmation back.
+
+**Not covered:** a full guest-session walk. Guest exclusion rests on the RLS
+policies, the property calendar's guest branch returning before reminders load,
+and `ics_reminders_for_token` returning early for a guest at any scope — all
+reviewed but not exercised with a live guest login.
+
 **Follow-ups**
 
+- The walk added 2 more orphaned `intake_documents` rows and 2 storage objects
+  (5 rows total across the three slices). Left in place per the standing ruling
+  from slice 2. The retention/cleanup follow-up below is now well overdue.
 - Recurrence overreach: the property-tax notice was labelled "annually" in 3 of
   12 rows on a page that never says it repeats. Bounded (the form states the
   proposed repeat and how to drop it, and nothing saves unconfirmed) and left
