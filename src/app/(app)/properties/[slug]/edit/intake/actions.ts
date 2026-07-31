@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { createClient } from "@/lib/supabase/server";
 import { resolveViewer } from "@/lib/guest";
 import { extractFromDocument } from "@/lib/intake/extract";
@@ -234,5 +236,141 @@ export async function extractIntake(
         extraction: result.extraction,
         sourceUrl,
       };
+  }
+}
+
+// --- Retention: seeing and removing what's been read (PRD 33) --------------
+
+type DocumentRecord = {
+  storage_path: string;
+  uploaded_by: string;
+  properties: { slug: string } | null;
+};
+
+/**
+ * Load one provenance row and decide whether this viewer may remove it.
+ *
+ * Authorization is uploader-or-admin, the same rule as the `intake_documents`
+ * delete policy and (after this PRD's migration) the bucket's. RLS enforces it
+ * regardless; checking here is what turns a silent no-op into a message.
+ */
+async function loadDocumentFor(
+  documentId: string,
+  need: "read" | "delete",
+): Promise<
+  | { ok: true; row: DocumentRecord; slug: string | null }
+  | { ok: false; message: string }
+> {
+  const viewer = await resolveViewer();
+  if (!viewer) return { ok: false, message: "Please sign in and try again." };
+  if (viewer.isGuest) {
+    return { ok: false, message: "Guests can't open property documents." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("intake_documents")
+    .select("storage_path, uploaded_by, properties(slug)")
+    .eq("id", documentId)
+    .maybeSingle<DocumentRecord>();
+  if (error || !data) {
+    return { ok: false, message: "That document couldn't be found." };
+  }
+
+  if (need === "delete" && !viewer.isAdmin && viewer.userId !== data.uploaded_by) {
+    return {
+      ok: false,
+      message: "Only the person who added this, or an admin, can remove it.",
+    };
+  }
+
+  return { ok: true, row: data, slug: data.properties?.slug ?? null };
+}
+
+export type IntakeDocumentUrlState =
+  | { status: "ok"; url: string }
+  | { status: "error"; message: string };
+
+/**
+ * A fresh short-lived link to one stored document.
+ *
+ * Minted on request rather than when the list is drawn, so opening a bill is a
+ * deliberate act with its own clock. Drawing the panel hands out nothing.
+ */
+export async function intakeDocumentUrl(
+  documentId: string,
+): Promise<IntakeDocumentUrlState> {
+  const found = await loadDocumentFor(documentId, "read");
+  if (!found.ok) return { status: "error", message: found.message };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from(INTAKE_BUCKET)
+    .createSignedUrl(found.row.storage_path, SOURCE_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) {
+    return {
+      status: "error",
+      message: "We couldn't open that document. It may have been removed.",
+    };
+  }
+  return { status: "ok", url: data.signedUrl };
+}
+
+/**
+ * Remove a document: the stored original first, then the row that records it.
+ *
+ * Object first, deliberately. If the storage delete fails the row stays, so the
+ * member sees a document that is still there and can try again. Row first would
+ * leave an object nobody can see, name, or reach — which is precisely the debris
+ * the PRD-32 walks left behind and had to be cleaned out by hand.
+ *
+ * An already-missing object is not a failure: those orphans exist today, and the
+ * point of this action is that they can finally be tidied from the app. But
+ * "missing" is established by listing the folder *before* removing, not inferred
+ * from an empty remove result, because a permission failure looks identical to a
+ * missing file in that response and must not be allowed to drop the row anyway.
+ *
+ * No `recordRevision`. These rows are provenance about member content, not the
+ * content itself, and deleting one shouldn't push a family member's edits down
+ * the history page. The server log keeps the trace.
+ */
+export async function deleteIntakeDocument(documentId: string): Promise<void> {
+  const found = await loadDocumentFor(documentId, "delete");
+  if (!found.ok) throw new Error(found.message);
+
+  const path = found.row.storage_path;
+  const supabase = await createClient();
+
+  const folder = path.split("/")[0];
+  const { data: listing } = await supabase.storage
+    .from(INTAKE_BUCKET)
+    .list(folder, { limit: 1000 });
+  const exists = (listing ?? []).some((o) => `${folder}/${o.name}` === path);
+
+  if (exists) {
+    const { data: removed, error: removeError } = await supabase.storage
+      .from(INTAKE_BUCKET)
+      .remove([path]);
+    if (removeError || !removed?.length) {
+      throw new Error(
+        "We couldn't remove the stored photo, so nothing was deleted. Please try again.",
+      );
+    }
+  }
+
+  const { error: rowError } = await supabase
+    .from("intake_documents")
+    .delete()
+    .eq("id", documentId);
+  if (rowError) {
+    throw new Error("The photo was removed but its record wasn't. Please try again.");
+  }
+
+  console.info(
+    `[intake] document ${documentId} removed (${path}${exists ? "" : ", object already gone"})`,
+  );
+
+  if (found.slug) {
+    revalidatePath(`/properties/${found.slug}/edit/intake`);
   }
 }
