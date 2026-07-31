@@ -37,9 +37,13 @@ export function DictationCapture({
   onCancel: () => void;
 }) {
   const [text, setText] = useState("");
-  const { supported, listening, toggle } = useSpeechRecognition((phrase) => {
-    setText((current) => (current ? `${current.trimEnd()} ${phrase}` : phrase));
-  });
+  const { supported, listening, micBlocked, toggle } = useSpeechRecognition(
+    (phrase) => {
+      setText((current) =>
+        current ? `${current.trimEnd()} ${phrase}` : phrase,
+      );
+    },
+  );
 
   const tooLong = text.length > MAX_DICTATION_CHARS;
   const ready = text.trim().length > 0 && !tooLong;
@@ -101,11 +105,19 @@ export function DictationCapture({
               {listening ? "Stop Recording" : "Use the Microphone"}
             </Button>
           </div>
-          <p className="text-sm text-foreground-subtle">
-            {listening
-              ? "Listening. Your words appear in the box above as you speak."
-              : "This browser can listen directly. The microphone on your keyboard works just as well."}
-          </p>
+          {micBlocked ? (
+            <p className="text-sm font-medium text-accent-bronze">
+              Your browser is blocking the microphone for this site. Allow it in
+              your browser&rsquo;s site settings, or use the microphone on your
+              keyboard instead.
+            </p>
+          ) : (
+            <p className="text-sm text-foreground-subtle">
+              {listening
+                ? "Listening. Your words appear in the box above as you speak."
+                : "This browser can listen directly. The microphone on your keyboard works just as well."}
+            </p>
+          )}
         </div>
       ) : null}
 
@@ -132,13 +144,20 @@ export function DictationCapture({
  * Web Speech, where it exists.
  *
  * Deliberately thin. It appends finalised phrases into the textarea and stops;
- * it does not submit, does not replace what's already there, and does not
- * surface its own errors as failures — if it stops working mid-sentence the
- * member still has a keyboard microphone and a box, which is the whole path for
- * everyone whose browser lacks this anyway.
+ * it does not submit, does not replace what's already there, and transient
+ * errors stay silent — if it hiccups mid-sentence the member still has a
+ * keyboard microphone and a box, which is the whole path for everyone whose
+ * browser lacks this anyway.
+ *
+ * The one error that must NOT stay silent is `not-allowed`: the browser is
+ * remembering an earlier "Block" on the mic permission, so the click starts,
+ * dies in ~100ms with no prompt, and the button flips straight back — which
+ * reads as a dead button, not a setting. That state persists until the member
+ * changes it in the browser, so it gets a message with the way out.
  */
 function useSpeechRecognition(onPhrase: (phrase: string) => void) {
   const [listening, setListening] = useState(false);
+  const [micBlocked, setMicBlocked] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const onPhraseRef = useRef(onPhrase);
 
@@ -191,7 +210,12 @@ function useSpeechRecognition(onPhrase: (phrase: string) => void) {
       }
     };
     recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        setMicBlocked(true);
+      }
+      setListening(false);
+    };
 
     recognitionRef.current = recognition;
     return recognition;
@@ -206,16 +230,19 @@ function useSpeechRecognition(onPhrase: (phrase: string) => void) {
       return;
     }
     try {
+      // A member who just fixed the site setting deserves a clean retry rather
+      // than a message that never clears.
+      setMicBlocked(false);
       recognition.start();
       setListening(true);
     } catch {
-      // Already running, or the member declined the microphone. Either way the
-      // textarea still works, so there is nothing to tell them.
+      // Already running. The permission case arrives through `onerror` above,
+      // not here, and transient failures leave the textarea path untouched.
       setListening(false);
     }
   }
 
-  return { supported, listening, toggle };
+  return { supported, listening, micBlocked, toggle };
 }
 
 /** The capability never changes for the life of the page, so nothing to watch. */
@@ -249,7 +276,7 @@ type SpeechRecognitionLike = {
       }) => void)
     | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
   start: () => void;
   stop: () => void;
 };
