@@ -5,8 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { canManageProperty } from "@/lib/property-auth";
 import { resolveViewer } from "@/lib/guest";
 import { isIntakeConfigured } from "@/lib/intake/extract";
+import { loadIntakeDocuments } from "@/lib/intake/documents";
 import { LedgerPanel, PageIntro } from "@/components/shell";
 import { IntakeFlow } from "./intake-flow";
+import { DocumentsPanel } from "./documents-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,11 @@ export default async function PropertyIntakePage({
   if (error || !property) notFound();
 
   const { ok: canManage } = await canManageProperty(property.id);
+
+  // Listed whether or not reading is currently configured: documents already
+  // stored still need an owner control, and pulling the API key shouldn't lock
+  // anyone out of tidying them.
+  const documents = await loadIntakeDocuments(property.id);
 
   return (
     <div className="flex flex-col gap-10">
@@ -92,6 +99,10 @@ export default async function PropertyIntakePage({
             </div>
           </div>
         )}
+      </LedgerPanel>
+
+      <LedgerPanel className="max-w-3xl px-0 py-0 sm:px-0 sm:py-0">
+        <DocumentsPanel documents={documents} />
       </LedgerPanel>
     </div>
   );
