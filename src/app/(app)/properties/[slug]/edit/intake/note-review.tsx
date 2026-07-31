@@ -47,16 +47,27 @@ export function NoteReview({
   property,
   extraction,
   canManage,
+  source = "photo",
   onStartOver,
   onPropertySaved,
+  onItemSaved,
   propertyBusy,
 }: {
   property: IntakeProperty;
   extraction: NoteExtraction;
   canManage: boolean;
+  /**
+   * Where the text came from. The routing below is identical either way — that
+   * reuse is the point of PRD 34 — but the framing can't be: telling someone who
+   * dictated to "check this against the photo" is nonsense, and the standing
+   * handwriting warning would be misplaced alarm about their own speech.
+   */
+  source?: "photo" | "voice";
   onStartOver: () => void;
   /** Fired after any write to the property, so the other forms re-read it. */
   onPropertySaved: () => void;
+  /** Fired once per saved destination, for the progress count. */
+  onItemSaved?: () => void;
   /** True while that re-read is in flight; holds the other property forms. */
   propertyBusy: boolean;
 }) {
@@ -68,16 +79,19 @@ export function NoteReview({
     !suggestedHowTo.value &&
     extraction.suggestedContacts.length === 0;
 
+  const voice = source === "voice";
+
   if (nothingFound) {
     return (
-      <ReviewSection label="Nothing readable">
+      <ReviewSection label={voice ? "Nothing to add" : "Nothing readable"}>
         <p className="text-base text-foreground">
-          We couldn&rsquo;t make out anything on that photo. A brighter room, or
-          holding the camera square over the page, usually does it.
+          {voice
+            ? "We couldn't find anything in there worth adding to the property. Try again and say a bit more about what you'd like recorded."
+            : "We couldn't make out anything on that photo. A brighter room, or holding the camera square over the page, usually does it."}
         </p>
         <div>
           <Button type="button" variant="outline" onClick={onStartOver}>
-            Try Another Photo
+            {voice ? "Try Again" : "Try Another Photo"}
           </Button>
         </div>
       </ReviewSection>
@@ -86,11 +100,12 @@ export function NoteReview({
 
   return (
     <div className="flex flex-col gap-6">
-      <TranscriptionPanel transcription={transcription} />
+      <TranscriptionPanel transcription={transcription} voice={voice} />
 
       <p className="text-base text-foreground-muted">
-        Below are the places this note could go. Each one saves on its own, so
-        you can take just the parts you want and ignore the rest.
+        Below are the places {voice ? "this could go" : "this note could go"}.
+        Each one saves on its own, so you can take just the parts you want and
+        ignore the rest.
       </p>
 
       <NarrativeForm
@@ -101,7 +116,10 @@ export function NoteReview({
         fieldLabel="Guidelines"
         proposed={suggestedGuidelines}
         blurb="Rules and expectations for people staying."
-        onSaved={onPropertySaved}
+        onSaved={() => {
+          onPropertySaved();
+          onItemSaved?.();
+        }}
         busy={propertyBusy}
       />
 
@@ -113,7 +131,10 @@ export function NoteReview({
         fieldLabel="How to"
         proposed={suggestedHowTo}
         blurb="Practical instructions: where the water shut-off is, gate codes, heating."
-        onSaved={onPropertySaved}
+        onSaved={() => {
+          onPropertySaved();
+          onItemSaved?.();
+        }}
         busy={propertyBusy}
       />
 
@@ -125,12 +146,14 @@ export function NoteReview({
           property={property}
           contact={contact}
           index={index}
+          voice={voice}
+          onSaved={onItemSaved}
         />
       ))}
 
       <div>
         <Button type="button" variant="ghost" onClick={onStartOver}>
-          Read Another Note
+          {voice ? "Say Something Else" : "Read Another Note"}
         </Button>
       </div>
     </div>
@@ -145,14 +168,16 @@ export function NoteReview({
  */
 function TranscriptionPanel({
   transcription,
+  voice,
 }: {
   transcription: ExtractedField;
+  voice: boolean;
 }) {
   return (
     <section className="flex flex-col gap-3 rounded-md border border-border bg-surface/60 p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-display text-lg leading-tight text-foreground">
-          What the note says
+          {voice ? "What we heard" : "What the note says"}
         </h3>
         {/*
           Unconditional, not confidence-driven. Measured across 30 handwriting
@@ -161,17 +186,27 @@ function TranscriptionPanel({
           runs. On this intent confidence doesn't discriminate, so the standing
           warning can't be gated on it — a flag that never fires is worse than
           no flag, because its absence reads as reassurance.
+
+          The voice wording is a different warning, not a softer one: the risk
+          there isn't our reading but the phone's, and it lands hardest on the
+          numbers a member is least likely to re-read.
         */}
         <span className="text-sm font-medium text-accent-bronze">
-          Please check this against the photo
+          {voice
+            ? "Please check any numbers and names"
+            : "Please check this against the photo"}
         </span>
       </div>
       <p className="text-sm text-foreground-subtle">
-        This is our best read of the handwriting, not a perfect copy. Anywhere it
-        shows [?] we couldn&rsquo;t make out the word.
+        {voice
+          ? "We've tidied up the punctuation and dropped the ums. The words are yours; phones often mishear numbers and names, so those are worth a second look."
+          : "This is our best read of the handwriting, not a perfect copy. Anywhere it shows [?] we couldn't make out the word."}
       </p>
       <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-surface p-4 text-base leading-relaxed text-foreground">
-        {transcription.value ?? "We couldn't read any text on this photo."}
+        {transcription.value ??
+          (voice
+            ? "We couldn't make anything out of that."
+            : "We couldn't read any text on this photo.")}
       </pre>
     </section>
   );
@@ -296,14 +331,19 @@ function SuggestedContactForm({
   property,
   contact,
   index,
+  voice,
+  onSaved,
 }: {
   property: IntakeProperty;
   contact: SuggestedContact;
   index: number;
+  voice: boolean;
+  onSaved?: () => void;
 }) {
   const action = addPropertyContact.bind(null, property.id, property.slug);
   const [state, formAction, isPending] = useActionState(action, contactInitial);
   const [dismissed, setDismissed] = useState(false);
+  useNotifyOnSave(state.status === "saved", () => onSaved?.());
 
   if (dismissed) return null;
 
@@ -330,9 +370,12 @@ function SuggestedContactForm({
   const id = (field: string) => `intake-contact-${index}-${field}`;
 
   return (
-    <ReviewSection label="Contact found in the note">
+    <ReviewSection
+      label={voice ? "Contact you mentioned" : "Contact found in the note"}
+    >
       <p className="text-base text-foreground-muted">
-        The note mentions {who}. Save them as a contact on {property.name}?
+        {voice ? "You mentioned" : "The note mentions"} {who}. Save them as a
+        contact on {property.name}?
       </p>
       <form action={formAction} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -367,7 +410,11 @@ function SuggestedContactForm({
             label="Phone"
             htmlFor={id("phone")}
             confidence={contact.confidence}
-            hint="Handwritten numbers are easy to misread. Worth checking digit by digit."
+            hint={
+              voice
+                ? "Spoken numbers are easy to mishear. Worth checking digit by digit."
+                : "Handwritten numbers are easy to misread. Worth checking digit by digit."
+            }
           >
             <Input
               id={id("phone")}

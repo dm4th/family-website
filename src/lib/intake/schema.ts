@@ -17,9 +17,34 @@ import {
   type ReminderRecurrence,
 } from "@/lib/reminders";
 
-export type IntakeIntent = "contact" | "note" | "calendar";
+export type IntakeIntent = "contact" | "note" | "calendar" | "dictation";
 
-export const INTAKE_INTENTS: IntakeIntent[] = ["contact", "note", "calendar"];
+export const INTAKE_INTENTS: IntakeIntent[] = [
+  "contact",
+  "note",
+  "calendar",
+  "dictation",
+];
+
+/**
+ * Intents that read an uploaded image or PDF. `dictation` is the odd one out —
+ * its input is text the member spoke — so anywhere the pipeline assumes a
+ * document (the upload picker, `extractIntake`'s path and MIME checks) should
+ * gate on this rather than on the full list.
+ */
+export type DocumentIntent = Exclude<IntakeIntent, "dictation">;
+
+export const DOCUMENT_INTENTS: DocumentIntent[] = [
+  "contact",
+  "note",
+  "calendar",
+];
+
+export function isDocumentIntent(value: unknown): value is DocumentIntent {
+  return (
+    typeof value === "string" && (DOCUMENT_INTENTS as string[]).includes(value)
+  );
+}
 
 export function isIntakeIntent(value: unknown): value is IntakeIntent {
   return (
@@ -118,6 +143,14 @@ export type SuggestedReminder = {
   notes: string | null;
   recurrence: ReminderRecurrence;
   confidence: FieldConfidence;
+  /**
+   * How the date was said out loud, when it came from speech: "the fifteenth",
+   * "next Friday". Only ever set by the dictation intent, where the date on the
+   * form is a *resolution* of relative words rather than a value copied off a
+   * page. Showing the member the phrase next to the date is what makes that
+   * resolution checkable — see `DICTATION_EXTRACTION_PROMPT`.
+   */
+  spokenAs?: string | null;
 };
 
 export type CalendarExtraction = {
@@ -132,6 +165,47 @@ export type CalendarExtraction = {
  * a thing to be reminded about.
  */
 export const MAX_SUGGESTED_REMINDERS = 4;
+
+// --- Dictation intent (PRD 34) ---------------------------------------------
+
+/**
+ * What a spoken session produces.
+ *
+ * Deliberately the note extraction plus reminders, rather than a shape of its
+ * own. PRD 34 describes dictation as "a note without a photo", and the note
+ * review screen already does the thing dictation needs: show the text back, then
+ * walk the member through each place it could go, one gated save at a time.
+ * Matching the shape is what lets that screen render this with no fork.
+ *
+ * `transcription` carries the *tidied* version — punctuated, paragraphed, filler
+ * removed. The member's literal words are not lost by that: the raw transcript is
+ * what gets stored in the bucket, so the retention panel can always show what was
+ * actually said.
+ */
+export type DictationExtraction = NoteExtraction & {
+  suggestedReminders: SuggestedReminder[];
+};
+
+/**
+ * Ceiling on how much speech we send in one go — a few minutes of talking. The
+ * cap exists because the textarea accepts a paste as readily as a dictation, and
+ * an unbounded box is an unbounded bill.
+ */
+export const MAX_DICTATION_CHARS = 6000;
+
+/**
+ * Below this there is nothing to tidy, and a stray tap shouldn't spend a model
+ * call.
+ */
+export const MIN_DICTATION_CHARS = 12;
+
+/**
+ * Room for the cleaned-up read of a full dictation. Larger than the note
+ * intent's prose cap on purpose: tidying can only be trusted if it doesn't
+ * silently drop the end of what someone said, and the input cap above is the
+ * real limit.
+ */
+const MAX_DICTATION_PROSE_CHARS = 10000;
 
 // --- Upload guardrails -----------------------------------------------------
 
@@ -182,6 +256,20 @@ export function generateIntakePath(originalName: string): string {
   const ext = inferIntakeExtension(originalName);
   const id = crypto.randomUUID();
   return `${id.slice(0, 2)}/${id}${ext}`;
+}
+
+/**
+ * Storage path for a stored dictation transcript. Same partitioning as photos,
+ * so PRD 33's retention panel — its listing, its signed-URL open, its delete —
+ * covers a spoken session without knowing it isn't an image.
+ *
+ * Separate from `generateIntakePath` rather than an extra extension on it,
+ * because `.txt` must not become an acceptable target for the vision path: this
+ * one is only ever called server-side, with text the server is about to write.
+ */
+export function generateIntakeTextPath(): string {
+  const id = crypto.randomUUID();
+  return `${id.slice(0, 2)}/${id}.txt`;
 }
 
 /**
@@ -444,6 +532,164 @@ Find the dates by which something must be paid or done, so a family member can c
 - Be honest with confidence, and use "low" for any date you worked out rather than read directly.
 - Do not describe the image, add commentary, or return anything outside the schema.`;
 
+/**
+ * The dictation schema: the note schema's four keys plus reminders.
+ *
+ * Reminders are part of *this* extraction rather than a second pass, unlike the
+ * photo intents' "also check this document for a due date" offer. A photo is
+ * still in the bucket to be re-read; a sentence like "remind me the propane is
+ * due on the fifteenth" is inseparable from the rest of what was said, and
+ * asking twice would mean paying twice to read the same paragraph.
+ */
+export const DICTATION_EXTRACTION_JSON_SCHEMA = {
+  type: "object",
+  properties: {
+    transcription: FIELD_SCHEMA(
+      "The whole dictation, tidied into clean markdown: sentences punctuated, filler words removed, self-corrections resolved to what the speaker settled on, related lines grouped under short ## headings or bullet lists where that helps. Keep every fact, name, number, and instruction they gave. Never leave this null.",
+    ),
+    suggestedGuidelines: FIELD_SCHEMA(
+      'The parts that are rules or expectations for people staying, e.g. "no shoes upstairs", "strip the beds before you leave", as tidied markdown. Null if they said nothing of the kind.',
+    ),
+    suggestedHowTo: FIELD_SCHEMA(
+      'The parts that explain how to operate the place, e.g. "the water shut-off is by the road", "the gate code is 4417", as tidied markdown. Null if they said nothing of the kind.',
+    ),
+    suggestedContacts: {
+      type: "array",
+      // Same finding as the note intent: `maxItems` on an array is rejected by
+      // structured outputs with a 400. Capped for real in the parser.
+      description: `People or companies they named AND gave a phone number or an email address for. Do not include someone merely mentioned with no way to reach them. An empty array if nobody reachable was named. At most ${MAX_SUGGESTED_CONTACTS}.`,
+      items: {
+        type: "object",
+        properties: {
+          label: {
+            type: ["string", "null"],
+            description:
+              'What they do, in two or three words: "Plumber", "Snow removal", "Caretaker".',
+          },
+          name: {
+            type: ["string", "null"],
+            description: "Their name or company, as said.",
+          },
+          phone: {
+            type: ["string", "null"],
+            description:
+              'Their phone number, digits only as spoken, e.g. "five five five one two three four" becomes "5551234". Null if they did not give one.',
+          },
+          email: {
+            type: ["string", "null"],
+            description: "Their email address, or null.",
+          },
+          notes: {
+            type: ["string", "null"],
+            description:
+              "Anything else said about them, in one short line.",
+          },
+          confidence: {
+            type: "string",
+            enum: ["high", "medium", "low"],
+            description:
+              "How sure you are of this whole suggestion. Use low for anything you had to guess at.",
+          },
+        },
+        required: ["label", "name", "phone", "email", "notes", "confidence"],
+        additionalProperties: false,
+      },
+    },
+    suggestedReminders: {
+      type: "array",
+      description: `Things they asked to be reminded about on a specific day. An empty array if they named no day at all. At most ${MAX_SUGGESTED_REMINDERS}.`,
+      items: {
+        type: "object",
+        properties: {
+          title: {
+            type: ["string", "null"],
+            description:
+              'What it is, in two or three words a family would recognise: "Propane bill", "Gutter cleaning".',
+          },
+          spokenAs: {
+            type: ["string", "null"],
+            description:
+              'The words they actually used for the day, quoted: "the fifteenth", "next Friday", "the end of the month". This is shown to them next to the date you worked out, so they can check your arithmetic. Never paraphrase it.',
+          },
+          dueDate: {
+            type: ["string", "null"],
+            description:
+              "That day as YYYY-MM-DD, worked out from today's date given in the instructions. Null if they named no day.",
+          },
+          amount: {
+            type: ["string", "null"],
+            description:
+              'An amount of money, if they said one, e.g. "$412.30". Null otherwise.',
+          },
+          notes: {
+            type: ["string", "null"],
+            description:
+              "Any other detail they gave about it, in one short plain-text line.",
+          },
+          recurrence: {
+            type: "string",
+            enum: RECURRENCE_VALUES,
+            description:
+              'How often it repeats, but ONLY if they said so — "every month", "every year". If they did not say, answer "none".',
+          },
+          confidence: {
+            type: "string",
+            enum: ["high", "medium", "low"],
+            description:
+              'How sure you are of the date specifically. Use "high" only when they named an unambiguous day. Anything you worked out from a relative phrase is at most "medium".',
+          },
+        },
+        required: [
+          "title",
+          "spokenAs",
+          "dueDate",
+          "amount",
+          "notes",
+          "recurrence",
+          "confidence",
+        ],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: [
+    "transcription",
+    "suggestedGuidelines",
+    "suggestedHowTo",
+    "suggestedContacts",
+    "suggestedReminders",
+  ],
+  additionalProperties: false,
+} as const;
+
+/**
+ * Built per call, because resolving "the fifteenth" needs to know what today is.
+ *
+ * That date is the one place this intent is allowed to produce something the
+ * speaker didn't literally say, and it is bounded on both sides: the model must
+ * quote the words it resolved (`spokenAs`), the member sees the quote next to the
+ * resolved date, and the reminder still saves through the ordinary gated action.
+ * Everything else keeps the note intent's hard rule — no phone number, no name,
+ * no instruction that wasn't spoken.
+ */
+export function dictationPrompt(todayIso: string): string {
+  return `Someone has spoken into their phone about their family's holiday property, and the phone has turned their speech into text. It is one long run-on: no punctuation, filler words, false starts, and topics that jump around. They are not a fast typist, which is why they spoke.
+
+Today's date is ${todayIso}.
+
+Tidy what they said, then sort it into the places it belongs. Rules:
+
+- Tidy, do not rewrite. Punctuate, paragraph, and drop filler ("um", "you know", "let me think"). Keep their vocabulary, their facts, their numbers, and their order. Do not add advice, headings they did not imply, or detail they did not give.
+- Where they corrected themselves, keep what they settled on and drop the false start. "The code is four four one seven, no wait, four four seven one" is 4471.
+- Speech-to-text mangles numbers and names. If a phone number came through with too few digits, or a name is clearly garbled, leave it out rather than repairing it. A number you patched is worse than a number they retype.
+- Never invent a phone number, an email address, or a name. Only offer someone as a contact if they gave a way to reach that person.
+- Only propose a reminder if they named a day. "Soon", "at some point", and "before winter" are not days. If they named no day, return an empty list. That is a correct answer.
+- When they named a day in relative words, work out the real date from today's date above, and quote their exact words in "spokenAs" so they can check it.
+- "Guidelines" is what people staying are asked to do; "how to" is how the building works. A line belongs in one of them, not both. Leave a section null when they simply did not cover it.
+- The tidied text goes in "transcription" in full, even where parts of it also appear in a section below. That is their record of what they said.
+- Do not answer them, comment on what they said, or return anything outside the schema.`;
+}
+
 // --- Validation ------------------------------------------------------------
 
 const MAX_FIELD_CHARS = 500;
@@ -547,6 +793,74 @@ export function parseNoteExtraction(raw: unknown): NoteExtraction {
     suggestedHowTo: readField(record.suggestedHowTo, MAX_PROSE_CHARS),
     suggestedContacts,
   };
+}
+
+/**
+ * The dictation counterpart, assembled from the two parsers either side of it
+ * rather than rewritten.
+ *
+ * That reuse is the point: the guarantees that matter here — unknown keys
+ * dropped so no privileged property column is reachable, a contact without a
+ * phone or an email discarded, a reminder whose date isn't a real calendar day
+ * discarded — are the *same* guarantees, and a second copy of them is a second
+ * place for them to drift. The only thing added is `spokenAs`, which the
+ * calendar parser has no reason to carry.
+ */
+export function parseDictationExtraction(raw: unknown): DictationExtraction {
+  const record = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+
+  const note = parseNoteExtraction(record);
+
+  // `parseCalendarExtraction` reads `reminders`; this intent's key is
+  // `suggestedReminders`, so hand it the array under the name it expects.
+  const { reminders } = parseCalendarExtraction({
+    reminders: record.suggestedReminders,
+  });
+
+  const spoken = Array.isArray(record.suggestedReminders)
+    ? record.suggestedReminders
+    : [];
+  // Consumed as they match, so two reminders landing on the same day take their
+  // own quoted phrase rather than both showing the first one's. The calendar
+  // parser preserves order and only ever drops entries, so walking to the first
+  // unused match is an exact pairing.
+  const claimed = new Set<number>();
+
+  return {
+    // Re-read with the roomier cap: a tidied dictation is prose, and truncating
+    // the end of what somebody said is a silent loss of their work.
+    transcription: readField(record.transcription, MAX_DICTATION_PROSE_CHARS),
+    suggestedGuidelines: note.suggestedGuidelines,
+    suggestedHowTo: note.suggestedHowTo,
+    suggestedContacts: note.suggestedContacts,
+    suggestedReminders: reminders.map((reminder) => ({
+      ...reminder,
+      // Matched by date rather than by position, because the calendar parser
+      // drops undated entries and the two arrays are not index-aligned.
+      spokenAs: claimSpokenAs(spoken, claimed, reminder.dueDate),
+    })),
+  };
+}
+
+function claimSpokenAs(
+  entries: unknown[],
+  claimed: Set<number>,
+  dueDate: string,
+): string | null {
+  for (let i = 0; i < entries.length; i++) {
+    if (claimed.has(i)) continue;
+    const entry = entries[i];
+    if (!entry || typeof entry !== "object") continue;
+    const r = entry as Record<string, unknown>;
+    if (readString(r.dueDate, 10) === dueDate) {
+      claimed.add(i);
+      return readString(r.spokenAs, MAX_FIELD_CHARS);
+    }
+  }
+  return null;
 }
 
 /**

@@ -80,3 +80,20 @@ roughly $1 per full run.
 ## Results
 
 See [results-2026-07-30.md](results-2026-07-30.md).
+
+## The dictation eval (PRD 34)
+
+```bash
+npx tsx --env-file=.env.local evals/intake/eval-dictation.mts
+```
+
+No image pipeline: the input to the `dictation` intent is *text*, because the
+phone has already done the speech-to-text. So the corpus is 22 hand-written
+transcripts in `dictation-samples.ts` — unpunctuated, full of filler and false
+starts — and the eval reads them straight through the shipped
+`extractFromDictation`. Under a dollar for a full run (~$0.15).
+
+Sixteen of the twenty-two name nobody reachable and thirteen name no day, on
+purpose: invention is only measurable on inputs whose correct answer is
+"nothing". Results in
+[results-dictation-2026-07-31.md](results-dictation-2026-07-31.md).

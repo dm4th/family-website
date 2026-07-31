@@ -14,6 +14,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FormStatus } from "@/components/form-status";
 import { ReviewShell, ReviewSection } from "@/components/intake/review-shell";
+import { SaveProgress } from "@/components/intake/save-progress";
 import type { IntakeProperty } from "@/components/intake/property-carry-fields";
 import { createClient } from "@/lib/supabase/client";
 import { prepareImageForUpload } from "@/lib/image-resize";
@@ -25,12 +26,18 @@ import {
   isAllowedIntakeMime,
   type CalendarExtraction,
   type ContactExtraction,
-  type IntakeIntent,
+  type DictationExtraction,
+  type DocumentIntent,
   type NoteExtraction,
 } from "@/lib/intake/schema";
-import { extractIntake, refreshIntakeProperty } from "./actions";
+import {
+  extractDictation,
+  extractIntake,
+  refreshIntakeProperty,
+} from "./actions";
 import { CalendarReview } from "./calendar-review";
 import { ContactReview } from "./contact-review";
+import { DictationCapture } from "./dictation-capture";
 import { NoteReview } from "./note-review";
 
 export type { IntakeProperty };
@@ -43,7 +50,7 @@ const MAX_MB = Math.round(MAX_INTAKE_BYTES / 1024 / 1024);
  * bill has a vendor and an account number, a note has instructions and people.
  */
 const KINDS: {
-  intent: IntakeIntent;
+  intent: DocumentIntent;
   title: string;
   blurb: string;
   button: string;
@@ -82,10 +89,46 @@ const KINDS: {
   },
 ];
 
+/**
+ * The voice door's framing at review time. Not a `KINDS` entry, because that
+ * list is specifically "what are you photographing" — every card there owns a
+ * file input, and dictation has no file to choose.
+ */
+const DICTATION_REVIEW = {
+  reviewTitle: "Here's what we heard",
+  reviewDescription:
+    "We've tidied up what you said. Read it over, then take the parts worth keeping. Nothing is saved until you press Save.",
+};
+
+/**
+ * How many separate things this review is offering to save. Counts what the
+ * member can actually act on, so a note with nothing for "how things work"
+ * doesn't inflate the denominator with a section that was never rendered.
+ */
+function countOffered(extraction: NoteExtraction | DictationExtraction): number {
+  return (
+    (extraction.suggestedGuidelines.value ? 1 : 0) +
+    (extraction.suggestedHowTo.value ? 1 : 0) +
+    extraction.suggestedContacts.length +
+    ("suggestedReminders" in extraction
+      ? extraction.suggestedReminders.length
+      : 0)
+  );
+}
+
 type Phase =
   | { name: "idle" }
+  /** The dictation capture screen (PRD 34). No upload; the input is speech. */
+  | { name: "dictate" }
   | { name: "working"; message: string }
   | { name: "error"; message: string }
+  | {
+      name: "review";
+      intent: "dictation";
+      extraction: DictationExtraction;
+      sourceUrl: string | null;
+      storagePath: null;
+    }
   | {
       name: "review";
       intent: "contact";
@@ -118,9 +161,12 @@ type CrossPhase =
 export function IntakeFlow({
   property: initialProperty,
   canManage,
+  initialMode,
 }: {
   property: IntakeProperty;
   canManage: boolean;
+  /** "voice" when the member arrived via the edit page's Add by Voice door. */
+  initialMode?: "voice";
 }) {
   // Held in state, not read straight from the prop, because a review session can
   // save more than once and the forms below carry the property's other fields
@@ -128,7 +174,24 @@ export function IntakeFlow({
   const [property, setProperty] = useState(initialProperty);
   /** True while the property is being re-read after a save. */
   const [refreshing, setRefreshing] = useState(false);
-  const [phase, setPhase] = useState<Phase>({ name: "idle" });
+  const [phase, setPhase] = useState<Phase>(
+    initialMode === "voice" ? { name: "dictate" } : { name: "idle" },
+  );
+  /**
+   * The capture screen's own busy flag and error, deliberately not folded into
+   * `phase`. Moving to a "working" phase would unmount the textarea, and a
+   * failed tidy-up would take the member's dictation down with it — the one
+   * thing they cannot get back by pressing a button again.
+   */
+  const [tidying, setTidying] = useState(false);
+  const [dictationError, setDictationError] = useState<string | null>(null);
+  /**
+   * How many of this review's destinations have been saved (PRD 34). Counted
+   * here rather than inside each review form because a session's updates are
+   * spread across two components — the note routing and, for dictation, the
+   * reminders underneath it — and "2 of 4" is only true if it counts both.
+   */
+  const [savedCount, setSavedCount] = useState(0);
   /**
    * The "one upload, two records" offer (PRD 32, slice 3): after a document has
    * been read for its contact details or as a note, the member can ask us to
@@ -138,9 +201,9 @@ export function IntakeFlow({
    */
   const [cross, setCross] = useState<CrossPhase>({ name: "idle" });
   /** Which card is working, for the status line. Not used to route the upload. */
-  const [pending, setPending] = useState<IntakeIntent | null>(null);
+  const [pending, setPending] = useState<DocumentIntent | null>(null);
 
-  async function handleFile(file: File, forIntent: IntakeIntent) {
+  async function handleFile(file: File, forIntent: DocumentIntent) {
     setPending(forIntent);
     if (file.size > MAX_INTAKE_BYTES) {
       setPhase({
@@ -206,6 +269,7 @@ export function IntakeFlow({
         return;
       }
       setCross({ name: "idle" });
+      setSavedCount(0);
       if (result.intent === "note") {
         setPhase({
           name: "review",
@@ -239,6 +303,36 @@ export function IntakeFlow({
             ? `Something went wrong: ${error.message}`
             : "Something went wrong. Please try again.",
       });
+    }
+  }
+
+  /** Send the dictated text off to be tidied, then hand it to the note review. */
+  async function handleDictation(text: string) {
+    setTidying(true);
+    setDictationError(null);
+    try {
+      const result = await extractDictation(property.id, text);
+      if (result.status === "error") {
+        setDictationError(result.message);
+        return;
+      }
+      setCross({ name: "idle" });
+      setSavedCount(0);
+      setPhase({
+        name: "review",
+        intent: "dictation",
+        extraction: result.extraction,
+        sourceUrl: result.sourceUrl,
+        storagePath: null,
+      });
+    } catch (error) {
+      setDictationError(
+        error instanceof Error
+          ? `Something went wrong: ${error.message}`
+          : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setTidying(false);
     }
   }
 
@@ -276,9 +370,26 @@ export function IntakeFlow({
     setCross({ name: "ready", extraction: result.extraction });
   }
 
+  if (phase.name === "dictate") {
+    return (
+      <DictationCapture
+        propertyName={property.name}
+        busy={tidying}
+        error={dictationError}
+        onSubmit={(text) => void handleDictation(text)}
+        onCancel={() => {
+          setDictationError(null);
+          setPhase({ name: "idle" });
+        }}
+      />
+    );
+  }
+
   if (phase.name === "review") {
     const reviewKind =
-      KINDS.find((k) => k.intent === phase.intent) ?? KINDS[0];
+      phase.intent === "dictation"
+        ? DICTATION_REVIEW
+        : (KINDS.find((k) => k.intent === phase.intent) ?? KINDS[0]);
     return (
       <ReviewShell
         title={reviewKind.reviewTitle}
@@ -290,7 +401,43 @@ export function IntakeFlow({
         }
         sourceUrl={phase.sourceUrl}
       >
-        {phase.intent === "calendar" ? (
+        {phase.intent === "dictation" ? (
+          <>
+            <SaveProgress
+              saved={savedCount}
+              total={countOffered(phase.extraction)}
+            />
+            <NoteReview
+              property={property}
+              extraction={phase.extraction}
+              canManage={canManage}
+              source="voice"
+              onStartOver={() => setPhase({ name: "dictate" })}
+              onPropertySaved={handlePropertySaved}
+              onItemSaved={() => setSavedCount((n) => n + 1)}
+              propertyBusy={refreshing}
+            />
+            {/*
+              Reminders come from the same extraction rather than the "also check
+              this document" second read the photo intents offer. There is no
+              document to re-read: "remind me the propane is due on the
+              fifteenth" is one sentence inside the same paragraph as everything
+              else, so asking twice would mean paying twice to read it.
+            */}
+            {phase.extraction.suggestedReminders.length > 0 && (
+              <CalendarReview
+                property={property}
+                extraction={{
+                  reminders: phase.extraction.suggestedReminders,
+                  rawText: "",
+                }}
+                source="voice"
+                onStartOver={() => setPhase({ name: "dictate" })}
+                onItemSaved={() => setSavedCount((n) => n + 1)}
+              />
+            )}
+          </>
+        ) : phase.intent === "calendar" ? (
           <CalendarReview
             property={property}
             extraction={phase.extraction}
@@ -298,12 +445,17 @@ export function IntakeFlow({
           />
         ) : phase.intent === "note" ? (
           <>
+            <SaveProgress
+              saved={savedCount}
+              total={countOffered(phase.extraction)}
+            />
             <NoteReview
               property={property}
               extraction={phase.extraction}
               canManage={canManage}
               onStartOver={() => setPhase({ name: "idle" })}
               onPropertySaved={handlePropertySaved}
+              onItemSaved={() => setSavedCount((n) => n + 1)}
               propertyBusy={refreshing}
             />
             <AlsoCheckDates
@@ -341,11 +493,12 @@ export function IntakeFlow({
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-2">
         <h2 className="font-display text-xl leading-tight text-foreground">
-          What are you photographing?
+          What have you got?
         </h2>
         <p className="text-base text-foreground-muted">
-          We&rsquo;ll read it and show you what we found, so you only have to
-          check it rather than type it. Nothing is saved until you press Save.
+          Photograph it, or just say it out loud. We&rsquo;ll show you what we
+          found so you only have to check it rather than type it. Nothing is
+          saved until you press Save.
         </p>
       </header>
 
@@ -359,6 +512,34 @@ export function IntakeFlow({
             onFile={(file) => void handleFile(file, k.intent)}
           />
         ))}
+
+        {/*
+          The voice door also lives here, not only on the edit page, so a member
+          who landed on the chooser directly (a bookmark, the Contacts link)
+          isn't shown three photo options and no way to talk.
+        */}
+        <div className="flex flex-col gap-3 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-5">
+          <h3 className="font-display text-lg leading-tight text-foreground">
+            Just talk
+          </h3>
+          <p className="flex-1 text-base text-foreground-muted">
+            Nothing on paper? Say what you want to add and we&rsquo;ll tidy it
+            up, then walk you through where each part could go.
+          </p>
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setDictationError(null);
+                setPhase({ name: "dictate" });
+              }}
+            >
+              Start Talking
+            </Button>
+          </div>
+        </div>
       </div>
 
       <p className="text-sm text-foreground-subtle">

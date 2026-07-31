@@ -20,7 +20,10 @@ import { Button } from "@/components/ui/button";
 import { FormStatus } from "@/components/form-status";
 import { ReviewSection } from "@/components/intake/review-shell";
 import { ReminderFields } from "@/components/reminders/reminder-fields";
-import type { IntakeProperty } from "@/components/intake/property-carry-fields";
+import {
+  useNotifyOnSave,
+  type IntakeProperty,
+} from "@/components/intake/property-carry-fields";
 import type { CalendarExtraction, SuggestedReminder } from "@/lib/intake/schema";
 import { RECURRENCE_LABELS, formatDueDate, todayIso } from "@/lib/reminders";
 import {
@@ -33,19 +36,27 @@ const initial: ReminderFormState = { status: "idle" };
 export function CalendarReview({
   property,
   extraction,
+  source = "document",
   onStartOver,
+  onItemSaved,
 }: {
   property: IntakeProperty;
   extraction: CalendarExtraction;
+  /** Where the dates came from, which is all that changes in the wording. */
+  source?: "document" | "voice";
   onStartOver: () => void;
+  /** Fired once per saved reminder, for the progress count (PRD 34). */
+  onItemSaved?: () => void;
 }) {
+  const voice = source === "voice";
+
   if (extraction.reminders.length === 0) {
     return (
       <ReviewSection label="No dates found">
         <p className="text-base text-foreground">
-          We didn&rsquo;t find a due date on that document. Some statements
-          don&rsquo;t set one, and we&rsquo;d rather tell you that than put a
-          made-up date on the calendar.
+          {voice
+            ? "You didn't name a day, so there's nothing to put on the calendar. We'd rather tell you that than guess at one."
+            : "We didn't find a due date on that document. Some statements don't set one, and we'd rather tell you that than put a made-up date on the calendar."}
         </p>
         <p className="text-sm text-foreground-subtle">
           You can still add a reminder by hand from the property&rsquo;s calendar
@@ -70,7 +81,9 @@ export function CalendarReview({
     <div className="flex flex-col gap-6">
       <p className="text-base text-foreground-muted">
         {extraction.reminders.length === 1
-          ? "Here's the date we found. Check it against the bill before you save."
+          ? voice
+            ? "Here's the date we worked out from what you said. Check it before you save."
+            : "Here's the date we found. Check it against the bill before you save."
           : `We found ${extraction.reminders.length} dates. Each one saves on its own, so you can take the ones you want.`}
       </p>
 
@@ -81,12 +94,14 @@ export function CalendarReview({
           property={property}
           reminder={reminder}
           index={index}
+          voice={voice}
+          onSaved={onItemSaved}
         />
       ))}
 
       <div>
         <Button type="button" variant="ghost" onClick={onStartOver}>
-          Read Another Document
+          {voice ? "Say Something Else" : "Read Another Document"}
         </Button>
       </div>
     </div>
@@ -106,14 +121,19 @@ function SuggestedReminderForm({
   property,
   reminder,
   index,
+  voice,
+  onSaved,
 }: {
   property: IntakeProperty;
   reminder: SuggestedReminder;
   index: number;
+  voice: boolean;
+  onSaved?: () => void;
 }) {
   const action = addPropertyReminder.bind(null, property.id, property.slug);
   const [state, formAction, isPending] = useActionState(action, initial);
   const [dismissed, setDismissed] = useState(false);
+  useNotifyOnSave(state.status === "saved", () => onSaved?.());
 
   if (dismissed) return null;
 
@@ -183,6 +203,20 @@ function SuggestedReminderForm({
             */
             dueDate: (
               <>
+                {/*
+                  Speech is the one input where the date on the form is a
+                  *resolution* rather than a copy: "the fifteenth" has to be
+                  turned into a real day, and getting the month or the year wrong
+                  is invisible once it's a date box. Quoting the words back is
+                  what makes that step checkable — the member confirms our
+                  arithmetic, not just our reading.
+                */}
+                {voice && reminder.spokenAs && (
+                  <p className="text-sm text-foreground-subtle">
+                    You said &ldquo;{reminder.spokenAs}&rdquo;. Check that
+                    we&rsquo;ve worked out the right day.
+                  </p>
+                )}
                 {reminder.dueDate < todayIso() && (
                   <p className="text-sm font-medium text-accent-bronze">
                     This date has already passed. If the bill only printed the
@@ -191,15 +225,19 @@ function SuggestedReminderForm({
                 )}
                 <p className="text-sm text-accent-bronze">
                   {reminder.confidence === "high"
-                    ? "Worth a glance against the bill."
-                    : "We weren't sure about this date. Please check it against the bill."}
+                    ? voice
+                      ? "Worth a glance before you save."
+                      : "Worth a glance against the bill."
+                    : voice
+                      ? "We weren't sure about this date. Please check it."
+                      : "We weren't sure about this date. Please check it against the bill."}
                 </p>
               </>
             ),
             recurrence:
               reminder.recurrence !== "none" ? (
                 <p className="text-sm text-foreground-subtle">
-                  The document says this repeats{" "}
+                  {voice ? "You said this repeats " : "The document says this repeats "}
                   {RECURRENCE_LABELS[reminder.recurrence].toLowerCase()}. Change
                   it to &ldquo;Just once&rdquo; if that&rsquo;s not right.
                 </p>

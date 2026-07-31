@@ -6,6 +6,7 @@ import { canManageProperty } from "@/lib/property-auth";
 import { resolveViewer } from "@/lib/guest";
 import { isIntakeConfigured } from "@/lib/intake/extract";
 import { LedgerPanel, PageIntro } from "@/components/shell";
+import { AddDetailsBand } from "./add-details-band";
 import { PropertyEditForm } from "./property-edit-form";
 import { ContactsEditor } from "./contacts-editor";
 import { PropertyAdminsEditor } from "./property-admins-editor";
@@ -99,6 +100,8 @@ export default async function PropertyEditPage({
         title={property.name}
         context="Any family member can edit. Every change is recorded in the revision log."
       />
+
+      {intakeReady ? <AddDetailsBand slug={property.slug} /> : null}
 
       <LedgerPanel className="max-w-3xl">
         <header className="mb-6 flex flex-col gap-1">

@@ -13,13 +13,19 @@ import { DocumentsPanel } from "./documents-panel";
 export const dynamic = "force-dynamic";
 
 type Params = Promise<{ slug: string }>;
+type SearchParams = Promise<{ mode?: string }>;
 
 export default async function PropertyIntakePage({
   params,
+  searchParams,
 }: {
   params: Params;
+  searchParams: SearchParams;
 }) {
   const { slug } = await params;
+  // Set by the edit page's "Add by Voice" door (PRD 34), so that button lands on
+  // the capture screen rather than on a chooser the member has to read first.
+  const { mode } = await searchParams;
 
   // Same gate as the edit page: a granted guest can read this property, so RLS
   // alone wouldn't 404 them. The `extractIntake` action rejects guests too.
@@ -56,9 +62,9 @@ export default async function PropertyIntakePage({
 
       <PageIntro
         mode="operations"
-        eyebrow="Add from a photo"
+        eyebrow="Add details"
         title={property.name}
-        context="Photograph a bill or a handwritten note and we'll fill in the details for you to check."
+        context="Photograph a bill or a handwritten note, or just say what you want to add, and we'll fill in the details for you to check."
       />
 
       <LedgerPanel className="max-w-3xl">
@@ -78,6 +84,7 @@ export default async function PropertyIntakePage({
               max_guests: property.max_guests ?? null,
             }}
             canManage={canManage}
+            initialMode={mode === "voice" ? "voice" : undefined}
           />
         ) : (
           <div className="flex flex-col gap-3">
