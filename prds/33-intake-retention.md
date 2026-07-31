@@ -1,7 +1,7 @@
 # 33 — Intake Document Retention & Management
 
 **Phase**: 7 (authoring assist) · **Depends on**: 32 (Smart Intake — the `intake` bucket, `intake_documents`, and the intake review flow are what this manages)
-**Status**: 🚧 in progress (2026-07-31) — built on branch `prd-33-intake-retention`; migration pending application to prod, live walk pending.
+**Status**: 🚧 in review (2026-07-31) — PR #35, opened **unwalked** by decision. Build green; migration not yet applied to prod and no delete path exercised live.
 **Parallel-safe with**: most feature PRDs (one new panel + one server action; touches nothing outside the intake surface).
 
 ---
