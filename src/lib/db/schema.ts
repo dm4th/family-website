@@ -818,3 +818,54 @@ export const intakeDocuments = pgTable(
 
 export type IntakeDocument = typeof intakeDocuments.$inferSelect;
 export type NewIntakeDocument = typeof intakeDocuments.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// property_reminders — dated obligations on a property (PRD 32, slice 3).
+//
+// Built because neither existing calendar table fits: `bookings` are stays with
+// an approval workflow, and `events` is the Family Legacy Timeline. A reminder
+// is a title, a date, and an optional repeat. Deliberately not a ledger — no
+// amount column, no paid state; an amount is free text in `notes`.
+//
+// Repeats are stored as a rule and expanded for display (src/lib/reminders.ts),
+// never materialized as rows.
+// ----------------------------------------------------------------------------
+export type ReminderRecurrence = "none" | "monthly" | "quarterly" | "annually";
+
+export const propertyReminders = pgTable(
+  "property_reminders",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    propertyId: uuid("property_id")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    notes: text("notes"),
+    dueDate: date("due_date").notNull(),
+    recurrence: text("recurrence")
+      .$type<ReminderRecurrence>()
+      .notNull()
+      .default("none"),
+    createdBy: uuid("created_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: uuid("updated_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("property_reminders_property_due_idx").on(
+      table.propertyId,
+      table.dueDate,
+    ),
+  ],
+);
+
+export type PropertyReminder = typeof propertyReminders.$inferSelect;
+export type NewPropertyReminder = typeof propertyReminders.$inferInsert;

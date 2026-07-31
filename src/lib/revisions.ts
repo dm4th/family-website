@@ -4,6 +4,7 @@ export type RevisionEntity =
   | "property"
   | "profile"
   | "property_contact"
+  | "property_reminder"
   | "booking"
   | "album"
   | "photo"

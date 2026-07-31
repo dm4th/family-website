@@ -12,22 +12,26 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 import {
+  CALENDAR_EXTRACTION_JSON_SCHEMA,
+  CALENDAR_EXTRACTION_PROMPT,
   CONTACT_EXTRACTION_JSON_SCHEMA,
   CONTACT_EXTRACTION_PROMPT,
   NOTE_EXTRACTION_JSON_SCHEMA,
   NOTE_EXTRACTION_PROMPT,
   isAllowedIntakeMime,
+  parseCalendarExtraction,
   parseContactExtraction,
   parseNoteExtraction,
+  type CalendarExtraction,
   type ContactExtraction,
   type IntakeIntent,
   type NoteExtraction,
 } from "@/lib/intake/schema";
 
 /**
- * The intent registry: prompt, schema, and validator per target. Adding slice
- * 3's calendar intent should be one more entry here plus a review form, not a
- * new code path.
+ * The intent registry: prompt, schema, and validator per target. Slice 3's
+ * calendar intent is one more entry here plus a review form, as intended — the
+ * pipeline below is unchanged from slice 1.
  */
 const INTENTS = {
   contact: {
@@ -39,6 +43,11 @@ const INTENTS = {
     prompt: NOTE_EXTRACTION_PROMPT,
     schema: NOTE_EXTRACTION_JSON_SCHEMA,
     parse: parseNoteExtraction,
+  },
+  calendar: {
+    prompt: CALENDAR_EXTRACTION_PROMPT,
+    schema: CALENDAR_EXTRACTION_JSON_SCHEMA,
+    parse: parseCalendarExtraction,
   },
 } as const satisfies Record<
   IntakeIntent,
@@ -95,6 +104,7 @@ export type ExtractionUsage = {
 export type ExtractionByIntent = {
   contact: ContactExtraction;
   note: NoteExtraction;
+  calendar: CalendarExtraction;
 };
 
 /**
