@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   DEFAULT_HORIZON_MONTHS,
   expandOccurrences,
-  parseYmd,
+  horizonFrom,
   todayIso,
   type ReminderRecurrence,
 } from "@/lib/reminders";
@@ -287,12 +287,7 @@ export async function GET(
   // means the two can't tell a member different things. The cost is a bounded
   // handful of extra VEVENTs.
   const from = todayIso();
-  const horizonAnchor = parseYmd(from);
-  const horizonEnd = horizonAnchor
-    ? `${horizonAnchor.year + Math.floor(DEFAULT_HORIZON_MONTHS / 12)}-${String(
-        horizonAnchor.month,
-      ).padStart(2, "0")}-${String(horizonAnchor.day).padStart(2, "0")}`
-    : from;
+  const horizonEnd = horizonFrom(from, DEFAULT_HORIZON_MONTHS);
   for (const r of reminders) {
     for (const iso of expandOccurrences(
       r.due_date,

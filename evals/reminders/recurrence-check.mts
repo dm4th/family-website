@@ -15,6 +15,7 @@
 
 import {
   expandOccurrences,
+  horizonFrom,
   nextOccurrence,
   parseYmd,
 } from "@/lib/reminders";
@@ -143,6 +144,17 @@ eq(
   expandOccurrences("not-a-date", "monthly", "2026-01-01", "2026-12-31"),
   [],
 );
+
+console.log("\nhorizonFrom (the feed's window end)");
+eq("a whole number of years", horizonFrom("2026-07-31", 24), "2028-07-31");
+// The case the old hand-rolled string math got wrong: it added months/12 to the
+// year and kept the month, so a non-multiple-of-12 horizon quietly produced a
+// window ending on the wrong month.
+eq("eighteen months, not a whole year", horizonFrom("2026-07-31", 18), "2028-01-31");
+eq("six months", horizonFrom("2026-07-31", 6), "2027-01-31");
+eq("a horizon that clamps", horizonFrom("2026-08-31", 6), "2027-02-28");
+eq("crossing a year boundary", horizonFrom("2026-11-15", 3), "2027-02-15");
+eq("an unparseable anchor passes through", horizonFrom("nope", 24), "nope");
 
 console.log("\nnextOccurrence");
 eq(

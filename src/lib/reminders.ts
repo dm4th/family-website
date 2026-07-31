@@ -150,6 +150,21 @@ export function expandOccurrences(
 }
 
 /**
+ * `from` advanced by `months`, as a window end for expansion.
+ *
+ * Exists so callers never hand-roll the arithmetic. The obvious shortcut —
+ * adding `months / 12` to the year and reusing the month and day — is correct
+ * only while the horizon is a whole number of years, and fails silently the
+ * moment someone tunes the constant to 18. This goes through the same clamping
+ * month arithmetic as everything else.
+ */
+export function horizonFrom(from: string, months: number): string {
+  const anchor = parseYmd(from);
+  if (!anchor) return from;
+  return formatYmd(addMonthsClamped(anchor, months));
+}
+
+/**
  * The next date this reminder is due, on or after `from`. Null for a one-off
  * that has already passed.
  */
@@ -158,11 +173,8 @@ export function nextOccurrence(
   recurrence: ReminderRecurrence,
   from: string,
 ): string | null {
-  const anchor = parseYmd(from);
-  if (!anchor) return null;
-  const horizonEnd = formatYmd(
-    addMonthsClamped(anchor, DEFAULT_HORIZON_MONTHS),
-  );
+  if (!parseYmd(from)) return null;
+  const horizonEnd = horizonFrom(from, DEFAULT_HORIZON_MONTHS);
   return expandOccurrences(dueDate, recurrence, from, horizonEnd)[0] ?? null;
 }
 

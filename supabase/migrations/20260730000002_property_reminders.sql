@@ -31,10 +31,17 @@ create table if not exists public.property_reminders (
   due_date date not null,
 
   -- Repeats are stored as a rule, not as materialized rows: one reminder that
-  -- recurs is one row, expanded for display over whatever window is on screen
-  -- (see src/lib/reminders.ts) and emitted as an RRULE in the calendar feed.
-  -- Materializing would mean guessing how far into the future to write, and
-  -- would turn "fix the date" into "fix it in eighty places".
+  -- recurs is one row, expanded on demand over whatever window is being
+  -- rendered (see src/lib/reminders.ts). Materializing would mean guessing how
+  -- far into the future to write, and would turn "fix the date" into "fix it in
+  -- eighty places".
+  --
+  -- The calendar feed deliberately expands these into one VEVENT per occurrence
+  -- rather than emitting an RRULE. RFC 5545's monthly rule SKIPS months that
+  -- have no such day, where we clamp to the month end -- so a bill due the 31st
+  -- would silently vanish in February in a subscriber's calendar while still
+  -- showing on the site. Expanding from the one shared function keeps the two
+  -- from telling a member different things.
   recurrence text not null default 'none'
     check (recurrence in ('none', 'monthly', 'quarterly', 'annually')),
 
