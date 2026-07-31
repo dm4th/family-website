@@ -823,6 +823,11 @@ export function parseDictationExtraction(raw: unknown): DictationExtraction {
   const spoken = Array.isArray(record.suggestedReminders)
     ? record.suggestedReminders
     : [];
+  // Consumed as they match, so two reminders landing on the same day take their
+  // own quoted phrase rather than both showing the first one's. The calendar
+  // parser preserves order and only ever drops entries, so walking to the first
+  // unused match is an exact pairing.
+  const claimed = new Set<number>();
 
   return {
     // Re-read with the roomier cap: a tidied dictation is prose, and truncating
@@ -833,18 +838,25 @@ export function parseDictationExtraction(raw: unknown): DictationExtraction {
     suggestedContacts: note.suggestedContacts,
     suggestedReminders: reminders.map((reminder) => ({
       ...reminder,
-      // Matched by date rather than by position: the calendar parser drops
-      // undated entries, so the two arrays are not index-aligned.
-      spokenAs: findSpokenAs(spoken, reminder.dueDate),
+      // Matched by date rather than by position, because the calendar parser
+      // drops undated entries and the two arrays are not index-aligned.
+      spokenAs: claimSpokenAs(spoken, claimed, reminder.dueDate),
     })),
   };
 }
 
-function findSpokenAs(entries: unknown[], dueDate: string): string | null {
-  for (const entry of entries) {
+function claimSpokenAs(
+  entries: unknown[],
+  claimed: Set<number>,
+  dueDate: string,
+): string | null {
+  for (let i = 0; i < entries.length; i++) {
+    if (claimed.has(i)) continue;
+    const entry = entries[i];
     if (!entry || typeof entry !== "object") continue;
     const r = entry as Record<string, unknown>;
     if (readString(r.dueDate, 10) === dueDate) {
+      claimed.add(i);
       return readString(r.spokenAs, MAX_FIELD_CHARS);
     }
   }

@@ -52,7 +52,7 @@ export function DictationCapture({
         </h2>
         <p className="text-base text-foreground-muted">
           Tap the microphone on your keyboard and just talk about{" "}
-          {propertyName} — house rules, how something works, someone worth
+          {propertyName}: house rules, how something works, someone worth
           calling, a date to remember. Don&rsquo;t worry about tidiness or
           getting it in order. We&rsquo;ll clean it up and then walk you through
           each thing you could save.
