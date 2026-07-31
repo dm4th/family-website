@@ -1,7 +1,7 @@
 # 33 — Intake Document Retention & Management
 
 **Phase**: 7 (authoring assist) · **Depends on**: 32 (Smart Intake — the `intake` bucket, `intake_documents`, and the intake review flow are what this manages)
-**Status**: 🚧 in review (2026-07-31) — PR #35, opened **unwalked** by decision. Build green; migration not yet applied to prod and no delete path exercised live.
+**Status**: ✅ shipped (PR #35 merged `b319e40` 2026-07-31; migration applied to prod; reviewer live-walked every delete path same day — see Verification)
 **Parallel-safe with**: most feature PRDs (one new panel + one server action; touches nothing outside the intake surface).
 
 ---
@@ -74,12 +74,12 @@ src/app/(app)/properties/[slug]/edit/intake/page.tsx         # render the panel 
 
 ## Reviewer sign-off (I check these)
 
-- [ ] Delete authz enforced in the action **and** at RLS/storage policy (uploader or admin), guests rejected.
-- [ ] Object-first delete, tolerant of already-missing objects; row never orphans an object.
-- [ ] Signed-URL-only access; nothing in the panel leaks a public path.
-- [ ] No guest-reachable surface added; slice 3's negative-suite posture unchanged.
-- [ ] Copy follows house style (Title Case buttons, no em-dashes, sentence-case body; confirm dialog states the photo is removed for everyone).
-- [ ] Migration applied to prod + a live admin-delete and owner-delete each walked once.
+- [x] Delete authz enforced in the action **and** at RLS/storage policy (uploader or admin), guests rejected.
+- [x] Object-first delete, tolerant of already-missing objects; row never orphans an object.
+- [x] Signed-URL-only access; nothing in the panel leaks a public path.
+- [x] No guest-reachable surface added; slice 3's negative-suite posture unchanged.
+- [x] Copy follows house style (Title Case buttons, no em-dashes, sentence-case body; confirm dialog states the photo is removed for everyone).
+- [x] Migration applied to prod + a live admin-delete and owner-delete each walked once.
 
 ## Implementation
 
@@ -111,7 +111,14 @@ src/app/(app)/properties/[slug]/edit/intake/page.tsx         # render the panel 
 **Verification**
 
 - `npx tsc --noEmit` clean, `npx eslint` clean on touched paths, `npm run build` green.
-- _(Live walk pending: migration application to prod, then the six-step recipe above.)_
+- **Reviewer live walk on prod (2026-07-31), all six recipe checks:**
+  1. **List** — kind/date/uploader/size all render; empty state is the quiet line; uploader falls back to email when `full_name` is null.
+  2. **Open** — signed URL minted on click returned 200 with the image; the same URL with the token stripped returned 400.
+  3. **Owner delete** — confirm copy per spec, success toast, row + object both verified gone at the DB, zero revision rows written.
+  4. **Admin delete of another member's document** — exercised the real `is_admin()` branch of both policies: a SQL fixture reattributed a test doc (row `uploaded_by` **and** `storage.objects.owner`) to another member, then the admin deleted it through the app. The non-admin-member-refused half is enforced at three layers (action + row RLS + storage policy, quals verified live in `pg_policies`) but has no walkable account on prod — same accepted trade-off as PRD 27.
+  5. **Orphan tolerance** — a fixture row with no object listed as "Photo no longer stored" (no Open, no size) and deleted cleanly with the orphan-specific dialog copy.
+  6. **Full in-app cleanup** — the walk's own debris was removed entirely through the panel (the thing the PRD-32 walks couldn't do). Final DB state: `intake_documents = 0`, `intake` bucket objects = 0.
+- Guest posture unchanged: page guard, `loadIntakeDocuments` early-return, and both actions' guest rejections verified in code; no new guest-reachable surface, so the slice 3 negative-suite result stands.
 
 **Follow-ups**
 
