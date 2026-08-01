@@ -117,3 +117,74 @@ export function deriveRelatives(focusId: string, edges: TreeEdge[]): Relatives {
     siblings: [...siblings],
   };
 }
+
+/**
+ * The generation a person sits in, derived from the edges (PRD 39).
+ *
+ * `known` maps person id → generation for everyone whose generation is already
+ * recorded (today: people linked to a profile that has one). From any person we
+ * walk UP through parent edges, breadth-first, until we reach someone known;
+ * each step up is one generation earlier, so the answer is
+ * `known + steps`. Returns null when no ancestor has a recorded generation.
+ *
+ * Breadth-first matters: with several paths to the top (in-laws, remarriages)
+ * we want the shortest, and a family graph can contain loops through spouses,
+ * so `seen` keeps this terminating.
+ */
+export function generationOfPerson(
+  personId: string,
+  edges: TreeEdge[],
+  known: Map<string, number>,
+): number | null {
+  const direct = known.get(personId);
+  if (direct != null) return direct;
+
+  const seen = new Set<string>([personId]);
+  let frontier = [personId];
+  let steps = 0;
+
+  // The tree is a few dozen people; a depth cap well past any real family
+  // keeps a malformed graph from spinning.
+  while (frontier.length && steps < 20) {
+    steps += 1;
+    const next: string[] = [];
+    for (const child of frontier) {
+      for (const e of edges) {
+        if (e.type !== "parent" || e.personB !== child) continue;
+        const parent = e.personA;
+        if (seen.has(parent)) continue;
+        seen.add(parent);
+        const g = known.get(parent);
+        if (g != null) return g + steps;
+        next.push(parent);
+      }
+    }
+    frontier = next;
+  }
+  return null;
+}
+
+/**
+ * The generation to preselect for someone whose parents are `parentIds`: one
+ * below the nearest parent we can place. Null when none of them resolve, in
+ * which case the picker should behave exactly as it does today (ask outright).
+ *
+ * Deliberately a *suggestion*. Dad's numbering is the source of truth and a
+ * member can always overrule this; derivation exists to stop the most-fumbled
+ * question being asked cold, not to make the graph authoritative over a person.
+ */
+export function suggestGeneration(
+  parentIds: string[],
+  edges: TreeEdge[],
+  known: Map<string, number>,
+): number | null {
+  let best: number | null = null;
+  for (const id of parentIds) {
+    const g = generationOfPerson(id, edges, known);
+    if (g == null) continue;
+    // Nearest-to-the-top parent wins, so a stub with no ancestry can't drag
+    // the suggestion down when the other parent is properly placed.
+    best = best == null ? g + 1 : Math.min(best, g + 1);
+  }
+  return best;
+}

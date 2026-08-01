@@ -1,7 +1,7 @@
 # 39 — Onboarding That Grows the Tree
 
 **Phase**: 7 (family growth) · **Depends on**: 24 (invite-only access, shipped), the generations reset (Bibi and Drew = 1, PR #48 + data script), PRD 13 (welcome flow, shipped)
-**Status**: 🟢 ready (2026-08-01)
+**Status**: 🚧 built + reviewed 2026-08-01 (branch `prd-39-onboarding`) — both slices code-complete; reviewed against a real local Postgres, two required fixes applied and re-verified. `tsc` / `eslint` / `build` green, 13/13 generation checks. **Migrations validated locally but not applied to prod, and no live walk yet** (see Implementation).
 **Parallel-safe with**: property-side PRDs (35–38). Touches `/welcome`, `/invite`, the invitations table, and the tree write path — do not run alongside another onboarding or tree PRD.
 
 ---
@@ -106,3 +106,146 @@ src/lib/family-tree.ts                          # generation-from-edges helper (
 - [ ] Nudge persists until tree placement; "Finish Later" is never punished.
 - [ ] Guests fully excluded; RLS verified for member inserts on people/relationships.
 - [ ] Live walk: invite a real test address end-to-end, onboard placing myself against seeded anchors, verify the tree renders the new edges, then clean up the test rows.
+
+---
+
+## Implementation (2026-08-01, branch `prd-39-onboarding`)
+
+Both slices built in one session. Everything below is code-complete and passes
+`tsc` / `eslint` / `next build`; **nothing has been run against a database.**
+
+### Key files
+
+| File | What it does |
+|---|---|
+| `supabase/migrations/20260801000001_invitation_kinship.sql` | `invitations.relation_to_inviter` (check-constrained) + `relation_note`, plus `my_invitation_hint()` |
+| `supabase/migrations/20260801000002_place_self_in_tree.sql` | `place_self_in_tree()` — the atomic placement |
+| `src/lib/email/invitation-email.ts` | The warm invitation email |
+| `src/lib/email/layout.ts` | Gained `mode` (family burgundy / operations forest) + `footer` |
+| `src/app/(app)/admin/actions.ts` | Kinship capture + best-effort send on create |
+| `src/app/(app)/admin/invitations-section.tsx` | "Who are they to you?" (hidden for guests), honest success copy |
+| `src/app/(auth)/login/*` | `?email=` prefill + invitation-aware header |
+| `src/app/welcome/actions.ts` | `saveIdentity` / `savePlacement` / `finishOnboarding` / `findClaimCandidates` |
+| `src/app/welcome/tree-step.tsx` | Pickers, claim card, stubs, generation suggestion |
+| `src/app/welcome/welcome-flow.tsx` | The three steps |
+| `src/lib/family-tree.ts` | `generationOfPerson()` + `suggestGeneration()` (pure) |
+| `src/components/profile-nudge.tsx` | Gap-aware nudge |
+| `evals/onboarding/generation-check.mts` | 13 checks on the derivation, no DB or API key |
+
+### Decisions made during the build
+
+- **Atomicity needed a SQL function.** "All-or-nothing on save" is unachievable
+  through supabase-js, which issues one statement per call. `place_self_in_tree`
+  is `SECURITY INVOKER`, so the existing `people` / `relationships` RLS is still
+  the authority; it grants nothing a member couldn't already do one row at a time
+  from the tree pages, it only makes the group atomic. Guests are rejected inside
+  it as well, behind RLS.
+- **The invitee cannot read their own invitation.** RLS scopes `invitations`
+  SELECT to the inviter, so the kinship hint needed `my_invitation_hint()`, a
+  `SECURITY DEFINER` reader matched on the caller's own `auth.users` email and
+  returning only two fields. Widening the RLS policy was the alternative and was
+  rejected: it would expose the invite list keyed by email.
+- **The email drives to `/login`, it does not carry a magic link.** The premise
+  "invitations don't send an email" turned out to be half stale: there is already
+  a manual per-row "Email Magic Link" button sending Supabase's raw OTP mail.
+  Embedding a second link would mean two competing sign-in emails, and links in
+  forwarded mail age badly. Prefilling `?email=` gets the same result. The old
+  button stays as a manual fallback.
+- **Per-step saving, not one save at the end.** Directly targets the observed
+  failure: step 1 alone now puts a name in the directory, so an interrupted first
+  run leaves something behind.
+- **Suggestion never overrides a choice.** `GenerationSelect` gained optional
+  controlled props; the field follows the derived suggestion only until the
+  member touches it, and an already-saved generation always outranks a guess.
+- **Kinship suggests, it never writes.** The inviter's answer produces a one-tap
+  "Add X as your parent?" row, not a pre-filled picker, so no edge can be created
+  by not noticing something.
+- **`relationship_notes` dropped from the welcome form.** It is the prose field
+  this PRD exists to replace. The column and the profile-edit field are untouched.
+
+### Bugs found and fixed on the way
+
+- **Nested `<form>` in the welcome flow (pre-existing).** "Finish Later" lived in
+  a `<form>` nested inside the step's form. HTML parsers drop the inner one, so
+  the button was a submit for the outer form. Replaced with `formAction` +
+  `formNoValidate` on the button.
+- **`/welcome` was a dead end for returners.** It redirected out whenever
+  `onboarded_at` was set, so the nudge's "Add yourself to the family tree" link
+  would have bounced straight back to the dashboard. The gate now also requires
+  identity + generation + placement, and the flow resumes at the first unfinished
+  step.
+- **Spouse-edge dedup was one-directional.** `ON CONFLICT` only catches the
+  canonical ordering; a hand-seeded reversed row would have produced a mirror
+  edge. Now checked in both directions explicitly.
+- **Sibling suggestions would have silently dropped.** The name lookup was built
+  only from people with linked profiles, but a sibling's parents are usually
+  accountless ancestors. Now loaded from all people.
+
+### Review (2026-08-01) and the two fixes it required
+
+Reviewed against a real local Postgres (`supabase db reset`, functional tests as
+authenticated JWTs, rolled back). Both migrations apply cleanly. The review
+confirmed `my_invitation_hint()` scoping, atomic placement, canonical spouse
+ordering, idempotent retry, guest rejection, and self-parent filtering, and
+endorsed both deviations from the original spec. It found two real defects:
+
+1. **Accepting a suggestion wiped manual picks.** The suggestion rows re-seeded
+   `PeoplePicker` by changing its `key`, which remounted it with
+   `defaultSelected` = the suggestion alone. Picking a parent by hand and then
+   pressing "Add" on a suggestion silently dropped the hand-picked one.
+   **Fixed**: `onSelectionChange` now emits whole people rather than ids, the
+   step tracks the live selection, and applying a suggestion seeds the *union*.
+   The spouse suggestion also hides once a spouse is chosen, since only one is
+   accepted.
+2. **Claim race.** The claim path SELECTed `profile_id`, checked null, then
+   UPDATEd without rechecking, so two same-named people claiming concurrently
+   would let the second silently overwrite the first's link. The partial unique
+   index on `people(profile_id)` does not catch this (it prevents one profile
+   owning two rows, not two profiles racing for one). **Fixed**: the null check
+   moved into the UPDATE's WHERE, with `if not found then raise`.
+
+Also applied from the review's nits: `my_invitation_hint()` now filters to
+`status in ('pending','accepted')` so a revoked invitation stops suggesting
+family ('accepted' must stay — the hint is read after sign-in, once
+`handle_new_user()` has marked it accepted). Uncapped server-side stub creation
+is documented in the migration as deliberate and consistent with existing member
+powers.
+
+Verified after the fixes on the local stack: steal-claim rejected with 23505 and
+the original link intact; revoked hints suppressed while pending and accepted
+still work; placement, idempotent retry, and canonical spouse ordering unchanged.
+`tsc` / `eslint` / `build` green, 13/13 generation checks.
+
+Fix 1 is verified by inspection and build only — the repo has no component test
+harness, so the interaction itself is covered by the live walk below.
+
+### Not done — required before this ships
+
+1. **No live walk.** Every numbered item in the Verification recipe above is
+   outstanding, including the reviewer sign-off list.
+2. **Guest negative suite** (recipe item 6) not run.
+3. **Email not sent through Resend once.** Rendering was verified offline for
+   both variants (subject, CTA casing, no em-dashes, both how-to paths); Gmail
+   rendering was not.
+
+### Ship order (matters here)
+
+Apply **both migrations to prod before merging the code** — the PRD-36 lesson.
+The welcome page calls `my_invitation_hint()` on load, so shipping code first
+would break `/welcome` for everyone.
+
+### Pre-existing bug found (not this PR's)
+
+`handle_new_user()`'s rejection path has a malformed `RAISE` ("RAISE option
+already specified: MESSAGE"). Uninvited signups still fail closed, but with an
+internal error instead of the intended message. Worth a one-liner someday; it is
+also why any test seeding `auth.users` must insert the invitation first.
+
+### Follow-ups
+
+- `place_self_in_tree` currently accepts one spouse. Remarriages need the tree
+  pages, which is consistent with the PRD's scope but worth saying out loud.
+- The plaintext email footer was unified with the HTML one (they had drifted);
+  booking/feedback plaintext footers now read slightly differently than before.
+- Reminder emails for stalled invites remain deliberately out of scope: measure
+  first, as the PRD says.

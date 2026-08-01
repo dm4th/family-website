@@ -13,7 +13,14 @@ import {
 
 const initialState: LoginState = { status: "idle" };
 
-export function LoginForm({ initialError }: { initialError?: string }) {
+export function LoginForm({
+  initialError,
+  defaultEmail = "",
+}: {
+  initialError?: string;
+  /** Prefilled from an invitation link's ?email= (PRD 39). Editable. */
+  defaultEmail?: string;
+}) {
   const [state, formAction, isPending] = useActionState(
     sendMagicLink,
     initialState,
@@ -66,6 +73,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
             required
             autoComplete="email"
             placeholder="you@example.com"
+            defaultValue={defaultEmail}
             className="h-10"
           />
         </div>

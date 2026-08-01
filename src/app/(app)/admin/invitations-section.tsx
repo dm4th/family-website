@@ -100,6 +100,53 @@ export function InvitationsSection({
             </Button>
           </div>
         </div>
+        {/* Kinship (PRD 39): the inviter answers once, and the invitee's tree
+            step uses it to put likely parents/spouses at the top of the
+            pickers. Optional, and never shown for guests. */}
+        {role !== "guest" && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr] sm:items-end">
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="invite-relation"
+                className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+              >
+                Who are they to you?
+              </Label>
+              <select
+                id="invite-relation"
+                name="relation_to_inviter"
+                defaultValue=""
+                className="h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                <option value="">Rather not say</option>
+                <option value="child">My child</option>
+                <option value="parent">My parent</option>
+                <option value="sibling">My sibling</option>
+                <option value="spouse">My spouse</option>
+                <option value="other">Someone else</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="invite-relation-note"
+                className="text-[0.65rem] uppercase tracking-[0.16em] text-foreground-subtle"
+              >
+                Anything to add? (optional)
+              </Label>
+              <Input
+                id="invite-relation-note"
+                name="relation_note"
+                autoComplete="off"
+                placeholder="e.g., my stepdaughter"
+              />
+            </div>
+            <p className="text-sm text-foreground-subtle sm:col-span-2">
+              Optional. It helps us suggest the right people when they add
+              themselves to the family tree.
+            </p>
+          </div>
+        )}
+
         {/* Guests are scoped to a single property — pick which one. */}
         {role === "guest" && (
           <div className="flex flex-col gap-1.5">
@@ -133,9 +180,20 @@ export function InvitationsSection({
             )}
           </div>
         )}
-        <FormStatus tone={state.status === "error" ? "error" : "success"}>
+        <FormStatus
+          tone={
+            state.status === "error"
+              ? "error"
+              : state.status === "created" && !state.emailed
+                ? // Saved, but the family member hasn't actually been told yet.
+                  "info"
+                : "success"
+          }
+        >
           {state.status === "created"
-            ? `Invitation created for ${state.email}. When they sign in (Google or magic link) with that email, they'll automatically get the assigned role.`
+            ? state.emailed
+              ? `Invitation sent to ${state.email}. They'll get an email explaining how to join, and they need to sign in with that same address.`
+              : `Invitation created for ${state.email}, but the email couldn't be sent. Use "Email Magic Link" below, or send them the site address yourself and tell them to sign in with that exact email.`
             : state.status === "error"
               ? state.message
               : null}

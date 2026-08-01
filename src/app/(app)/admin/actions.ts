@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/email/resend";
+import { invitationEmail } from "@/lib/email/invitation-email";
+import type { InviteRelation } from "@/lib/db/schema";
 
 type AdminCheckedClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -165,9 +168,89 @@ export async function setMemberActivation(
 
 export type InvitationActionState =
   | { status: "idle" }
-  | { status: "created"; email: string }
+  | {
+      status: "created";
+      email: string;
+      /** False when the invitation saved but the welcome email didn't go out. */
+      emailed: boolean;
+    }
   | { status: "sent"; email: string }
   | { status: "error"; message: string };
+
+/** Allowed kinship answers, mirroring the DB check constraint (PRD 39). */
+const INVITE_RELATIONS: readonly InviteRelation[] = [
+  "parent",
+  "child",
+  "sibling",
+  "spouse",
+  "other",
+];
+
+/**
+ * Send the warm invitation email. Best-effort by design: returns whether it
+ * went out so the form can tell the inviter the truth, and never throws.
+ *
+ * The CTA lands on /login with the address prefilled rather than carrying a
+ * magic link of its own. Two reasons: an emailed link would be a second,
+ * competing sign-in email next to the existing "Email Magic Link" button, and
+ * links in forwarded email age badly. Prefilling gets the same result (the one
+ * address that works, already typed) without either problem.
+ */
+async function sendInvitationEmail({
+  supabase,
+  inviterId,
+  invitedEmail,
+  isGuest,
+  grantPropertyId,
+}: {
+  supabase: AdminCheckedClient;
+  inviterId: string;
+  invitedEmail: string;
+  isGuest: boolean;
+  grantPropertyId: string | null;
+}): Promise<boolean> {
+  try {
+    const { data: inviter } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", inviterId)
+      .single();
+
+    let propertyName: string | null = null;
+    if (isGuest && grantPropertyId) {
+      const { data: property } = await supabase
+        .from("properties")
+        .select("name")
+        .eq("id", grantPropertyId)
+        .single();
+      propertyName = (property?.name as string | null) ?? null;
+    }
+
+    const origin = getOrigin(await headers());
+    const rendered = invitationEmail({
+      invitedEmail,
+      inviterName: (inviter?.full_name as string | null)?.trim() || "",
+      acceptUrl: `${origin}/login?email=${encodeURIComponent(invitedEmail)}`,
+      isGuest,
+      propertyName,
+    });
+
+    const result = await sendEmail({
+      to: [invitedEmail],
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+    });
+    return result.ok;
+  } catch (err) {
+    console.error(
+      `[invite] could not send invitation email: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return false;
+  }
+}
 
 export async function createInvitation(
   _prev: InvitationActionState,
@@ -205,6 +288,19 @@ export async function createInvitation(
       };
     }
 
+    // Optional kinship (PRD 39) — a hint for the invitee's tree step, never an
+    // edge. Guests are excluded by design: they aren't family and never see the
+    // tree step, so storing a relationship for them would be meaningless.
+    const relationRaw = readText(formData, "relation_to_inviter");
+    const relationToInviter =
+      role !== "guest" &&
+      relationRaw &&
+      INVITE_RELATIONS.includes(relationRaw as InviteRelation)
+        ? (relationRaw as InviteRelation)
+        : null;
+    const relationNote =
+      role !== "guest" ? readText(formData, "relation_note") : null;
+
     // 30-day expiry default.
     const expiresAt = new Date(
       Date.now() + 30 * 24 * 60 * 60 * 1000,
@@ -218,6 +314,8 @@ export async function createInvitation(
       token: randomUUID(),
       expires_at: expiresAt,
       grant_property_id: role === "guest" ? grantPropertyId : null,
+      relation_to_inviter: relationToInviter,
+      relation_note: relationNote,
     });
     if (error) {
       // Surface the unique-pending-per-email collision nicely.
@@ -229,9 +327,21 @@ export async function createInvitation(
       }
       return { status: "error", message: error.message };
     }
+
+    // The invitation now actually invites (PRD 39). Best-effort, exactly like
+    // the booking emails: a send failure must not undo a row that was written
+    // successfully, or the inviter sees an error for an invite that exists.
+    const emailed = await sendInvitationEmail({
+      supabase,
+      inviterId: userId,
+      invitedEmail: email,
+      isGuest: role === "guest",
+      grantPropertyId: role === "guest" ? grantPropertyId : null,
+    });
+
     revalidatePath("/admin");
     revalidatePath("/invite");
-    return { status: "created", email };
+    return { status: "created", email, emailed };
   } catch (err) {
     return {
       status: "error",

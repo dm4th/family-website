@@ -5,7 +5,7 @@ import { resolveViewer } from "@/lib/guest";
 import { cn } from "@/lib/utils";
 import { Eyebrow, SectionRule } from "@/components/shell";
 import { WelcomePanel } from "@/components/welcome-panel";
-import { ProfileNudge } from "@/components/profile-nudge";
+import { ProfileNudge, type ProfileGap } from "@/components/profile-nudge";
 import {
   NAV_GROUPS,
   doorItemsForViewer,
@@ -56,8 +56,22 @@ export default async function Dashboard({
     user
       ? supabase
           .from("profiles")
-          .select("full_name")
+          .select("full_name, family_branch, generation")
           .eq("id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  // Is this member in the family tree yet? (PRD 39 — "finished" now includes
+  // being placed.) Guests are excluded entirely: they aren't family, and the
+  // tree is.
+  const [{ data: isGuest }, { data: ownPerson }] = await Promise.all([
+    user ? supabase.rpc("is_guest") : Promise.resolve({ data: null }),
+    user
+      ? supabase
+          .from("people")
+          .select("id")
+          .eq("profile_id", user.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -73,11 +87,26 @@ export default async function Dashboard({
 
   // The welcome panel is the celebratory landing right after finishing the
   // guided flow (?welcome=1). The nudge is the gentle follow-up for someone who
-  // chose "finish later" and still has no name — the real "Unnamed" case. We
-  // gate on name only (not branch) so established members who were backfilled as
-  // onboarded but never set a branch aren't nagged.
+  // chose "Finish Later".
+  //
+  // PRD 39 widened "finished" from "has a name" to "has a name, a generation,
+  // and a place in the tree" — the old rule stopped nagging while the member
+  // was still invisible in the tree and filed under "Generation not set", which
+  // is how a half-finished profile stayed half-finished for weeks. Safe to
+  // widen because the 2026-08-01 reset placed every existing member; nobody
+  // established gets newly nagged. One gap is named at a time, worst first.
   const justOnboarded = (await searchParams)?.welcome === "1";
-  const needsProfile = Boolean(user) && !ownProfile?.data?.full_name?.trim();
+  const profileGap: ProfileGap | null = !user
+    ? null
+    : isGuest === true
+      ? null
+      : !ownProfile?.data?.full_name?.trim() || !ownProfile?.data?.family_branch
+        ? "identity"
+        : ownProfile?.data?.generation == null
+          ? "generation"
+          : !ownPerson
+            ? "tree"
+            : null;
 
   const firstName =
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
@@ -95,8 +124,8 @@ export default async function Dashboard({
       {/* Just finished onboarding → celebratory orientation panel. */}
       {justOnboarded && <WelcomePanel firstName={firstName} />}
 
-      {/* Skipped onboarding with a blank profile → soft, dismissible nudge. */}
-      {!justOnboarded && needsProfile && <ProfileNudge />}
+      {/* Unfinished profile → soft, dismissible nudge naming what's missing. */}
+      {!justOnboarded && profileGap && <ProfileNudge gap={profileGap} />}
 
       {/* Opening statement — date, greeting, mood. Not a KPI wall. */}
       <header className="flex flex-col gap-3">
