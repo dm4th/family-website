@@ -22,6 +22,7 @@ import {
   INTAKE_BUCKET,
   INTAKE_MAX_DIMENSION,
   MAX_INTAKE_BYTES,
+  MAX_PASTE_CHARS,
   generateIntakePath,
   isAllowedIntakeMime,
   type CalendarExtraction,
@@ -37,9 +38,11 @@ import {
   extractPaste,
   refreshIntakeProperty,
 } from "./actions";
+import { isDocsPickerConfigured } from "@/lib/google/docs-picker";
 import { CalendarReview } from "./calendar-review";
 import { ContactReview } from "./contact-review";
 import { DictationCapture } from "./dictation-capture";
+import { GDocCapture } from "./gdoc-capture";
 import { NoteReview } from "./note-review";
 import { PasteCapture } from "./paste-capture";
 import { PasteReview } from "./paste-review";
@@ -137,6 +140,11 @@ type Phase =
   | { name: "dictate" }
   /** The paste capture screen (PRD 37). No upload; the input is a document. */
   | { name: "paste" }
+  /**
+   * The Google Doc screen (PRD 38). Also has no upload: it ends by handing the
+   * document's exported text to the same action the paste screen calls.
+   */
+  | { name: "gdoc" }
   | { name: "working"; message: string }
   | { name: "error"; message: string }
   | {
@@ -190,7 +198,7 @@ export function IntakeFlow({
   property: IntakeProperty;
   canManage: boolean;
   /** Set when the member arrived through one of the edit page's named doors. */
-  initialMode?: "voice" | "paste";
+  initialMode?: "voice" | "paste" | "gdoc";
 }) {
   // Held in state, not read straight from the prop, because a review session can
   // save more than once and the forms below carry the property's other fields
@@ -203,7 +211,11 @@ export function IntakeFlow({
       ? { name: "dictate" }
       : initialMode === "paste"
         ? { name: "paste" }
-        : { name: "idle" },
+        : // A hand-typed or stale `?mode=gdoc` must not land on a screen whose
+          // only button throws. Unconfigured, it means the chooser.
+          initialMode === "gdoc" && isDocsPickerConfigured()
+          ? { name: "gdoc" }
+          : { name: "idle" },
   );
   /**
    * The capture screen's own busy flag and error, deliberately not folded into
@@ -220,6 +232,14 @@ export function IntakeFlow({
    */
   const [sorting, setSorting] = useState(false);
   const [pasteError, setPasteError] = useState<string | null>(null);
+  /**
+   * Text the paste box should open with. Only ever set by the Google Doc door
+   * handing back a document it couldn't send on (PRD 38) — a paste that came
+   * back over the cap is still the member's document, and making them fetch it
+   * from Google a second time to split it in half would be the errand this
+   * whole band exists to remove.
+   */
+  const [pasteInitialText, setPasteInitialText] = useState("");
   /**
    * How many of this review's destinations have been saved (PRD 34). Counted
    * here rather than inside each review form because a session's updates are
@@ -418,6 +438,41 @@ export function IntakeFlow({
   }
 
   /**
+   * A Google Doc came back with its text (PRD 38). From here it is a paste in
+   * every respect, so it goes through the same action, the same cap, and the
+   * same review.
+   */
+  function handleGDocText(text: string, name: string) {
+    // Keep it in the paste box behind this screen. If the member presses "start
+    // over" out of the review, their document is still there.
+    setPasteInitialText(text);
+    if (text.length > MAX_PASTE_CHARS) {
+      // The cap is the engine's, so it is checked here rather than being
+      // discovered as a server error after the round trip.
+      setPasteError(
+        `"${name}" is longer than we can take in one go. It's in the box below, so you can send it in two or three parts.`,
+      );
+      setPhase({ name: "paste" });
+      return;
+    }
+    void handlePaste(text);
+  }
+
+  /** The Google side failed or gave us nothing. Land on the sibling door. */
+  function handleGDocFailure(message: string, recoveredText?: string) {
+    setPasteInitialText(recoveredText ?? "");
+    setPasteError(message);
+    setPhase({ name: "paste" });
+  }
+
+  /** Open the paste door empty, the way the chooser's own button means it. */
+  function openPasteFresh() {
+    setPasteInitialText("");
+    setPasteError(null);
+    setPhase({ name: "paste" });
+  }
+
+  /**
    * Called by any review form that just wrote to the property. Pulls the row
    * back so the *other* forms carry what's actually stored rather than what was
    * there when the page loaded.
@@ -466,12 +521,25 @@ export function IntakeFlow({
     );
   }
 
+  if (phase.name === "gdoc") {
+    return (
+      <GDocCapture
+        propertyName={property.name}
+        busy={sorting}
+        onDocument={handleGDocText}
+        onFailure={handleGDocFailure}
+        onCancel={() => setPhase({ name: "idle" })}
+      />
+    );
+  }
+
   if (phase.name === "paste") {
     return (
       <PasteCapture
         property={property}
         busy={sorting}
         error={pasteError}
+        initialText={pasteInitialText}
         onSubmit={(text) => void handlePaste(text)}
         onCancel={() => {
           setPasteError(null);
@@ -654,6 +722,33 @@ export function IntakeFlow({
         ))}
 
         {/*
+          The Google Doc door (PRD 38). Rendered only when the picker is
+          configured: a door that cannot open is worse than one that isn't
+          there, especially for the members this band was built for.
+        */}
+        {isDocsPickerConfigured() ? (
+          <div className="flex flex-col gap-3 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-5">
+            <h3 className="font-display text-lg leading-tight text-foreground">
+              A Google Doc you already have
+            </h3>
+            <p className="flex-1 text-base text-foreground-muted">
+              If the house manual lives in Google Docs, you don&rsquo;t have to
+              copy it out. Pick the document and we&rsquo;ll read it from there.
+            </p>
+            <div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setPhase({ name: "gdoc" })}
+              >
+                Connect Google Doc
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {/*
           The paste door (PRD 37). Sits with the others rather than above them:
           it is the widest of the four in what it can take, but "I have a
           document already" is one answer to "what have you got?", not a
@@ -673,10 +768,7 @@ export function IntakeFlow({
               type="button"
               variant="outline"
               disabled={busy}
-              onClick={() => {
-                setPasteError(null);
-                setPhase({ name: "paste" });
-              }}
+              onClick={openPasteFresh}
             >
               Paste Text
             </Button>

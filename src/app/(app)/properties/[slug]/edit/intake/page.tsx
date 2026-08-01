@@ -87,7 +87,13 @@ export default async function PropertyIntakePage({
             }}
             canManage={canManage}
             initialMode={
-              mode === "voice" ? "voice" : mode === "paste" ? "paste" : undefined
+              mode === "voice"
+                ? "voice"
+                : mode === "paste"
+                  ? "paste"
+                  : mode === "gdoc"
+                    ? "gdoc"
+                    : undefined
             }
           />
         ) : (
