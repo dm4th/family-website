@@ -97,8 +97,12 @@ src/app/(app)/properties/[slug]/actions.ts                 # updateProperty whit
 
 Built in an isolated worktree because PRD 35 was being built in the main
 checkout at the same time and both touch `properties/[slug]/page.tsx` and
-`actions.ts`. Whoever merges second should expect a small conflict in the
-aside (35 changes which photo is the hero; 36 reorders the side rail).
+`actions.ts`. 35 merged first (PR #42), and this branch was rebased onto it
+on 2026-08-01. Three conflicts, all keep-both: the `SetHeroButton` /
+`WifiPanel` imports, the property select (`hero_image_path` **and**
+`wifi_network, wifi_password`), and the block where 35's hero resolution
+sits next to 36's contact split. 35's explicit-hero-else-newest logic and
+`restPhotos` filter-by-id are intact; `actions.ts` auto-merged.
 
 ### Key files
 
