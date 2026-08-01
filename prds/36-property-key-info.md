@@ -1,7 +1,7 @@
 # 36 — Property Key Info (Emergencies, Wi-Fi, Contact Kinds)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 03 (property pages), 27 (column guard posture) · **Feeds**: 37 (paste ingestion needs these destinations)
-**Status**: 🚧 built, awaiting migration + live walk (2026-07-31)
+**Status**: ✅ shipped (PR #43 merged `3c744b7` 2026-07-31; migration applied to prod 2026-08-01; reviewer walked contacts-by-kind, Emergencies panel, and Service Directory live same day. The Wi-Fi panel + QR render is deliberately verified during **PRD 37's first real run** — the Wi-Fi fields get their first data from the extractor, not from hand-typing, per Dan)
 **Parallel-safe with**: 35 (different files). **37 must wait for this** — ingestion routes into the fields this PRD creates.
 
 ---
@@ -147,11 +147,33 @@ sits next to 36's contact split. 35's explicit-hero-else-newest logic and
 ### Verification status
 
 - ✅ `tsc`, `eslint`, `next build` green; 19/19 QR payload checks pass.
-- ⏳ **Migration not yet applied anywhere** (no Docker locally, and pushing to
-  prod is the owner's call). `supabase/tests/prd36-property-key-info.sql` is
-  written and ready to run against the DB once it is.
-- ⏳ Live walk still owed: real Wi-Fi entered for Loon-A-See, QR scanned from a
-  phone, one contact of each kind, guest view confirmed.
+- ✅ **Migration applied to prod 2026-08-01** (owner-run `supabase db push`; the
+  `drop constraint if exists` NOTICE is the expected no-op). Columns, kind
+  default, and index confirmed via read-only queries. Note: the code merged
+  ~15 minutes before the migration was applied, and property pages 404'd in
+  that window (the select referenced missing columns) — recovered instantly on
+  apply. Reviewer's lesson for 37: **apply the migration from the PR branch
+  before merging the code** when a PR ships both.
+- ✅ **Reviewer live walk on prod (2026-08-01)**: one contact per kind added
+  through the new "Shows up in" select — Hospital (Speare Memorial,
+  603-536-1120) rendered in the Emergencies panel under the fixed 911 `tel:`
+  row; Caretaker (Doug Brosius) in Contacts on the Ground; Plumber (Minute Man)
+  in the full-width Service Directory table under "Who fixes what". Three
+  revision rows, each with `kind` in the diff. Fact rail shows "Contacts: 3 on
+  file". New how-to hint copy confirmed live. Guard trigger read from prod:
+  wifi columns absent from `guard_property_privileged_columns` (structurally
+  member-editable, as designed).
+- ⏳ **Wi-Fi panel + QR: verified at PRD 37's first real run, by design.** Dan's
+  call: the Wi-Fi fields' first data comes from the extractor parsing Dad's
+  existing "How things work here" blob and proposing the value for approval —
+  nobody hand-types the password, including the reviewer (password entry into
+  fields is outside the reviewer's operating rules anyway). The QR phone-scan
+  check happens at that same moment.
+- Guest view: inspection-only (RLS select policies unchanged; wifi columns
+  covered by the existing property policy; guests still have no write path).
+  `supabase/tests/prd36-property-key-info.sql` remains available but its
+  fixture block commits two test profiles, so it must not run against prod
+  as-is.
 
 ### Follow-ups
 
