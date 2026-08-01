@@ -1,7 +1,7 @@
 # 35 — Hero Photo Picker
 
 **Phase**: 7 (authoring assist) · **Depends on**: 05 (photo upload/delete), 17 (renditions)
-**Status**: 🚧 built (2026-07-31) — branch `prd-35-hero-photo-picker`, awaiting review + the live walk
+**Status**: ✅ shipped (PR #42 merged `22d7606` 2026-07-31; reviewer live-walked set / upload-no-displace / delete-the-hero / clear on prod 2026-08-01 — see Verification)
 **Parallel-safe with**: 36, 37, and most feature PRDs (touches the property detail page + gallery + one action; no schema, no intake surface).
 
 ---
@@ -94,7 +94,18 @@ Built on branch `prd-35-hero-photo-picker` in a dedicated worktree (`../family-w
 - **Listing hardening was added even though the PRD said "read path already correct".** It wasn't, for the dangling case: `loadPropertyCards` would sign a URL for a deleted object and render a broken card. One `Set` of live paths in the existing photo query, no extra round-trip.
 - **`restPhotos` by id, not index** — with an explicit hero the newest photo has to stay in the gallery.
 
-**Verification** — `tsc`, `eslint`, and `npm run build` green in the worktree. Recipe steps 1-6 (set / clear / delete-the-hero / dangling / non-admin / guest) are **not** yet walked live; that plus the prod Loon-A-See walk is the review gate.
+**Verification** — `tsc`, `eslint`, and `npm run build` green in the worktree; deploy of merge `22d7606` green on prod.
+
+**Reviewer live walk on prod (2026-08-01, Loon-A-See):**
+
+- **Set**: promoted the sunset photo (the *oldest* of three — a real test of "not the newest") → "Hero photo updated" toast, detail hero swapped, caption flipped to "Hero: chosen by an admin. New uploads won't replace it.", and the `/properties` listing card showed the same sunset. Revision recorded with before/after (`null → f8/f89d…`).
+- **Upload does not displace**: added a canvas-generated "PRD35 TEST" photo through the Add Photos modal → it became the newest photo, the sunset stayed hero on reload, the caption stayed in chosen mode.
+- **Delete the hero**: promoted the test photo, then removed it from the hero frame. The confirm dialog carried the new truthful copy ("The newest remaining photo will take its place."), the page fell back to the newest real photo, and the **next revision's `before` was `null`** — DB proof that `deletePhoto` cleared the pointer rather than leaving it dangling.
+- **Clear**: re-promoted the sunset, then "Use Newest Photo" → "Back to the newest photo" toast, newest-photo caption, pointer null. Revision recorded (`f8/f89d… → null`).
+- **Overlay stacking**: on hover the hero shows Remove (top-right) and Use Newest Photo beneath it — no collision with each other or the status badge.
+- **Ledger**: exactly 4 property revisions for the walk (set, set, set, clear), each with a correct `hero_image_path` before/after diff; the delete-path auto-clear wrote no revision, consistent with `deletePhoto`'s existing behavior.
+- **End state**: prod restored to pre-walk (3 photos, `hero_image_path` null, test photo row deleted) — the first *real* hero choice is Dad's to make, which is the point of the feature.
+- **Inspection-only** (accepted, same posture as PRD 27/33): dangling-path fallback (needs a direct DB write prod doesn't allow; covered by code review + the listing hardening), non-admin member and guest negatives (no walkable non-admin session; `canManageProperty()` + the PRD-27 trigger + button-not-rendered are unchanged mechanisms).
 
 **Follow-ups**
 
@@ -103,10 +114,10 @@ Built on branch `prd-35-hero-photo-picker` in a dedicated worktree (`../family-w
 
 ## Reviewer sign-off (I check these)
 
-- [ ] Writes go through `canManageProperty()` **and** land inside the existing DB column guard; non-admin members and guests can't set a hero from any path.
-- [ ] `setHeroPhoto` validates the path belongs to the property (no writing arbitrary storage paths into the column).
-- [ ] Fallback semantics: no explicit hero → identical to today's behavior; dangling path → newest photo, never a broken image.
-- [ ] Deleting the hero clears the column in the same action; delete copy is truthful in both modes.
-- [ ] `recordRevision` on set and clear.
-- [ ] Controls follow house restraint (Title Case, ≥40px, no candy pills); reversible via "Use Newest Photo".
-- [ ] Live walk on prod: set Loon-A-See's hero to the photo Dad prefers, confirm listing + detail agree, upload-doesn't-displace confirmed.
+- [x] Writes go through `canManageProperty()` **and** land inside the existing DB column guard; non-admin members and guests can't set a hero from any path (verified in review; negatives inspection-only, mechanisms unchanged).
+- [x] `setHeroPhoto` validates the path belongs to the property (no writing arbitrary storage paths into the column).
+- [x] Fallback semantics: no explicit hero → identical to today's behavior; dangling path → newest photo, never a broken image (plus the listing-card hardening the build added).
+- [x] Deleting the hero clears the column in the same action (DB-proven on the walk); delete copy is truthful in both modes.
+- [x] `recordRevision` on set and clear — 4 walk revisions, each with correct before/after.
+- [x] Controls follow house restraint (Title Case, ≥40px via `min-h-10`, no candy pills); reversible via "Use Newest Photo".
+- [x] Live walk on prod (2026-08-01): set/clear/delete-the-hero/upload-no-displace all pass, listing + detail agree, prod restored to pre-walk state — the standing hero choice is left for Dad to make.
