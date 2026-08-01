@@ -34,6 +34,7 @@ export async function loadPropertyCards(opts?: {
 
   const propertyIds = properties.map((p) => p.id);
   const fallbacks = new Map<string, string>();
+  const livePaths = new Set<string>();
 
   if (propertyIds.length > 0) {
     const { data: photos } = await supabase
@@ -42,6 +43,7 @@ export async function loadPropertyCards(opts?: {
       .in("property_id", propertyIds)
       .order("created_at", { ascending: false });
     for (const photo of photos ?? []) {
+      livePaths.add(photo.storage_path);
       if (photo.property_id && !fallbacks.has(photo.property_id)) {
         fallbacks.set(photo.property_id, photo.storage_path);
       }
@@ -50,7 +52,14 @@ export async function loadPropertyCards(opts?: {
 
   const pathsToSign: { id: string; storagePath: string }[] = [];
   for (const p of properties) {
-    const path = p.hero_image_path ?? fallbacks.get(p.id) ?? null;
+    // Honor an explicit hero only while it still points at a live photo; a
+    // dangling path falls back to the newest one rather than signing a URL
+    // for an object that no longer exists (PRD 35).
+    const hero =
+      p.hero_image_path && livePaths.has(p.hero_image_path)
+        ? p.hero_image_path
+        : null;
+    const path = hero ?? fallbacks.get(p.id) ?? null;
     if (path) pathsToSign.push({ id: p.id, storagePath: path });
   }
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { canManageProperty } from "@/lib/property-auth";
 import {
   PHOTOS_BUCKET,
   isValidPhotoStoragePath,
@@ -217,6 +218,22 @@ export async function deletePhoto(
       storagePath: photo.storage_path,
       error: storageErr.message,
     });
+  }
+
+  // If this photo was a property's chosen hero (PRD 35), clear the pointer in
+  // the same action rather than leaving it dangling. The column is
+  // property-admin-only (PRD 27 trigger), so a plain uploader deleting their
+  // own hero photo can't do this write — the read-side fallback (explicit path
+  // → newest photo) covers that case and the racy ones.
+  if (photo.property_id) {
+    const { ok: canManage } = await canManageProperty(photo.property_id);
+    if (canManage) {
+      await supabase
+        .from("properties")
+        .update({ hero_image_path: null })
+        .eq("id", photo.property_id)
+        .eq("hero_image_path", photo.storage_path);
+    }
   }
 
   revalidatePath("/family");
