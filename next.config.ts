@@ -39,13 +39,18 @@ const csp = [
   // anti-flash snippet). 'unsafe-eval' is dev-only (React error overlay).
   // Tightening script-src to nonces is the recorded follow-up for the
   // enforce phase — see PRD 28 Implementation notes.
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://accounts.google.com`,
+  // apis.google.com serves gapi + the Picker library (PRD 38).
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""} https://accounts.google.com https://apis.google.com`,
   // Next/React set inline style attributes; no external stylesheets.
   `style-src 'self' 'unsafe-inline'`,
   `img-src 'self' blob: data: https://${supabaseHost} https://*.googleusercontent.com`,
-  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://accounts.google.com https://photospicker.googleapis.com https://*.googleusercontent.com`,
+  // www.googleapis.com is the Drive export the Google Doc door reads (PRD 38);
+  // apis.google.com is the Picker's own XHR back to Google.
+  `connect-src 'self' https://${supabaseHost} wss://${supabaseHost} https://accounts.google.com https://apis.google.com https://www.googleapis.com https://photospicker.googleapis.com https://*.googleusercontent.com`,
   `font-src 'self'`,
-  `frame-src https://accounts.google.com`,
+  // The Google Picker renders inside an iframe served from docs.google.com,
+  // with apis.google.com hosting the shim that talks to it (PRD 38).
+  `frame-src https://accounts.google.com https://docs.google.com https://apis.google.com`,
   `object-src 'none'`,
   `base-uri 'self'`,
   // Chrome checks form-action against the whole redirect chain of a form
