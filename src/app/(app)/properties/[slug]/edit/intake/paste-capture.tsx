@@ -27,16 +27,25 @@ export function PasteCapture({
   property,
   busy,
   error,
+  /**
+   * Text the box starts with. Set when the Google Doc door (PRD 38) had to hand
+   * the member back here: we already have their document, so the fallback is
+   * this screen with the text in it, not this screen empty. The over-cap case
+   * is the one that matters most, since the box's own "try it in two or three
+   * parts" hint is only useful next to the thing that needs splitting.
+   */
+  initialText,
   onSubmit,
   onCancel,
 }: {
   property: IntakeProperty;
   busy: boolean;
   error: string | null;
+  initialText?: string;
   onSubmit: (text: string) => void;
   onCancel: () => void;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [pulledFrom, setPulledFrom] = useState<string | null>(null);
   const boxRef = useRef<HTMLTextAreaElement | null>(null);
 
