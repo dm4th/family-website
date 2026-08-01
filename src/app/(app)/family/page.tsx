@@ -2,7 +2,9 @@ import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
 import { resolveAvatarUrls } from "@/lib/avatars";
+import { resolveViewer } from "@/lib/guest";
 import { displayName } from "@/lib/display-name";
+import { isInMemoriam, lifespan, type TreePerson } from "@/lib/family-tree";
 import {
   generationLabel,
   GENERATION_UNSET_LABEL,
@@ -24,6 +26,7 @@ type DirectoryProfile = {
 
 export default async function FamilyDirectoryPage() {
   const supabase = await createClient();
+  const viewer = await resolveViewer();
   const { data: profiles, error } = await supabase
     .from("profiles")
     .select(
@@ -49,6 +52,44 @@ export default async function FamilyDirectoryPage() {
   );
 
   const grouped = groupByGeneration(list);
+
+  // Family recorded in the tree who have no login — ancestors, in-laws, kids.
+  // They belong in the directory too (Dan, 2026-08-01): Bibi and Drew should be
+  // findable next to their descendants, not only by traversing the tree. Their
+  // pages live under /family/tree/, where anyone can add dates, a bio, or a
+  // story. Members only: the tree is family-scoped and its pages 404 for
+  // guests, so a guest directory shows just the portal members they can reach.
+  const treeOnly: TreeOnlyPerson[] = [];
+  if (viewer && !viewer.isGuest) {
+    const { data: people } = await supabase
+      .from("people")
+      .select(
+        "id, display_name, family_branch, birth_date, birth_circa, death_date, death_circa",
+      )
+      .is("profile_id", null)
+      .order("display_name", { ascending: true });
+    for (const p of people ?? []) {
+      const tp: TreePerson = {
+        id: p.id as string,
+        displayName: p.display_name as string,
+        givenName: null,
+        familyName: null,
+        birthDate: (p.birth_date as string | null) ?? null,
+        birthCirca: (p.birth_circa as string | null) ?? null,
+        deathDate: (p.death_date as string | null) ?? null,
+        deathCirca: (p.death_circa as string | null) ?? null,
+        familyBranch: (p.family_branch as string | null) ?? null,
+        profileId: null,
+      };
+      treeOnly.push({
+        id: tp.id,
+        name: tp.displayName,
+        lifespan: lifespan(tp),
+        familyBranch: tp.familyBranch,
+        memoriam: isInMemoriam(tp),
+      });
+    }
+  }
 
   return (
     <div className="flex flex-col gap-12">
@@ -110,11 +151,71 @@ export default async function FamilyDirectoryPage() {
               </ul>
             </section>
           ))}
+
+          {treeOnly.length > 0 && (
+            <section className="flex flex-col gap-6">
+              <SectionRule ornament className="-mt-2" />
+              <header className="flex flex-col gap-1.5">
+                <div className="flex items-baseline justify-between gap-4">
+                  <h2 className="font-display text-2xl leading-tight text-foreground sm:text-[1.75rem]">
+                    In the Family Tree
+                  </h2>
+                  <span className="eyebrow text-foreground-subtle">
+                    {treeOnly.length}{" "}
+                    {treeOnly.length === 1 ? "Person" : "People"}
+                  </span>
+                </div>
+                <p className="text-sm text-foreground-muted">
+                  Family recorded in the tree who aren&apos;t signed into the
+                  portal. Open anyone&apos;s page to add dates, a bio, or their
+                  story.
+                </p>
+              </header>
+              <ul className="grid gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                {treeOnly.map((p) => (
+                  <li key={p.id}>
+                    <Link
+                      href={`/family/tree/${p.id}`}
+                      className="group flex items-baseline gap-2 rounded-md py-1.5 transition-colors hover:bg-surface/60"
+                    >
+                      {p.memoriam && (
+                        <span
+                          aria-label="In memoriam"
+                          title="In memoriam"
+                          className="text-foreground-muted"
+                        >
+                          &dagger;
+                        </span>
+                      )}
+                      <span className="min-w-0">
+                        <span className="font-display text-base leading-tight text-foreground transition-colors group-hover:text-accent-family">
+                          {p.name}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-foreground-subtle">
+                          {[p.lifespan, p.familyBranch]
+                            .filter(Boolean)
+                            .join(" · ") || "In the tree"}
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+type TreeOnlyPerson = {
+  id: string;
+  name: string;
+  lifespan: string;
+  familyBranch: string | null;
+  memoriam: boolean;
+};
 
 function groupByGeneration(profiles: DirectoryProfile[]) {
   const buckets = new Map<number | null, DirectoryProfile[]>();
