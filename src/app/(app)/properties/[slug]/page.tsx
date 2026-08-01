@@ -515,14 +515,20 @@ export default async function PropertyDetailPage({
  * instead, because seventeen rows want columns.
  */
 function ContactLine({ contact }: { contact: ContactRow }) {
+  // A name that just repeats the label ("Fire Department / Fire Department")
+  // is noise, not information — show it once.
+  const name =
+    contact.name &&
+    contact.name.trim().toLowerCase() !== contact.label.trim().toLowerCase()
+      ? contact.name
+      : null;
   return (
     <li className="flex flex-col gap-1.5 px-5 py-4 sm:px-6">
-      <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow className="text-foreground-subtle">{contact.label}</Eyebrow>
-        {contact.name && (
-          <span className="text-sm text-foreground">{contact.name}</span>
-        )}
-      </div>
+      {/* Stacked and left-aligned: floating the name to the right edge made
+          the panel read as off-center once labels started wrapping to two
+          lines (Dan, 2026-08-01). */}
+      <Eyebrow className="text-foreground-subtle">{contact.label}</Eyebrow>
+      {name && <span className="text-sm text-foreground">{name}</span>}
       {(contact.phone || contact.email) && (
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           {contact.phone && (

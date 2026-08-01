@@ -116,8 +116,8 @@ function DocumentRowItem({ doc }: { doc: IntakeDocumentRow }) {
             title="Remove this document?"
             description={
               doc.objectMissing
-                ? "This clears the leftover record. The photo itself is already gone."
-                : "The photo is deleted for everyone, not just you, and can't be brought back. Anything already saved from it stays where it is."
+                ? "This clears the leftover record. The document itself is already gone."
+                : "The document is deleted for everyone, not just you, and can't be brought back. Anything already saved from it stays where it is."
             }
             confirmLabel="Remove Document"
             cancelLabel="Keep It"
