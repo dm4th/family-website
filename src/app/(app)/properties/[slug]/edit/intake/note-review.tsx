@@ -20,13 +20,12 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { FormStatus } from "@/components/form-status";
 import { ReviewField, ReviewSection } from "@/components/intake/review-shell";
+// Shared with the paste review (PRD 37); it was this file's function first.
+import { NarrativeForm } from "@/components/intake/narrative-form";
 import {
-  PropertyCarryFields,
   useNotifyOnSave,
-  type CarryableField,
   type IntakeProperty,
 } from "@/components/intake/property-carry-fields";
 import type {
@@ -38,10 +37,8 @@ import {
   addPropertyContact,
   type ContactFormState,
 } from "../../contacts/actions";
-import { updateProperty, type PropertyFormState } from "../../actions";
 
 const contactInitial: ContactFormState = { status: "idle" };
-const propertyInitial: PropertyFormState = { status: "idle" };
 
 export function NoteReview({
   property,
@@ -209,116 +206,6 @@ function TranscriptionPanel({
             : "We couldn't read any text on this photo.")}
       </pre>
     </section>
-  );
-}
-
-/**
- * One property narrative field (`guidelines` or `how_to`) as a destination.
- *
- * Where the property already has text in that field, the box opens with the
- * existing text *plus* the new lines appended, rather than offering a hidden
- * "append or replace" mode. What the member sees in the box is exactly what
- * will be saved, which is the only version of this that's safe to press Save on
- * without reading the small print.
- */
-function NarrativeForm({
-  property,
-  canManage,
-  field,
-  sectionLabel,
-  fieldLabel,
-  proposed,
-  blurb,
-  onSaved,
-  busy,
-}: {
-  property: IntakeProperty;
-  canManage: boolean;
-  field: "guidelines" | "how_to";
-  sectionLabel: string;
-  fieldLabel: string;
-  proposed: ExtractedField;
-  blurb: string;
-  onSaved: () => void;
-  busy: boolean;
-}) {
-  const action = updateProperty.bind(null, property.id);
-  const [state, formAction, isPending] = useActionState(action, propertyInitial);
-  const [dismissed, setDismissed] = useState(false);
-  useNotifyOnSave(state.status === "saved", onSaved);
-
-  // Read at render, so a sibling form's save (which refreshes the property
-  // upstream) is reflected here rather than frozen at page load.
-  const existing = property[field];
-
-  // Nothing to offer if the note had nothing for this field.
-  if (!proposed.value || dismissed) return null;
-
-  if (state.status === "saved") {
-    return (
-      <ReviewSection label={sectionLabel}>
-        <p className="text-base text-foreground">
-          Saved to {property.name}.
-        </p>
-      </ReviewSection>
-    );
-  }
-
-  const initial = existing
-    ? `${existing.trimEnd()}\n\n${proposed.value}`
-    : proposed.value;
-  const inputId = `intake-${field}`;
-
-  return (
-    <ReviewSection label={sectionLabel}>
-      <p className="text-base text-foreground-muted">{blurb}</p>
-      {existing ? (
-        <p className="text-sm text-foreground-subtle">
-          There are already notes here, so we&rsquo;ve put the new lines
-          underneath the ones you had. Nothing is lost. Edit the box however you
-          like before saving.
-        </p>
-      ) : null}
-      <form action={formAction} className="flex flex-col gap-4">
-        <PropertyCarryFields
-          property={property}
-          canManage={canManage}
-          omit={[field as CarryableField]}
-        />
-
-        <ReviewField
-          label={fieldLabel}
-          htmlFor={inputId}
-          confidence={proposed.confidence}
-        >
-          <Textarea
-            id={inputId}
-            name={field}
-            rows={8}
-            disabled={isPending}
-            defaultValue={initial}
-          />
-        </ReviewField>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setDismissed(true)}
-          >
-            Not This One
-          </Button>
-          <div className="flex items-center gap-3">
-            <FormStatus tone="error">
-              {state.status === "error" ? state.message : null}
-            </FormStatus>
-            <Button type="submit" variant="outline" disabled={isPending || busy}>
-              {isPending ? "Saving…" : `Save ${fieldLabel}`}
-            </Button>
-          </div>
-        </div>
-      </form>
-    </ReviewSection>
   );
 }
 

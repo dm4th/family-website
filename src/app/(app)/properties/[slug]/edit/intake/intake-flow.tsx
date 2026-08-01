@@ -29,16 +29,20 @@ import {
   type DictationExtraction,
   type DocumentIntent,
   type NoteExtraction,
+  type PasteExtraction,
 } from "@/lib/intake/schema";
 import {
   extractDictation,
   extractIntake,
+  extractPaste,
   refreshIntakeProperty,
 } from "./actions";
 import { CalendarReview } from "./calendar-review";
 import { ContactReview } from "./contact-review";
 import { DictationCapture } from "./dictation-capture";
 import { NoteReview } from "./note-review";
+import { PasteCapture } from "./paste-capture";
+import { PasteReview } from "./paste-review";
 
 export type { IntakeProperty };
 
@@ -100,19 +104,30 @@ const DICTATION_REVIEW = {
     "We've tidied up what you said. Read it over, then take the parts worth keeping. Nothing is saved until you press Save.",
 };
 
+/** The paste door's framing at review time (PRD 37). Same reasoning as above. */
+const PASTE_REVIEW = {
+  reviewTitle: "Here's what was in it",
+  reviewDescription:
+    "We've sorted the document into the places it could go. Check each part, then save the ones you want. Nothing is saved until you press Save.",
+};
+
 /**
  * How many separate things this review is offering to save. Counts what the
  * member can actually act on, so a note with nothing for "how things work"
  * doesn't inflate the denominator with a section that was never rendered.
  */
-function countOffered(extraction: NoteExtraction | DictationExtraction): number {
+function countOffered(
+  extraction: NoteExtraction | DictationExtraction | PasteExtraction,
+): number {
   return (
     (extraction.suggestedGuidelines.value ? 1 : 0) +
     (extraction.suggestedHowTo.value ? 1 : 0) +
     extraction.suggestedContacts.length +
     ("suggestedReminders" in extraction
       ? extraction.suggestedReminders.length
-      : 0)
+      : 0) +
+    // A pasted document's Wi-Fi card is one more thing to look through.
+    ("wifi" in extraction && extraction.wifi ? 1 : 0)
   );
 }
 
@@ -120,12 +135,21 @@ type Phase =
   | { name: "idle" }
   /** The dictation capture screen (PRD 34). No upload; the input is speech. */
   | { name: "dictate" }
+  /** The paste capture screen (PRD 37). No upload; the input is a document. */
+  | { name: "paste" }
   | { name: "working"; message: string }
   | { name: "error"; message: string }
   | {
       name: "review";
       intent: "dictation";
       extraction: DictationExtraction;
+      sourceUrl: string | null;
+      storagePath: null;
+    }
+  | {
+      name: "review";
+      intent: "paste";
+      extraction: PasteExtraction;
       sourceUrl: string | null;
       storagePath: null;
     }
@@ -165,8 +189,8 @@ export function IntakeFlow({
 }: {
   property: IntakeProperty;
   canManage: boolean;
-  /** "voice" when the member arrived via the edit page's Add by Voice door. */
-  initialMode?: "voice";
+  /** Set when the member arrived through one of the edit page's named doors. */
+  initialMode?: "voice" | "paste";
 }) {
   // Held in state, not read straight from the prop, because a review session can
   // save more than once and the forms below carry the property's other fields
@@ -175,7 +199,11 @@ export function IntakeFlow({
   /** True while the property is being re-read after a save. */
   const [refreshing, setRefreshing] = useState(false);
   const [phase, setPhase] = useState<Phase>(
-    initialMode === "voice" ? { name: "dictate" } : { name: "idle" },
+    initialMode === "voice"
+      ? { name: "dictate" }
+      : initialMode === "paste"
+        ? { name: "paste" }
+        : { name: "idle" },
   );
   /**
    * The capture screen's own busy flag and error, deliberately not folded into
@@ -185,6 +213,13 @@ export function IntakeFlow({
    */
   const [tidying, setTidying] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
+  /**
+   * The paste screen's own busy flag and error, kept out of `phase` for exactly
+   * the reason dictation's are: a failed sort must not unmount the textarea and
+   * take a document the member pasted (and may no longer have) with it.
+   */
+  const [sorting, setSorting] = useState(false);
+  const [pasteError, setPasteError] = useState<string | null>(null);
   /**
    * How many of this review's destinations have been saved (PRD 34). Counted
    * here rather than inside each review form because a session's updates are
@@ -352,6 +387,36 @@ export function IntakeFlow({
     }
   }
 
+  /** Send the pasted document off to be sorted, then hand it to its review. */
+  async function handlePaste(text: string) {
+    setSorting(true);
+    setPasteError(null);
+    try {
+      const result = await extractPaste(property.id, text);
+      if (result.status === "error") {
+        setPasteError(result.message);
+        return;
+      }
+      setCross({ name: "idle" });
+      setSavedCount(0);
+      setPhase({
+        name: "review",
+        intent: "paste",
+        extraction: result.extraction,
+        sourceUrl: result.sourceUrl,
+        storagePath: null,
+      });
+    } catch (error) {
+      setPasteError(
+        error instanceof Error
+          ? `Something went wrong: ${error.message}`
+          : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setSorting(false);
+    }
+  }
+
   /**
    * Called by any review form that just wrote to the property. Pulls the row
    * back so the *other* forms carry what's actually stored rather than what was
@@ -401,11 +466,28 @@ export function IntakeFlow({
     );
   }
 
+  if (phase.name === "paste") {
+    return (
+      <PasteCapture
+        property={property}
+        busy={sorting}
+        error={pasteError}
+        onSubmit={(text) => void handlePaste(text)}
+        onCancel={() => {
+          setPasteError(null);
+          setPhase({ name: "idle" });
+        }}
+      />
+    );
+  }
+
   if (phase.name === "review") {
     const reviewKind =
       phase.intent === "dictation"
         ? DICTATION_REVIEW
-        : (KINDS.find((k) => k.intent === phase.intent) ?? KINDS[0]);
+        : phase.intent === "paste"
+          ? PASTE_REVIEW
+          : (KINDS.find((k) => k.intent === phase.intent) ?? KINDS[0]);
     return (
       <ReviewShell
         title={reviewKind.reviewTitle}
@@ -417,7 +499,42 @@ export function IntakeFlow({
         }
         sourceUrl={phase.sourceUrl}
       >
-        {phase.intent === "dictation" ? (
+        {phase.intent === "paste" ? (
+          <>
+            <SaveProgress
+              saved={savedCount}
+              total={countOffered(phase.extraction)}
+            />
+            <PasteReview
+              property={property}
+              extraction={phase.extraction}
+              canManage={canManage}
+              onStartOver={() => setPhase({ name: "paste" })}
+              onPropertySaved={handlePropertySaved}
+              // The contact checklist saves many at once, so it reports how
+              // many rather than firing once per row.
+              onItemSaved={(count) => setSavedCount((n) => n + (count ?? 1))}
+              propertyBusy={refreshing}
+            />
+            {/*
+              Reminders come from the same extraction as everything else, like
+              dictation and unlike the photo intents: there is no document in
+              storage to re-read, and "the dock comes out by 15 October" is one
+              line inside the paragraph we already paid to read.
+            */}
+            {phase.extraction.suggestedReminders.length > 0 && (
+              <CalendarReview
+                property={property}
+                extraction={{
+                  reminders: phase.extraction.suggestedReminders,
+                  rawText: "",
+                }}
+                onStartOver={() => setPhase({ name: "paste" })}
+                onItemSaved={() => setSavedCount((n) => n + 1)}
+              />
+            )}
+          </>
+        ) : phase.intent === "dictation" ? (
           <>
             <SaveProgress
               saved={savedCount}
@@ -528,6 +645,36 @@ export function IntakeFlow({
             onFile={(file) => void handleFile(file, k.intent)}
           />
         ))}
+
+        {/*
+          The paste door (PRD 37). Sits with the others rather than above them:
+          it is the widest of the four in what it can take, but "I have a
+          document already" is one answer to "what have you got?", not a
+          different question.
+        */}
+        <div className="flex flex-col gap-3 rounded-md border border-dashed border-accent-bronze/40 bg-surface/60 p-5">
+          <h3 className="font-display text-lg leading-tight text-foreground">
+            A document you already have
+          </h3>
+          <p className="flex-1 text-base text-foreground-muted">
+            A house manual, an email, notes typed up years ago, or the notes
+            already on this property&rsquo;s page. Paste it in and we&rsquo;ll
+            sort out the contacts, the Wi-Fi, and the rest.
+          </p>
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setPasteError(null);
+                setPhase({ name: "paste" });
+              }}
+            >
+              Paste Text
+            </Button>
+          </div>
+        </div>
 
         {/*
           The voice door also lives here, not only on the edit page, so a member

@@ -31,15 +31,21 @@ export function AddDetailsBand({ slug }: { slug: string }) {
             Rather not type it?
           </h2>
           <p className="text-base text-foreground-muted">
-            Photograph a bill or a handwritten note, or just say what you want to
-            add. We&rsquo;ll read it and walk you through what we found, so you
-            only have to check it. Nothing is saved until you press Save.
+            Photograph a bill or a handwritten note, paste in a document you
+            already have, or just say what you want to add. We&rsquo;ll read it
+            and walk you through what we found, so you only have to check it.
+            Nothing is saved until you press Save.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button asChild>
             <Link href={`/properties/${slug}/edit/intake`}>
               Add from a Photo
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/properties/${slug}/edit/intake?mode=paste`}>
+              Paste Text
             </Link>
           </Button>
           <Button asChild variant="outline">

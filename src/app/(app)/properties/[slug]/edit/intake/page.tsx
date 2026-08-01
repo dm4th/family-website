@@ -86,7 +86,9 @@ export default async function PropertyIntakePage({
               max_guests: property.max_guests ?? null,
             }}
             canManage={canManage}
-            initialMode={mode === "voice" ? "voice" : undefined}
+            initialMode={
+              mode === "voice" ? "voice" : mode === "paste" ? "paste" : undefined
+            }
           />
         ) : (
           <div className="flex flex-col gap-3">

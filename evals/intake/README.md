@@ -97,3 +97,44 @@ Sixteen of the twenty-two name nobody reachable and thirteen name no day, on
 purpose: invention is only measurable on inputs whose correct answer is
 "nothing". Results in
 [results-dictation-2026-07-31.md](results-dictation-2026-07-31.md).
+
+## The paste eval (PRD 37)
+
+```bash
+npx tsx evals/intake/paste-parser-check.mts            # free, no API key
+npx tsx --env-file=.env.local evals/intake/eval-paste.mts   # ~$0.17 a run
+```
+
+Text again, like dictation, but a different risk. A pasted house manual is the
+first input that routinely contains **things that must not be published**: the
+family's real document has three plaintext utility logins in it, and the page it
+would be saved onto is readable by property guests.
+
+So this eval has a **gated metric**: every secret planted in a fixture must be
+absent from every proposal, in every run. One survivor exits non-zero. The other
+outcomes (fabrication, restraint, preservation, routing) are scored the same way
+as the other evals; contact `kind` accuracy is recorded but never gated, because
+a plumber filed under the wrong panel is a one-click fix rather than a wrong
+fact.
+
+Sixteen samples in `paste-samples.ts`, weighted toward restraint: several name
+no date, no network, or nobody reachable. **Every credential, phone number,
+email, and network key in them is invented.** The lead fixture matches the
+*shape* of the family's real document — section order, `●`/`○` bullets, logins
+sharing a line with account numbers — and none of its content. The real document
+is not in this repo and must not be.
+
+`paste-parser-check.mts` is the other half, and it needs no API key: it feeds
+`parsePasteExtraction` hand-written hostile responses (a password smuggled into
+a tidied paragraph, a credential hidden in an advisory hint, a date resolved
+from "they bill in April") and asserts the parser removes them whatever the
+model did. Run it on every change to the redactor; run the full eval before
+changing the paste prompt or the model.
+
+Both caught real bugs on their first run. The parser check found the Wi-Fi
+exception failing on "Wi-Fi Password:" (the hyphen kept the qualifier out of the
+match) and "alarm code" missing from the credential labels. The eval found an
+all-lowercase username surviving into a tidied document, and "they bill in
+April" becoming 1 April — which is why a paste reminder must now quote the words
+it read the day from. Results in
+[results-paste-2026-08-01.md](results-paste-2026-08-01.md).
