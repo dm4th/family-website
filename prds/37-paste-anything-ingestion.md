@@ -1,7 +1,7 @@
 # 37 — Paste Anything (Structured Ingestion of Existing Documents)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 32/34 (intake pipeline, review idiom, dictation text path), 33 (retention), **36 (the destinations — hard dependency)**
-**Status**: 🚧 built (2026-08-01) — awaiting review + the live Dad-doc run on prod
+**Status**: ✅ shipped (PR #45 merged `fc5907f` 2026-08-01; reviewer ran the real Dad-doc walk on prod same day — the run this PRD exists for. See Verification)
 **Parallel-safe with**: 35. Touches the intake surface + `src/lib/intake/*`.
 
 ---
@@ -177,10 +177,43 @@ Two refinements came out of measurement, not design:
 - ✅ **Eval, 16 samples × 2 runs: 0 leaked, 0 fabricated, 0 missed**, 9 misrouted
   (all `kind` and section judgment calls). ~$0.0052/document, 3.4s average.
   Committed as `results-paste-2026-08-01.md`.
-- ⏳ **No live walk yet.** The whole flow has never been exercised against a real
-  session: no browser run, no real save. Everything above is compile-time,
-  parser-level, or model-level.
-- ⏳ The real Dad-doc run on prod is still owed, and is the point of the PRD.
+- ✅ **The real Dad-doc run, on prod (2026-08-01, reviewer).** The walk this PRD
+  was written for, end to end:
+  - **"Use 'How things work here'"** pulled the live 4,382-char blob into the box
+    with the "nothing on the property has changed" announcement; Sort This Out
+    kept the textarea mounted through the ~15s model call.
+  - **The credential advisory named all four**: Conexon (website login *and* PIN,
+    two entries), NH Electric CoOp, Dead River Co propane — each with a redacted
+    hint, none of the secrets anywhere in any proposal (checked the saved
+    narratives at the DB afterwards: no credential strings).
+  - **26 contacts proposed, every phone digit-exact against the source,** all
+    kinds sensible (4 emergency / 4 ground / 18 service), zero fabricated, and
+    correctly *no* 911 row and *no* row for "AWM 1989 Trust" (nothing reachable).
+    The model even cross-referenced ("Ray Mason ... Also landscaper/snow
+    removal"). Unchecked the 3 duplicates of PRD-36's walk contacts; **Save
+    Selected saved 23 in one press as 23 individually gated writes** — 23
+    revision rows, per-row "saved." lines, "Saved 23 contacts to Loon-A-See."
+  - **The Wi-Fi card read the ambiguous line honestly**: "Wi-Fi network and
+    password: bibiseesloons" produced network=the single value, password empty,
+    both marked "Please check" (low confidence), with the replaces-existing
+    disclosure. Dismissed via **Not This One** — only the family knows which
+    value that is; a guessed half-pair would render a wrong open-network QR.
+    Real values remain a Dan/Dad entry, then the phone-scan check.
+  - **The blob cleanup happened in the box, as designed**: the how-to form opened
+    with existing + tidied appended; trimmed to the tidied version only (Water /
+    Generator / Trash sections) and dropped the reviewer's own stale walk-test
+    line ("blue door"); guidelines trimmed to the one real rule (camera
+    etiquette), removing the PRD-34 test lines that had been awaiting manual
+    cleanup. **`how_to`: 4,382 → 724 chars; `guidelines`: the boilerplate + test
+    lines → 178 chars.** Both saves landed with revisions; progress ended
+    "25 of 29 updates saved" (the unchecked duplicates and dismissed Wi-Fi are
+    the difference, correctly).
+  - **Retention**: the session appeared as "Pasted document · 4 KB"; Open served
+    the verbatim source (credentials intact — that's provenance); deleted through
+    the panel; bucket + `intake_documents` verified back at **zero** at the DB.
+  - The property page after: fact rail "Contacts: 26 on file", Emergencies panel
+    with five entries under 911, a Living Here a human can read, one real house
+    rule, 19-row Service Directory.
 
 ### Follow-ups
 
@@ -188,4 +221,13 @@ Two refinements came out of measurement, not design:
   Wi-Fi. Deliberately left (the PRD scopes it out); worth a small pass now that
   the destinations and the vocabulary exist.
 - `MAX_SUGGESTED_REMINDERS` is 4 for paste as well as for a bill. A seasonal
-  calendar page listing six dates will lose two. Raise it if the live run hits it.
+  calendar page listing six dates will lose two. Raise it if a real run hits it
+  (the Dad-doc run proposed zero — the document names no day, correctly).
+- **Copy nit from the walk**: the retention panel's confirm dialog says "The
+  photo is deleted for everyone" even for a pasted document or spoken note —
+  same source-aware-copy family as the PRD-34 nits ("Open the photo you
+  uploaded"). One small pass would fix all of them.
+- **Wi-Fi is still test data** ("Test WiFi"/"atest"): the doc's single ambiguous
+  value can't fill a trustworthy pair, so the real network + passphrase are a
+  30-second Dan/Dad edit, followed by the real-phone QR scan — the last open
+  item of the PRD 36/37 arc.
