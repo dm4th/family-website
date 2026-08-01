@@ -121,6 +121,8 @@ Dan's read of the shipped version: the two text buttons under every tile were aw
 - **One lightbox, not two.** The Legacy archive already had a good accessible viewer (focus trap, Escape, arrow keys, backdrop click). It was extracted to `src/components/photo-lightbox.tsx` with `renderCaption` / `renderActions` slots and both galleries now use it. Markup is unchanged, so the archive should look identical.
 - The hero frame at the top keeps its existing hover overlay controls and is **not** click-to-view. Worth revisiting for consistency, but out of scope for this pass.
 
+**Reviewer walk of the revision (PR #44 merged `c7c9218`, 2026-08-01, prod):** tile click opened the viewer full-screen with "Make This the Hero" as the primary action beneath the photo; clicking it fired the toast, closed the viewer, and set the pointer (revision recorded); "Use Newest Photo" on the hero frame cleared it — prod left at pre-walk state (pointer null). Corner Remove pills confirmed always-visible on tiles. Archive spot-check: album lightbox renders through the shared component with the date caption and no actions row, navigation + close intact. One observation, pre-existing and untouched by this PR: in dark theme the lightbox backdrop is ivory (`bg-foreground/90` inverts with the theme), so the viewer reads as a light sheet over a dark page — same as the archive has always been; fine, just noting it is theme-inverted rather than photo-viewer black.
+
 ## Reviewer sign-off (I check these)
 
 - [x] Writes go through `canManageProperty()` **and** land inside the existing DB column guard; non-admin members and guests can't set a hero from any path (verified in review; negatives inspection-only, mechanisms unchanged).
