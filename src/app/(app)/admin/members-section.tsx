@@ -24,7 +24,25 @@ export type MemberRow = {
   family_branch: string | null;
   generation: number | null;
   deactivated_at: string | null;
+  /** Null when they've never been through (or past) the welcome flow. */
+  onboarded_at?: string | null;
+  /** True when a `people` row is linked to them (PRD 39). */
+  in_tree?: boolean;
 };
+
+/**
+ * What's still unfinished about a member's own setup (PRD 39). Surfaced on the
+ * roster because the failure mode is invisible otherwise: the member we lost
+ * looked like an ordinary row with a blank name for weeks. Guests are exempt —
+ * they have no tree to be in.
+ */
+function onboardingGap(row: MemberRow): string | null {
+  if (row.role === "guest") return null;
+  if (!row.full_name?.trim() || !row.family_branch) return "No name yet";
+  if (row.generation == null) return "No generation";
+  if (row.in_tree === false) return "Not in the tree";
+  return null;
+}
 
 export function MembersSection({
   members,
@@ -62,6 +80,7 @@ function MemberRowEditor({
   const roleAction = changeMemberRole.bind(null, row.id);
   const [state, formAction, isPending] = useActionState(roleAction, initial);
   const name = row.full_name ?? row.email;
+  const gap = onboardingGap(row);
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -73,6 +92,11 @@ function MemberRowEditor({
           <span className="text-xs text-foreground-subtle">{row.email}</span>
           {row.deactivated_at && (
             <Badge variant="outline">Deactivated</Badge>
+          )}
+          {!row.deactivated_at && gap && (
+            <Badge variant="outline" title="This member hasn't finished setting up">
+              {gap}
+            </Badge>
           )}
         </div>
         <div className="mt-1 text-xs text-foreground-subtle">

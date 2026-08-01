@@ -24,19 +24,27 @@ export function GenerationSelect({
   id = "generation",
   name = "generation",
   defaultValue,
+  value,
+  onChange,
   required,
   className,
 }: {
   id?: string;
   name?: string;
   defaultValue?: number | string | null;
+  /**
+   * Controlled value. Supply with `onChange` when something outside the select
+   * needs to move it — the welcome flow's tree step derives a suggestion from
+   * the parents you pick (PRD 39). Omit for the original uncontrolled form.
+   */
+  value?: number | string | null;
+  onChange?: (value: string) => void;
   required?: boolean;
   className?: string;
 }) {
-  const current =
-    defaultValue === null || defaultValue === undefined
-      ? ""
-      : String(defaultValue).trim();
+  const controlled = value !== undefined;
+  const raw = controlled ? value : defaultValue;
+  const current = raw === null || raw === undefined ? "" : String(raw).trim();
   const isKnown = (GENERATIONS as readonly number[])
     .map(String)
     .includes(current);
@@ -46,7 +54,9 @@ export function GenerationSelect({
       id={id}
       name={name}
       required={required}
-      defaultValue={current}
+      {...(controlled
+        ? { value: current, onChange: (e) => onChange?.(e.target.value) }
+        : { defaultValue: current })}
       className={cn(
         // Mirror the Input primitive, but taller for a comfortable tap target.
         "h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30",

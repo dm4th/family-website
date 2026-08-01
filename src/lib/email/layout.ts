@@ -1,6 +1,6 @@
 /**
  * Email layout primitives — a single restrained, editorial shell shared by all
- * transactional emails (booking notifications today; invitations later).
+ * transactional emails (bookings, feedback, invitations).
  *
  * Email HTML is its own dialect: no external stylesheets, inline styles only,
  * table-based structure for legacy clients. We keep it deliberately simple and
@@ -25,6 +25,18 @@ export type EmailContent = {
   details?: EmailDetail[];
   /** Optional primary action button. */
   cta?: EmailCta;
+  /**
+   * Which emotional zone the email belongs to, matching the site's modes.
+   * Tints the CTA button only. Defaults to "operations" (forest) — bookings
+   * were the first sender and stay exactly as they were.
+   */
+  mode?: EmailMode;
+  /**
+   * Footer line. Defaults to the booking-oriented sentence the first emails
+   * shipped with; senders whose email has nothing to do with the calendar
+   * should pass their own.
+   */
+  footer?: string;
 };
 
 const INK = "#23201c";
@@ -33,6 +45,20 @@ const IVORY = "#f7f4ee";
 const CARD = "#fffdf8";
 const RULE = "#e7e1d6";
 const FOREST = "#2f4a3a";
+const BURGUNDY = "#7c322f";
+
+/** The site's three emotional zones, as far as email is concerned. */
+export type EmailMode = "family" | "operations";
+
+/** CTA fill per mode — burgundy for family matters, forest for logistics. */
+const MODE_ACCENT: Record<EmailMode, string> = {
+  family: BURGUNDY,
+  operations: FOREST,
+};
+
+/** The footer the booking + feedback emails shipped with. */
+const DEFAULT_FOOTER =
+  "You're receiving this because you're part of the Mathieson family portal. Manage bookings anytime from the family calendar.";
 
 /** Escape a string for safe interpolation into HTML. */
 export function escapeHtml(value: string): string {
@@ -68,8 +94,10 @@ export function renderEmailHtml(content: EmailContent): string {
         .join("")}</table>`
     : "";
 
+  const accent = MODE_ACCENT[content.mode ?? "operations"];
+
   const cta = content.cta
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;"><tr><td style="border-radius:8px;background:${FOREST};"><a href="${escapeHtml(
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 4px;"><tr><td style="border-radius:8px;background:${accent};"><a href="${escapeHtml(
         content.cta.url,
       )}" style="display:inline-block;padding:11px 22px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${escapeHtml(
         content.cta.label,
@@ -100,7 +128,9 @@ ${details}
 ${cta}
 </td></tr>
 <tr><td style="padding:18px 28px 26px;border-top:1px solid ${RULE};">
-<p style="margin:0;font-size:12px;line-height:1.5;color:${MUTED};">You're receiving this because you're part of the Mathieson family portal. Manage bookings anytime from the family calendar.</p>
+<p style="margin:0;font-size:12px;line-height:1.5;color:${MUTED};">${escapeHtml(
+    content.footer ?? DEFAULT_FOOTER,
+  )}</p>
 </td></tr>
 </table>
 </td></tr>
@@ -124,9 +154,6 @@ export function renderEmailText(content: EmailContent): string {
   if (content.cta) {
     lines.push(`${content.cta.label}: ${content.cta.url}`, "");
   }
-  lines.push(
-    "--",
-    "Mathieson family portal. Manage bookings from the family calendar.",
-  );
+  lines.push("--", content.footer ?? DEFAULT_FOOTER);
   return lines.join("\n");
 }

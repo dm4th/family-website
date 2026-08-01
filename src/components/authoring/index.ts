@@ -5,7 +5,7 @@ export { RichTextField } from "./rich-text-field";
 export { ChipListField } from "./chip-list-field";
 export { FuzzyDateField } from "./fuzzy-date-field";
 export type { FuzzyDate } from "./fuzzy-date-field";
-export { PeoplePicker } from "./people-picker";
+export { PeoplePicker, type SelectedPerson } from "./people-picker";
 export { InlineEditable } from "./inline-editable";
 export { CreateFlow } from "./create-flow";
 export type { SaveState } from "./save-state";

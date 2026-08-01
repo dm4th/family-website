@@ -25,10 +25,24 @@ export default async function AdminPage() {
   const { data: members } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, email, role, family_branch, generation, deactivated_at",
+      "id, full_name, email, role, family_branch, generation, deactivated_at, onboarded_at",
     )
     .order("deactivated_at", { ascending: true, nullsFirst: true })
     .order("full_name", { ascending: true });
+
+  // Who has actually made it into the family tree (PRD 39). One small query
+  // over a table of a few dozen rows, joined in memory.
+  const { data: treePeople } = await supabase
+    .from("people")
+    .select("profile_id")
+    .not("profile_id", "is", null);
+  const inTree = new Set(
+    (treePeople ?? []).map((p) => p.profile_id as string),
+  );
+  const memberRows = (members ?? []).map((m) => ({
+    ...m,
+    in_tree: inTree.has(m.id as string),
+  }));
 
   const { data: invitations } = await supabase
     .from("invitations")
@@ -67,7 +81,7 @@ export default async function AdminPage() {
           description="Change roles, deactivate accounts. You can't edit your own role here."
         >
           <MembersSection
-            members={(members ?? []).map((m) => ({
+            members={memberRows.map((m) => ({
               id: m.id,
               full_name: m.full_name,
               email: m.email,
@@ -75,6 +89,8 @@ export default async function AdminPage() {
               family_branch: m.family_branch,
               generation: m.generation,
               deactivated_at: m.deactivated_at,
+              onboarded_at: m.onboarded_at,
+              in_tree: m.in_tree,
             }))}
             currentUserId={user.id}
           />

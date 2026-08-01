@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { searchPeople, type PersonHit } from "./people-actions";
 
-type SelectedPerson = {
+export type SelectedPerson = {
   id: string;
   displayName: string;
   familyBranch?: string | null;
@@ -33,6 +33,8 @@ export function PeoplePicker({
   inputAriaLabel,
   emptyHint,
   id: idProp,
+  max,
+  onSelectionChange,
 }: {
   name: string;
   defaultSelected?: SelectedPerson[];
@@ -40,6 +42,19 @@ export function PeoplePicker({
   inputAriaLabel?: string;
   emptyHint?: string;
   id?: string;
+  /**
+   * Cap on how many people may be selected. Omit for unlimited (the original
+   * behavior). At the cap the search input is hidden — "are you married, to
+   * whom?" wants exactly one answer, and a picker that keeps inviting more is
+   * a picker that will collect more.
+   */
+  max?: number;
+  /**
+   * Notified whenever the selection changes. Emits the whole people, not just
+   * ids, so a caller that re-seeds `defaultSelected` can preserve what the user
+   * already picked instead of replacing it.
+   */
+  onSelectionChange?: (people: SelectedPerson[]) => void;
 }) {
   const reactId = useId();
   const inputId = idProp ?? `people-${reactId}`;
@@ -84,7 +99,10 @@ export function PeoplePicker({
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
+  const atCapacity = max != null && selected.length >= max;
+
   function addPerson(p: PersonHit) {
+    if (atCapacity) return;
     setSelected((prev) =>
       prev.some((s) => s.id === p.id)
         ? prev
@@ -100,11 +118,22 @@ export function PeoplePicker({
     );
     setQuery("");
     setResults([]);
+    setOpen(false);
   }
 
   function removePerson(id: string) {
     setSelected((prev) => prev.filter((p) => p.id !== id));
   }
+
+  // Report the selection out. Effect (not inline in the handlers) so the
+  // callback always sees committed state, including the initial value.
+  const notify = useRef(onSelectionChange);
+  useEffect(() => {
+    notify.current = onSelectionChange;
+  });
+  useEffect(() => {
+    notify.current?.(selected);
+  }, [selected]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
@@ -158,7 +187,9 @@ export function PeoplePicker({
         <p className="text-sm italic text-foreground-subtle">{emptyHint}</p>
       ) : null}
 
-      <div className="relative max-w-[20rem]">
+      <div
+        className={cn("relative max-w-[20rem]", atCapacity && "hidden")}
+      >
         <Input
           id={inputId}
           value={query}

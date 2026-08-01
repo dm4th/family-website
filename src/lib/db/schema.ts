@@ -664,6 +664,14 @@ export type NewRevision = typeof revisions.$inferInsert;
 // ----------------------------------------------------------------------------
 export type InvitationStatus = "pending" | "accepted" | "expired" | "revoked";
 
+/** Who the invitee is to the inviter (PRD 39). Mirrors the DB check constraint. */
+export type InviteRelation =
+  | "parent"
+  | "child"
+  | "sibling"
+  | "spouse"
+  | "other";
+
 export const invitations = pgTable(
   "invitations",
   {
@@ -682,6 +690,11 @@ export const invitations = pgTable(
     grantPropertyId: uuid("grant_property_id").references(() => properties.id, {
       onDelete: "set null",
     }),
+    // Optional kinship captured at invite time (PRD 39): who the invitee is TO
+    // the inviter. A hint that orders the onboarding tree pickers — never an
+    // edge, and always null for guest invites.
+    relationToInviter: text("relation_to_inviter").$type<InviteRelation>(),
+    relationNote: text("relation_note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
