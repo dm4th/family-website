@@ -1,7 +1,7 @@
 # 37 — Paste Anything (Structured Ingestion of Existing Documents)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 32/34 (intake pipeline, review idiom, dictation text path), 33 (retention), **36 (the destinations — hard dependency)**
-**Status**: 🟢 ready (2026-07-31) — **do not start before 36 is merged**; same builder as 36 recommended
+**Status**: 🚧 built (2026-08-01) — awaiting review + the live Dad-doc run on prod
 **Parallel-safe with**: 35. Touches the intake surface + `src/lib/intake/*`.
 
 ---
@@ -95,3 +95,97 @@ No migration expected (`intent` unconstrained, bucket mime-agnostic — confirme
 - [ ] Prompt-injection fencing on the pasted text (it's the most attacker-shaped input intake has accepted yet).
 - [ ] Copy: Title Case buttons, no em-dashes, advisory in sentence case.
 - [ ] Live walk: the real Dad doc run end-to-end on prod, old blob trimmed, source deleted after verification.
+
+---
+
+## Implementation (2026-08-01)
+
+Built directly on top of PRD 36, same session, in the worktree 36 was built in.
+No migration: `intake_documents.intent` is unconstrained and the bucket is
+mime-agnostic, both re-confirmed.
+
+### Key files
+
+| File | What |
+|---|---|
+| `src/lib/intake/schema.ts` | The `paste` intent: types, `PASTE_EXTRACTION_JSON_SCHEMA`, `pastePrompt(todayIso)`, `parsePasteExtraction`, and **`redactCredentials`** |
+| `src/lib/intake/extract.ts` | `extractFromPaste` + the registry entry. `runExtraction` unchanged |
+| `.../edit/intake/actions.ts` | `extractPaste`: guest reject, caps, store the `.txt` **before** the model call, provenance row with orphan rollback, signed source URL |
+| `.../edit/intake/paste-capture.tsx` | The textarea, plus "start with what's already here" |
+| `.../edit/intake/paste-review.tsx` | Credential advisory, Wi-Fi card, bulk contact checklist, tidied-document panel |
+| `src/components/intake/narrative-form.tsx` | Lifted out of `note-review.tsx` so both reviews share one copy of the append semantics |
+| `.../edit/intake/intake-flow.tsx` | `paste` phase, chooser card, `?mode=paste` |
+| `.../edit/add-details-band.tsx` | Third door |
+| `src/lib/intake/document-view.ts` | "Pasted document" |
+| `evals/intake/paste-parser-check.mts` | 40 checks, no API key, no cost |
+| `evals/intake/eval-paste.mts` + `paste-samples.ts` + `results-paste-2026-08-01.md` | 16 samples × 2 runs |
+
+### The credential catch, as built
+
+Three layers, because the prompt is a request and the page is guest-readable:
+
+1. **The prompt** asks for logins in `flaggedCredentials` and nowhere else.
+2. **`FlaggedCredential`** is `{ service, hint }` and nothing else, so there is
+   no field in the type for a secret to travel in.
+3. **`redactCredentials` runs over every proposable string** in
+   `parsePasteExtraction` — the tidied document, both prose sections, contact
+   labels/names/notes, reminder titles/notes, and the advisory's own hint.
+   Anything it catches is folded back into the advisory, so a credential the
+   model failed to flag still reaches the member as "removed from what we
+   propose" rather than vanishing silently.
+
+Two refinements came out of measurement, not design:
+
+- **Wi-Fi is spared by adjacency, not by keyword.** "Wi-Fi Password: x" needs a
+  14-character lookback, because the hyphen keeps "Wi-Fi" out of the matched
+  label entirely. "The wifi is patchy upstairs. Account password: x" must still
+  be redacted, which is why the window is short.
+- **Identity labels are stricter than secret labels.** After `password`, a value
+  is only redacted if it looks like a secret (a digit, a symbol, or length with
+  mixed case) — otherwise "The password is written on the underside of the
+  router" is destroyed, which is a useful how-to line. After `login` /
+  `username`, the next token goes whatever it looks like: the eval caught
+  `login mathiesonfamily` surviving into a tidied document precisely because an
+  all-lowercase username has none of a password's shape.
+
+### Decisions made during the build
+
+- **`statedAs` on paste reminders.** "They bill in April" came back as 1 April in
+  one run out of two, with that exact phrase already in the prompt as a negative
+  example. Prompting was clearly not going to hold it, so a paste reminder now
+  has to quote the words it read the day from, and the parser drops any date
+  whose quote names no day (a numeral or a written-out ordinal). Structural, and
+  it mirrors dictation's `spokenAs`.
+- **911 is dropped in the parser.** The family document says "Emergencies — 911
+  obviously" and the model was right to read it, but PRD 36 renders 911 as a
+  fixed first row, so proposing it would save a duplicate.
+- **Contact `kind` is scored, never gated.** A plumber filed "on the ground" is
+  one click to fix; recording the accuracy is useful, failing a build on it is
+  not.
+- **The tidied document is read-only.** Everything worth saving out of it is
+  offered above it; a second editable copy of a whole manual next to those would
+  give the member two texts to reconcile.
+- **Bulk saves run sequentially.** `addPropertyContact` reads the current maximum
+  `sort_order` to place each new row, so twenty parallel inserts would race to
+  the same position and land the document's careful ordering as noise.
+
+### Verification status
+
+- ✅ `tsc`, `eslint`, `next build` green.
+- ✅ **40/40 parser checks** (`npx tsx evals/intake/paste-parser-check.mts`) —
+  free, no API key, safe to run on every change.
+- ✅ **Eval, 16 samples × 2 runs: 0 leaked, 0 fabricated, 0 missed**, 9 misrouted
+  (all `kind` and section judgment calls). ~$0.0052/document, 3.4s average.
+  Committed as `results-paste-2026-08-01.md`.
+- ⏳ **No live walk yet.** The whole flow has never been exercised against a real
+  session: no browser run, no real save. Everything above is compile-time,
+  parser-level, or model-level.
+- ⏳ The real Dad-doc run on prod is still owed, and is the point of the PRD.
+
+### Follow-ups
+
+- The photo `contact` intent and `dictation` still don't know about `kind` or
+  Wi-Fi. Deliberately left (the PRD scopes it out); worth a small pass now that
+  the destinations and the vocabulary exist.
+- `MAX_SUGGESTED_REMINDERS` is 4 for paste as well as for a bill. A seasonal
+  calendar page listing six dates will lose two. Raise it if the live run hits it.

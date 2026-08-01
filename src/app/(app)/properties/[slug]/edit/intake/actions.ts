@@ -4,11 +4,17 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { resolveViewer } from "@/lib/guest";
-import { extractFromDictation, extractFromDocument } from "@/lib/intake/extract";
+import {
+  extractFromDictation,
+  extractFromDocument,
+  extractFromPaste,
+} from "@/lib/intake/extract";
 import {
   INTAKE_BUCKET,
   MAX_DICTATION_CHARS,
   MAX_INTAKE_BYTES,
+  MAX_PASTE_CHARS,
+  MIN_PASTE_CHARS,
   generateIntakeTextPath,
   isAllowedIntakeMime,
   isDocumentIntent,
@@ -18,6 +24,7 @@ import {
   type DictationExtraction,
   type DocumentIntent,
   type NoteExtraction,
+  type PasteExtraction,
 } from "@/lib/intake/schema";
 
 /**
@@ -348,6 +355,119 @@ export async function extractDictation(
   }
 
   const result = await extractFromDictation({ text: transcript });
+  if (!result.ok) {
+    return { status: "error", message: result.message };
+  }
+
+  const { data: signed } = await supabase.storage
+    .from(INTAKE_BUCKET)
+    .createSignedUrl(storagePath, SOURCE_URL_TTL_SECONDS);
+
+  revalidatePath(`/properties/${property.slug}/edit/intake`);
+
+  return {
+    status: "ok",
+    extraction: result.extraction,
+    sourceUrl: signed?.signedUrl ?? null,
+  };
+}
+
+// --- Paste: a document that already exists somewhere (PRD 37) --------------
+
+export type ExtractPasteState =
+  | {
+      status: "ok";
+      extraction: PasteExtraction;
+      sourceUrl: string | null;
+    }
+  | { status: "error"; message: string };
+
+/**
+ * Sort a pasted document into proposals. **Writes nothing the member has to
+ * live with**, exactly like `extractIntake` and `extractDictation`.
+ *
+ * Stored before the model call, dictation's shape exactly: the pasted text is
+ * the member's own material, and it is the thing worth keeping even when the
+ * sorting fails.
+ *
+ * That stored copy is deliberately verbatim, credentials and all. It is the
+ * provenance record — private bucket, signed URLs, uploader-or-admin delete
+ * (PRD 33) — and it is the same posture as a photographed bill carrying an
+ * account number. The credential catch governs what gets *proposed for the
+ * page*, which is the part that would otherwise end up somewhere guests can
+ * read.
+ */
+export async function extractPaste(
+  propertyId: string,
+  text: string,
+): Promise<ExtractPasteState> {
+  const viewer = await resolveViewer();
+  if (!viewer) {
+    return { status: "error", message: "Please sign in and try again." };
+  }
+  if (viewer.isGuest) {
+    return { status: "error", message: "Guests can't add property details." };
+  }
+
+  const document = text.trim();
+  if (document.length < MIN_PASTE_CHARS) {
+    return {
+      status: "error",
+      message: "There isn't enough here to sort out yet. Paste a bit more.",
+    };
+  }
+  if (document.length > MAX_PASTE_CHARS) {
+    return {
+      status: "error",
+      message:
+        "That's a longer document than we can take in one go. Paste it in two or three parts instead.",
+    };
+  }
+
+  const supabase = await createClient();
+
+  const { data: property } = await supabase
+    .from("properties")
+    .select("id, slug")
+    .eq("id", propertyId)
+    .maybeSingle<{ id: string; slug: string }>();
+  if (!property) {
+    return { status: "error", message: "That property couldn't be found." };
+  }
+
+  const body = new Blob([document], { type: "text/plain" });
+  const storagePath = generateIntakeTextPath();
+  const { error: uploadError } = await supabase.storage
+    .from(INTAKE_BUCKET)
+    .upload(storagePath, body, { contentType: "text/plain", upsert: false });
+  if (uploadError) {
+    console.error("[intake] could not store pasted document", uploadError);
+    return {
+      status: "error",
+      message: "We couldn't save what you pasted. Please try again.",
+    };
+  }
+
+  const { error: recordError } = await supabase.from("intake_documents").insert({
+    property_id: propertyId,
+    storage_path: storagePath,
+    content_type: "text/plain",
+    byte_size: body.size,
+    intent: "paste",
+    uploaded_by: viewer.userId,
+  });
+  if (recordError) {
+    // Same orphan rollback as dictation: an object no panel can list is the
+    // debris PRD 33 exists to prevent, and this one may hold credentials.
+    console.error("[intake] could not record pasted document", recordError);
+    await supabase.storage.from(INTAKE_BUCKET).remove([storagePath]);
+    return {
+      status: "error",
+      message: "We couldn't save what you pasted. Please try again.",
+    };
+  }
+
+  const result = await extractFromPaste({ text: document });
   if (!result.ok) {
     return { status: "error", message: result.message };
   }

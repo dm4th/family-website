@@ -27,6 +27,12 @@ export function intakeKindLabel(intent: string): string {
       return "Handwritten note";
     case "calendar":
       return "Due date";
+    case "paste":
+      // Also not a document we were handed — text a member pasted in, stored
+      // verbatim (PRD 37). The raw source is the point: it is where the
+      // credentials we refused to publish still live, behind a signed URL, so
+      // the retention panel is how they get removed.
+      return "Pasted document";
     case "dictation":
       // Not a document at all — a stored transcript of what someone said (PRD
       // 34). It sits in the same bucket with the same row so the panel can see,
