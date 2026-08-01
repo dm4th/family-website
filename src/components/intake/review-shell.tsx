@@ -22,6 +22,7 @@ export function ReviewShell({
   description,
   rawText,
   sourceUrl,
+  sourceLinkLabel,
   children,
 }: {
   title: string;
@@ -29,6 +30,12 @@ export function ReviewShell({
   rawText?: string;
   /** Short-lived signed link to the uploaded document, when we have one. */
   sourceUrl?: string | null;
+  /**
+   * What the link should call the source. "Open the photo you uploaded" was
+   * wrong for a pasted document and a spoken note (Dan, 2026-08-01), so each
+   * intent names its own.
+   */
+  sourceLinkLabel?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -50,7 +57,7 @@ export function ReviewShell({
               rel="noopener noreferrer"
               className="text-foreground underline underline-offset-4"
             >
-              Open the photo you uploaded
+              {sourceLinkLabel ?? "Open the photo you uploaded"}
             </a>{" "}
             <span className="text-foreground-subtle">
               (opens in a new tab, so you can check it against what we read)

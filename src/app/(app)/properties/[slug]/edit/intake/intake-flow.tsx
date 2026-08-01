@@ -498,6 +498,13 @@ export function IntakeFlow({
             : undefined
         }
         sourceUrl={phase.sourceUrl}
+        sourceLinkLabel={
+          phase.intent === "paste"
+            ? "Open the document you pasted"
+            : phase.intent === "dictation"
+              ? "Open what you said, word for word"
+              : "Open the photo you uploaded"
+        }
       >
         {phase.intent === "paste" ? (
           <>

@@ -31,12 +31,16 @@ function StatLine({
       className={cn("flex flex-col gap-1", className)}
     >
       <span className="eyebrow text-accent-bronze">{label}</span>
-      <span className="font-display text-xl leading-tight text-foreground sm:text-2xl">
-        {value}
+      {/* Unit sits beside the value on the baseline, not beneath it — a short
+          qualifier under a large numeral reads as misalignment (Dan, 2026-08-01). */}
+      <span className="flex items-baseline gap-1.5">
+        <span className="font-display text-xl leading-tight text-foreground sm:text-2xl">
+          {value}
+        </span>
+        {unit && (
+          <span className="text-xs text-foreground-subtle">{unit}</span>
+        )}
       </span>
-      {unit && (
-        <span className="text-xs text-foreground-subtle">{unit}</span>
-      )}
     </div>
   );
 }

@@ -55,7 +55,7 @@ export function WifiPanel({
         {password && (
           <div className="flex flex-col gap-1">
             <Eyebrow className="text-foreground-subtle">Password</Eyebrow>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="select-all font-mono text-sm text-foreground">
                 {password}
               </p>
