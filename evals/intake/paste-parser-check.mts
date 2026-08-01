@@ -94,7 +94,7 @@ for (const [label, line] of [
 
 console.log("\nwhat redaction must NOT touch");
 for (const [label, line] of [
-  ["wifi password", "WiFi password: bibiseesloons"],
+  ["wifi password", "WiFi password: pinecoveharbour"],
   ["wi-fi hyphenated", "Wi-Fi Password: summeratthelake"],
   ["network password", "Network password: loons2019"],
   ["guest network", "Guest network password: welcome123"],
@@ -192,19 +192,19 @@ check(
 
 console.log("\nthe Wi-Fi exception");
 const withWifi = parsePasteExtraction({
-  transcription: { value: "WiFi password: bibiseesloons", confidence: "high" },
+  transcription: { value: "WiFi password: pinecoveharbour", confidence: "high" },
   suggestedGuidelines: { value: null, confidence: "low" },
   suggestedHowTo: { value: null, confidence: "low" },
   suggestedContacts: [],
   suggestedReminders: [],
-  wifi: { network: "LoonASee", password: "bibiseesloons", confidence: "high" },
+  wifi: { network: "LoonASee", password: "pinecoveharbour", confidence: "high" },
   flaggedCredentials: [],
 });
 eq("network kept", withWifi.wifi?.network, "LoonASee");
-eq("passphrase kept", withWifi.wifi?.password, "bibiseesloons");
+eq("passphrase kept", withWifi.wifi?.password, "pinecoveharbour");
 check(
   "and it survives in the tidied text as well",
-  (withWifi.transcription.value ?? "").includes("bibiseesloons"),
+  (withWifi.transcription.value ?? "").includes("pinecoveharbour"),
 );
 
 console.log("\nwifi restraint");

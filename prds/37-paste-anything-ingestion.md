@@ -60,7 +60,7 @@ A third door on the intake band — **Paste Text** — where a member pastes any
 
 ## Verification recipe
 
-1. **The Dad run (dev)** — paste the scrubbed fixture: ~20 contacts proposed with sensible kinds, Wi-Fi card shows `bibiseesloons`-shaped value, credentials flagged into the advisory (and absent from every proposal), prose comes back as clean markdown routed to Living Here / What We Ask, reminders only where a date is stated.
+1. **The Dad run (dev)** — paste the scrubbed fixture: ~20 contacts proposed with sensible kinds, Wi-Fi card shows `pinecoveharbour`-shaped value, credentials flagged into the advisory (and absent from every proposal), prose comes back as clean markdown routed to Living Here / What We Ask, reminders only where a date is stated.
 2. **Bulk save** — uncheck two contacts, save the rest → each saved row has a revision; unchecked ones absent; progress line correct; one forced per-row failure reports individually.
 3. **Anti-fabrication** — a prose-only paste: zero contacts, zero reminders, zero Wi-Fi; sections still proposed.
 4. **Credential exclusion is parse-level** — a crafted model response smuggling a password outside `flaggedCredentials` fails parsing or is dropped (test the parser directly).

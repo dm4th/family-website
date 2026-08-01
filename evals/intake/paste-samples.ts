@@ -13,6 +13,12 @@
 // either, which is the same reason the feature refuses to publish credentials
 // in the first place.
 //
+// **That includes the Wi-Fi passphrase.** It is the one credential the app
+// deliberately publishes, and the first version of this file carried the real
+// one for exactly that reason — which was wrong. The exception is for the
+// property page, where the audience is the family and their guests. This repo
+// is public. Every network key here is invented, like everything else.
+//
 // The corpus leans toward restraint. Half of these samples name no date, or no
 // network, or nobody reachable, because the failure mode that matters is a
 // confident invention, and you only measure that on inputs whose correct answer
@@ -96,7 +102,7 @@ export const SAMPLES: Sample[] = [
 
 6. THE WIFI
 ● Network is LoonASee
-● Password is bibiseesloons (all one word, no capitals)
+● Password is pinecoveharbour (all one word, no capitals)
 ● It's slow in the boathouse, that's just how it is
 
 7. HOW THINGS WORK
@@ -149,7 +155,7 @@ export const SAMPLES: Sample[] = [
     },
     guidelines: ["strip the beds", "life jackets"],
     howTo: ["shut-off", "thermostat", "dump"],
-    wifi: { network: "LoonASee", password: "bibiseesloons" },
+    wifi: { network: "LoonASee", password: "pinecoveharbour" },
     // "The dock has to come out by 15 October": a day and a month, no year.
     dates: ["10-15"],
     plantedSecrets: [
