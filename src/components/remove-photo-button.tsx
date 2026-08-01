@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { deletePhoto } from "@/app/(app)/photos/actions";
 
-type Variant = "inline" | "overlay";
+type Variant = "inline" | "overlay" | "corner";
 
 /**
  * Confirm-then-delete affordance used on photo tiles and on the property
@@ -29,6 +29,9 @@ type Variant = "inline" | "overlay";
  *   alongside the existing "Use as my avatar" pattern.
  * - `overlay` variant is positioned absolutely in the top-right corner of
  *   a large image (e.g. the property hero) and only fades in on hover.
+ * - `corner` variant tucks into the bottom-right of a grid tile and stays
+ *   visible: hover-only controls are invisible on touch, and this is the
+ *   only control on the tile (clicking the photo opens the viewer instead).
  */
 export function RemovePhotoButton({
   photoId,
@@ -62,6 +65,30 @@ export function RemovePhotoButton({
     startTransition(() => router.refresh());
   }
 
+  if (variant === "corner") {
+    return (
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger asChild>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            aria-label="Remove photo"
+            className="absolute bottom-2 right-2 min-h-10 rounded-full bg-background/80 px-3 text-xs text-foreground-muted backdrop-blur-sm hover:bg-background hover:text-destructive"
+          >
+            {label}
+          </Button>
+        </AlertDialogTrigger>
+        <ConfirmContent
+          title={confirmTitle}
+          body={confirmBody}
+          pending={pending}
+          onConfirm={handleConfirm}
+        />
+      </AlertDialog>
+    );
+  }
+
   const trigger =
     variant === "overlay" ? (
       <Button
@@ -87,25 +114,47 @@ export function RemovePhotoButton({
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{confirmTitle}</AlertDialogTitle>
-          <AlertDialogDescription>{confirmBody}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={pending}
-            onClick={(e) => {
-              e.preventDefault();
-              void handleConfirm();
-            }}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            {pending ? "Removing…" : "Remove"}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
+      <ConfirmContent
+        title={confirmTitle}
+        body={confirmBody}
+        pending={pending}
+        onConfirm={handleConfirm}
+      />
     </AlertDialog>
+  );
+}
+
+/** The confirm dialog body, shared by all three trigger variants. */
+function ConfirmContent({
+  title,
+  body,
+  pending,
+  onConfirm,
+}: {
+  title: string;
+  body: string;
+  pending: boolean;
+  onConfirm: () => Promise<void>;
+}) {
+  return (
+    <AlertDialogContent>
+      <AlertDialogHeader>
+        <AlertDialogTitle>{title}</AlertDialogTitle>
+        <AlertDialogDescription>{body}</AlertDialogDescription>
+      </AlertDialogHeader>
+      <AlertDialogFooter>
+        <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+        <AlertDialogAction
+          disabled={pending}
+          onClick={(e) => {
+            e.preventDefault();
+            void onConfirm();
+          }}
+          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        >
+          {pending ? "Removing…" : "Remove"}
+        </AlertDialogAction>
+      </AlertDialogFooter>
+    </AlertDialogContent>
   );
 }

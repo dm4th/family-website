@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Pencil, Star, Trash2, X } from "lucide-react";
+import { Pencil, Star, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/confirm-button";
+import { PhotoLightbox } from "@/components/photo-lightbox";
 import { FormStatus } from "@/components/form-status";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -162,11 +163,13 @@ export function ArchiveGallery({
 
       {/* Lightbox */}
       {lightboxIndex >= 0 && (
-        <Lightbox
+        <PhotoLightbox
           photos={photos}
           index={lightboxIndex}
           onClose={() => setLightboxId(null)}
           onNavigate={(i) => setLightboxId(photos[i]!.id)}
+          fallbackAlt="Archive photo"
+          renderCaption={(photo) => <ArchiveCaption photo={photo} />}
         />
       )}
 
@@ -286,153 +289,31 @@ function RemoveButton({
   );
 }
 
-/** Tabbable elements inside a container, in DOM order — for the lightbox focus trap. */
-function focusablesIn(container: HTMLElement | null): HTMLElement[] {
-  if (!container) return [];
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  );
-}
-
-function Lightbox({
-  photos,
-  index,
-  onClose,
-  onNavigate,
-}: {
-  photos: ArchivePhoto[];
-  index: number;
-  onClose: () => void;
-  onNavigate: (i: number) => void;
-}) {
-  const photo = photos[index]!;
+/** Lightbox caption for an archive scan: date, caption, and tagged people. */
+function ArchiveCaption({ photo }: { photo: ArchivePhoto }) {
   const label = dateLabel(photo);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Move focus into the lightbox on open and restore it to the trigger on
-  // close. Runs once per open (the component stays mounted while navigating).
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const first = focusablesIn(containerRef.current)[0];
-    first?.focus();
-    return () => previouslyFocused?.focus?.();
-  }, []);
-
-  // Keyboard: Escape closes, arrows navigate, Tab is trapped inside the dialog.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (e.key === "ArrowRight" && index < photos.length - 1) {
-        onNavigate(index + 1);
-        return;
-      }
-      if (e.key === "ArrowLeft" && index > 0) {
-        onNavigate(index - 1);
-        return;
-      }
-      if (e.key === "Tab") {
-        const items = focusablesIn(containerRef.current);
-        if (items.length === 0) return;
-        const first = items[0]!;
-        const last = items[items.length - 1]!;
-        const active = document.activeElement;
-        if (e.shiftKey && (active === first || !containerRef.current?.contains(active))) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && (active === last || !containerRef.current?.contains(active))) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [index, photos.length, onClose, onNavigate]);
-
+  if (!label && !photo.caption && photo.people.length === 0) return null;
   return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/90 p-4 sm:p-10"
-      role="dialog"
-      aria-modal="true"
-      aria-label={photo.caption ?? "Archive photo"}
-      onClick={onClose}
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute right-4 top-4 inline-flex size-10 items-center justify-center rounded-full bg-background/10 text-surface transition-colors hover:bg-background/20"
-      >
-        <X aria-hidden />
-      </button>
-
-      <figure
-        className="flex max-h-full max-w-4xl flex-col items-center gap-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.fallbackUrl ?? photo.signedUrl}
-          alt={photo.caption ?? "Archive photo"}
-          className="max-h-[75vh] w-auto rounded-md object-contain shadow-portrait"
-        />
-        {(label || photo.caption || photo.people.length > 0) && (
-          <figcaption className="max-w-prose text-center text-sm text-surface/90">
-            {label && <span className="font-medium">{label}</span>}
-            {label && photo.caption && <span> · </span>}
-            {photo.caption}
-            {photo.people.length > 0 && (
-              <span className="mt-1 block text-xs text-surface/70">
-                {photo.people.map((p, i) => (
-                  <span key={p.id}>
-                    {i > 0 && ", "}
-                    <Link
-                      href={`/family/tree/${p.id}`}
-                      className="underline-offset-4 hover:text-surface hover:underline"
-                    >
-                      {p.inMemoriam ? `† ${p.displayName}` : p.displayName}
-                    </Link>
-                  </span>
-                ))}
-              </span>
-            )}
-          </figcaption>
-        )}
-      </figure>
-
-      {index > 0 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNavigate(index - 1);
-          }}
-          aria-label="Previous"
-          className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-background/10 px-3 py-4 text-surface transition-colors hover:bg-background/20"
-        >
-          ‹
-        </button>
+    <>
+      {label && <span className="font-medium">{label}</span>}
+      {label && photo.caption && <span> · </span>}
+      {photo.caption}
+      {photo.people.length > 0 && (
+        <span className="mt-1 block text-xs text-surface/70">
+          {photo.people.map((p, i) => (
+            <span key={p.id}>
+              {i > 0 && ", "}
+              <Link
+                href={`/family/tree/${p.id}`}
+                className="underline-offset-4 hover:text-surface hover:underline"
+              >
+                {p.inMemoriam ? `† ${p.displayName}` : p.displayName}
+              </Link>
+            </span>
+          ))}
+        </span>
       )}
-      {index < photos.length - 1 && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNavigate(index + 1);
-          }}
-          aria-label="Next"
-          className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-background/10 px-3 py-4 text-surface transition-colors hover:bg-background/20"
-        >
-          ›
-        </button>
-      )}
-    </div>
+    </>
   );
 }
 
