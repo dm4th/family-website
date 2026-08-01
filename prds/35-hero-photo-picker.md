@@ -112,6 +112,15 @@ Built on branch `prd-35-hero-photo-picker` in a dedicated worktree (`../family-w
 - Reordering the gallery is still unbuilt (deliberately out of scope) — if Dad asks for it, it's a separate PRD, not an extension of this one.
 - The status caption under the hero is admin-only text. If PRD 36 rewrites the hero block, keep the caption or fold it into whatever replaces it.
 
+### Design revision (2026-08-01, post-merge)
+
+Dan's read of the shipped version: the two text buttons under every tile were awkward, and a gallery photo should open full-screen the way a photo viewer does. Reworked:
+
+- **The tile is the affordance.** Clicking a gallery photo opens a full-screen viewer; "Make This the Hero" is the primary action inside it, where you can actually see what you're choosing.
+- **Remove is the only control left on the tile** — a small always-visible pill in the bottom-right. Not hover-only: hover controls don't exist on a tablet, which is most of this audience.
+- **One lightbox, not two.** The Legacy archive already had a good accessible viewer (focus trap, Escape, arrow keys, backdrop click). It was extracted to `src/components/photo-lightbox.tsx` with `renderCaption` / `renderActions` slots and both galleries now use it. Markup is unchanged, so the archive should look identical.
+- The hero frame at the top keeps its existing hover overlay controls and is **not** click-to-view. Worth revisiting for consistency, but out of scope for this pass.
+
 ## Reviewer sign-off (I check these)
 
 - [x] Writes go through `canManageProperty()` **and** land inside the existing DB column guard; non-admin members and guests can't set a hero from any path (verified in review; negatives inspection-only, mechanisms unchanged).

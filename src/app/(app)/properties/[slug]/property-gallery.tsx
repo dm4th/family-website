@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RemovePhotoButton } from "@/components/remove-photo-button";
+import { PhotoLightbox } from "@/components/photo-lightbox";
 import { SetHeroButton } from "./set-hero-button";
 
 export type PropertyPhoto = {
@@ -68,6 +69,8 @@ export function PropertyGallery({
   /** Needed for the admin-only "Make This the Hero" control (PRD 35). */
   propertyId: string;
 }) {
+  const [viewingId, setViewingId] = useState<string | null>(null);
+
   if (photos.length === 0) {
     return (
       <p className="text-sm italic text-foreground-subtle">
@@ -76,39 +79,71 @@ export function PropertyGallery({
     );
   }
 
+  const viewingIndex = photos.findIndex((p) => p.id === viewingId);
+
   return (
-    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-      {photos.map((photo) => {
-        const canRemove =
-          canManage ||
-          (!!currentUserId && photo.uploadedBy === currentUserId);
-        return (
-          <li key={photo.id} className="flex flex-col gap-2">
-            <div className="relative aspect-[4/3] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
-              <TileImg
-                src={photo.signedUrl}
-                fallbackSrc={photo.fallbackUrl ?? null}
-                alt={photo.caption ?? "Property photo"}
-              />
-            </div>
-            {photo.caption && (
-              <p className="line-clamp-2 text-xs text-foreground-subtle">
-                {photo.caption}
-              </p>
-            )}
-            <div className="flex flex-wrap items-center gap-x-3">
-              {canManage && (
-                <SetHeroButton
-                  propertyId={propertyId}
-                  storagePath={photo.storagePath}
-                  label="Make This the Hero"
+    <>
+      <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {photos.map((photo) => {
+          const canRemove =
+            canManage ||
+            (!!currentUserId && photo.uploadedBy === currentUserId);
+          return (
+            <li key={photo.id} className="flex flex-col gap-2">
+              {/* The tile itself is the affordance: click to view it large.
+                  Remove sits in the corner so the photo stays the subject. */}
+              <div className="group relative aspect-[4/3] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
+                <button
+                  type="button"
+                  onClick={() => setViewingId(photo.id)}
+                  className="block h-full w-full"
+                  aria-label={`View ${photo.caption ?? "photo"} full size`}
+                >
+                  <TileImg
+                    src={photo.signedUrl}
+                    fallbackSrc={photo.fallbackUrl ?? null}
+                    alt={photo.caption ?? "Property photo"}
+                  />
+                </button>
+                <RemovePhotoButton
+                  photoId={photo.id}
+                  canRemove={canRemove}
+                  variant="corner"
                 />
+              </div>
+              {photo.caption && (
+                <p className="line-clamp-2 text-xs text-foreground-subtle">
+                  {photo.caption}
+                </p>
               )}
-              <RemovePhotoButton photoId={photo.id} canRemove={canRemove} />
-            </div>
-          </li>
-        );
-      })}
-    </ul>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Full-screen viewer — where choosing the hero now lives, so the grid
+          stays a grid of photos instead of a grid of buttons. */}
+      {viewingIndex >= 0 && (
+        <PhotoLightbox
+          photos={photos}
+          index={viewingIndex}
+          onClose={() => setViewingId(null)}
+          onNavigate={(i) => setViewingId(photos[i]!.id)}
+          fallbackAlt="Property photo"
+          renderCaption={(photo) => photo.caption}
+          renderActions={(photo) =>
+            canManage ? (
+              <SetHeroButton
+                propertyId={propertyId}
+                storagePath={photo.storagePath}
+                label="Make This the Hero"
+                variant="lightbox"
+                onDone={() => setViewingId(null)}
+              />
+            ) : null
+          }
+        />
+      )}
+    </>
   );
 }
