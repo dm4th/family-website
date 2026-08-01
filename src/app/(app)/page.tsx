@@ -108,7 +108,11 @@ export default async function Dashboard({
             ? "tree"
             : null;
 
+  // Prefer the name the member chose in onboarding over auth metadata: magic-
+  // link accounts have no metadata name, so without this every invitee is
+  // greeted by their email prefix even after telling us who they are.
   const firstName =
+    ownProfile?.data?.full_name?.trim()?.split(/\s+/)[0] ??
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
     user?.email?.split("@")[0] ??
     "there";
@@ -131,7 +135,9 @@ export default async function Dashboard({
       <header className="flex flex-col gap-3">
         <p className="eyebrow text-foreground-subtle">{today}</p>
         <h1 className="font-display text-[2.5rem] leading-[1.02] text-foreground sm:text-[3.25rem]">
-          Welcome back, {firstName}.
+          {/* "Back" is wrong the first time: someone who just finished
+              onboarding is arriving, not returning. */}
+          {justOnboarded ? <>Welcome, {firstName}.</> : <>Welcome back, {firstName}.</>}
         </h1>
         <p className="max-w-xl text-base leading-relaxed text-foreground-muted">
           A quiet place for the family, to share what we love, look after what

@@ -89,8 +89,11 @@ export function GDocCapture({
           Read it straight from Google Docs
         </h2>
         <p className="text-base text-foreground-muted">
-          If the notes about {propertyName} live in a Google Doc, you don&rsquo;t
-          have to copy them out. Choose the document and we&rsquo;ll read it and
+          {/* Explicit space: this Next version's SSR minifier drops the plain
+              space after a same-line JSX expression (rendered "Loon-A-Seelive"
+              on prod, 2026-08-01). */}
+          If the notes about {propertyName}
+          {" "}live in a Google Doc, you don&rsquo;t have to copy them out. Choose the document and we&rsquo;ll read it and
           sort it out: who to call, the Wi-Fi, dates worth remembering, and the
           rest tidied up. Nothing is saved until you press Save.
         </p>
