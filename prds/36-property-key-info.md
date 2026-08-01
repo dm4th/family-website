@@ -1,7 +1,7 @@
 # 36 — Property Key Info (Emergencies, Wi-Fi, Contact Kinds)
 
 **Phase**: 7 (authoring assist) · **Depends on**: 03 (property pages), 27 (column guard posture) · **Feeds**: 37 (paste ingestion needs these destinations)
-**Status**: 🟢 ready (2026-07-31)
+**Status**: 🚧 built, awaiting migration + live walk (2026-07-31)
 **Parallel-safe with**: 35 (different files). **37 must wait for this** — ingestion routes into the fields this PRD creates.
 
 ---
@@ -90,3 +90,69 @@ src/app/(app)/properties/[slug]/actions.ts                 # updateProperty whit
 - [ ] Intake untouched (parse whitelists identical before/after — this is 37's seam, not 36's).
 - [ ] Credential-steering hint shipped; no em-dashes; Title Case buttons.
 - [ ] Live walk on prod: enter Loon-A-See's real Wi-Fi, scan the QR from a phone, add one contact per kind from Dad's doc, confirm guest view.
+
+---
+
+## Implementation (2026-07-31)
+
+Built in an isolated worktree because PRD 35 was being built in the main
+checkout at the same time and both touch `properties/[slug]/page.tsx` and
+`actions.ts`. Whoever merges second should expect a small conflict in the
+aside (35 changes which photo is the hero; 36 reorders the side rail).
+
+### Key files
+
+| File | What |
+|---|---|
+| `supabase/migrations/20260731000002_property_key_info.sql` | `properties.wifi_network` / `wifi_password`; `property_contacts.kind` with check constraint + `default 'on_the_ground'`; a `(property_id, kind, sort_order)` index; column comments recording why Wi-Fi is deliberately not privileged |
+| `src/lib/wifi-qr.ts` | `escapeWifiValue` / `buildWifiPayload` / `wifiQrSvg` — payload grammar + server-rendered inline SVG via the `qrcode` package (new dependency) |
+| `src/app/(app)/properties/[slug]/wifi-panel.tsx` | The Wi-Fi square: network, selectable password, Copy Password (announced through `FormStatus`), QR with caption. Client leaf; the SVG string arrives as a prop |
+| `src/app/(app)/properties/[slug]/page.tsx` | Aside reordered to Emergencies → Wi-Fi → On the Ground → Amenities; contacts split by kind; full-width Service Directory table below the grid under a "Who fixes what" rule; shared `ContactLine` so the two aside panels can't drift |
+| `.../edit/property-edit-form.tsx` | Two Wi-Fi inputs above the narrative fields; the "How things work here" hint rewritten to send Wi-Fi to its own field and warn account logins out |
+| `.../edit/contacts-editor.tsx` | "Shows up in" select on both the add and edit contact forms, phrased as places on the page rather than a taxonomy |
+| `.../contacts/actions.ts` | `readKind()` (unrecognized → default; the DB constraint is the real backstop); `kind` in insert, update, and both revision payloads |
+| `src/components/intake/property-carry-fields.tsx` | Wi-Fi added to the carry set + `IntakeProperty` |
+| `evals/wifi/qr-payload-check.mts` | 19 checks: escaping, payload shape, `nopass`, and field-integrity (splitting on unescaped `;` must yield exactly 3 fields). `npx tsx evals/wifi/qr-payload-check.mts` |
+| `supabase/tests/prd36-property-key-info.sql` | 11 psql checks: columns exist, backfill, constraint rejects a bogus kind, member CAN write Wi-Fi while status stays blocked, guest reads Wi-Fi and writes nothing |
+
+### Decisions made during the build
+
+- **The intake carry set had to change, and that is not a scope breach.**
+  `updateProperty` is a whole-form action, so the moment it gained two columns
+  every intake review form that submits a sliver would have written them as
+  null — an intake save would have silently blanked the Wi-Fi. Adding the two
+  fields to `PropertyCarryFields` (whose own doc comment says "if
+  `updateProperty` gains an editable field, add it here too") preserves data;
+  it teaches intake nothing about Wi-Fi. Parse whitelists, intents, and review
+  UI are untouched, which is the seam PRD 37 owns. `CARRY_COLUMNS` and
+  `IntakePropertySnapshot` in `edit/intake/actions.ts` moved with it.
+- **`qrcode` as a dependency** rather than a hand-rolled encoder. Reed-Solomon
+  and version selection are not worth reimplementing; the SVG renderer is pure
+  JS, runs server-side only, and emits no external references (asserted in the
+  eval).
+- **QR colors are fixed black-on-white, not theme-aware.** Scanners want a
+  light quiet zone. A code that only reads in one theme is worse than one that
+  looks slightly plain in the other, so it sits on a small white card in both.
+- **Unknown `kind` values render as ground contacts** rather than disappearing.
+  The detail page filters with `!== 'emergency' && !== 'service'`, so a row
+  that somehow escapes the constraint still shows up somewhere.
+- **911 is a fixed first row**, not a seeded contact — nothing to maintain, and
+  the panel is never empty. No alarm-red styling; the panel earns its place by
+  being first.
+
+### Verification status
+
+- ✅ `tsc`, `eslint`, `next build` green; 19/19 QR payload checks pass.
+- ⏳ **Migration not yet applied anywhere** (no Docker locally, and pushing to
+  prod is the owner's call). `supabase/tests/prd36-property-key-info.sql` is
+  written and ready to run against the DB once it is.
+- ⏳ Live walk still owed: real Wi-Fi entered for Loon-A-See, QR scanned from a
+  phone, one contact of each kind, guest view confirmed.
+
+### Follow-ups
+
+- The `Contacts` count in the fact rail now counts all three kinds together.
+  Left as-is deliberately (restraint), but it reads oddly once seventeen
+  vendors land — revisit with PRD 37's first real run.
+- Wi-Fi is one network per property. Loon-A-See vs Looney Bin remains a family
+  decision, per the PRD's out-of-scope list.

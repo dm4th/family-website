@@ -47,6 +47,8 @@ export type IntakeProperty = {
   how_to: string | null;
   guidelines: string | null;
   amenities: string[];
+  wifi_network: string | null;
+  wifi_password: string | null;
   status: string;
   max_guests: number | null;
 };
@@ -59,7 +61,9 @@ export type CarryableField =
   | "description"
   | "how_to"
   | "guidelines"
-  | "amenities";
+  | "amenities"
+  | "wifi_network"
+  | "wifi_password";
 
 export function PropertyCarryFields({
   property,
@@ -80,6 +84,11 @@ export function PropertyCarryFields({
     ["how_to", property.how_to ?? ""],
     ["guidelines", property.guidelines ?? ""],
     ["amenities", property.amenities.join("\n")],
+    // Wi-Fi (PRD 36) is an ordinary wiki field as far as the action is
+    // concerned, so it carries like the rest — an intake save that didn't
+    // send it would blank the network the family just typed in.
+    ["wifi_network", property.wifi_network ?? ""],
+    ["wifi_password", property.wifi_password ?? ""],
   ];
 
   return (

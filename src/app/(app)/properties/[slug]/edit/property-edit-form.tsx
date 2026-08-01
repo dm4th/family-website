@@ -25,6 +25,8 @@ export type PropertyEditValues = {
   how_to: string | null;
   guidelines: string | null;
   amenities: string[];
+  wifi_network: string | null;
+  wifi_password: string | null;
   status: string;
   max_guests: number | null;
   peak_period_ranges: PeakRange[];
@@ -85,10 +87,41 @@ export function PropertyEditForm({
         />
       </Field>
 
+      {/* Wi-Fi sits above the narrative fields on purpose: it's the fact most
+          likely to be typed into prose otherwise, and the hint below sends
+          people here (PRD 36). */}
+      <Field
+        label="Wi-Fi network"
+        htmlFor="wifi_network"
+        hint="The network name people pick from the list on their phone."
+      >
+        <Input
+          id="wifi_network"
+          name="wifi_network"
+          defaultValue={property.wifi_network ?? ""}
+          autoComplete="off"
+          placeholder="e.g., Loon-A-See"
+        />
+      </Field>
+
+      <Field
+        label="Wi-Fi password"
+        htmlFor="wifi_password"
+        hint="Shown on the property page to everyone who can see it, guests included, with a code a phone camera can join from. Leave blank for an open network."
+      >
+        <Input
+          id="wifi_password"
+          name="wifi_password"
+          defaultValue={property.wifi_password ?? ""}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </Field>
+
       <Field
         label="How things work here"
         htmlFor="how_to"
-        hint="Trash schedule, WiFi, quirks, boat/dock notes."
+        hint="Trash schedule, quirks, boat and dock notes. Wi-Fi has its own field above. Please don't put account logins or passwords here; everyone signed in can read this page."
       >
         <RichTextField
           id="how_to"

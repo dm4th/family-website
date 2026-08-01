@@ -3,6 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { recordRevision } from "@/lib/revisions";
+import {
+  PROPERTY_CONTACT_KINDS,
+  type PropertyContactKind,
+} from "@/lib/db/schema";
 
 export type ContactFormState =
   | { status: "idle" }
@@ -15,6 +19,19 @@ function readText(formData: FormData, key: string): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();
   return t.length ? t : null;
+}
+
+/**
+ * Which panel this contact belongs in (PRD 36). Anything unrecognized falls
+ * back to the default rather than erroring — the DB check constraint is the
+ * real backstop, and a bad value here can only come from a hand-crafted post.
+ */
+function readKind(formData: FormData): PropertyContactKind {
+  const raw = formData.get("kind");
+  return typeof raw === "string" &&
+    (PROPERTY_CONTACT_KINDS as string[]).includes(raw)
+    ? (raw as PropertyContactKind)
+    : "on_the_ground";
 }
 
 export async function addPropertyContact(
@@ -49,6 +66,7 @@ export async function addPropertyContact(
   const next = {
     property_id: propertyId,
     label,
+    kind: readKind(formData),
     name: readText(formData, "name"),
     phone: readText(formData, "phone"),
     email: readText(formData, "email"),
@@ -76,6 +94,7 @@ export async function addPropertyContact(
     before: {},
     after: {
       label: next.label,
+      kind: next.kind,
       name: next.name,
       phone: next.phone,
       email: next.email,
@@ -105,7 +124,7 @@ export async function updatePropertyContact(
 
   const { data: current, error: currentErr } = await supabase
     .from("property_contacts")
-    .select("label, name, phone, email, notes")
+    .select("label, kind, name, phone, email, notes")
     .eq("id", contactId)
     .single();
   if (currentErr || !current) {
@@ -119,6 +138,7 @@ export async function updatePropertyContact(
 
   const next = {
     label,
+    kind: readKind(formData),
     name: readText(formData, "name"),
     phone: readText(formData, "phone"),
     email: readText(formData, "email"),
@@ -141,6 +161,7 @@ export async function updatePropertyContact(
     before: current,
     after: {
       label: next.label,
+      kind: next.kind,
       name: next.name,
       phone: next.phone,
       email: next.email,
@@ -165,7 +186,7 @@ export async function deletePropertyContact(
 
   const { data: current } = await supabase
     .from("property_contacts")
-    .select("label, name, phone, email, notes")
+    .select("label, kind, name, phone, email, notes")
     .eq("id", contactId)
     .single();
 

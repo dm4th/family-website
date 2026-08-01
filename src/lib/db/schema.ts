@@ -84,6 +84,10 @@ export const properties = pgTable("properties", {
   amenities: text("amenities").array().notNull().default(sql`'{}'`),
   guidelines: text("guidelines"),
   howTo: text("how_to"),
+  // Wi-Fi is a wiki field, not a privileged one: any non-guest member may edit
+  // it, and guests may read it. See 20260731000002_property_key_info.sql.
+  wifiNetwork: text("wifi_network"),
+  wifiPassword: text("wifi_password"),
   status: text("status").$type<PropertyStatus>().notNull().default("active"),
   maxGuests: integer("max_guests"),
   peakPeriodRanges: jsonb("peak_period_ranges")
@@ -107,6 +111,18 @@ export type NewProperty = typeof properties.$inferInsert;
 // ----------------------------------------------------------------------------
 // property_contacts
 // ----------------------------------------------------------------------------
+/**
+ * Which panel a contact renders in on the property page. `on_the_ground` is
+ * the default so pre-PRD-36 rows land where they already appeared.
+ */
+export type PropertyContactKind = "emergency" | "on_the_ground" | "service";
+
+export const PROPERTY_CONTACT_KINDS: PropertyContactKind[] = [
+  "emergency",
+  "on_the_ground",
+  "service",
+];
+
 export const propertyContacts = pgTable(
   "property_contacts",
   {
@@ -115,6 +131,10 @@ export const propertyContacts = pgTable(
       .notNull()
       .references(() => properties.id, { onDelete: "cascade" }),
     label: text("label").notNull(),
+    kind: text("kind")
+      .$type<PropertyContactKind>()
+      .notNull()
+      .default("on_the_ground"),
     name: text("name"),
     phone: text("phone"),
     email: text("email"),

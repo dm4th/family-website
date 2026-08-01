@@ -120,7 +120,7 @@ export async function updateProperty(
   const { data: current, error: currentErr } = await supabase
     .from("properties")
     .select(
-      "slug, name, location, address, description, how_to, guidelines, amenities, status, max_guests, peak_period_ranges",
+      "slug, name, location, address, description, how_to, guidelines, amenities, wifi_network, wifi_password, status, max_guests, peak_period_ranges",
     )
     .eq("id", propertyId)
     .single();
@@ -188,6 +188,10 @@ export async function updateProperty(
     how_to: readText(formData, "how_to"),
     guidelines: readText(formData, "guidelines"),
     amenities: parseAmenities(readText(formData, "amenities")),
+    // Wi-Fi is a wiki field like how_to: any non-guest member may maintain it,
+    // and it sits deliberately outside the privileged-column guard (PRD 36).
+    wifi_network: readText(formData, "wifi_network"),
+    wifi_password: readText(formData, "wifi_password"),
     status: canChangeStatus
       ? (readText(formData, "status") ?? current.status)
       : current.status,
@@ -208,6 +212,8 @@ export async function updateProperty(
       how_to: next.how_to,
       guidelines: next.guidelines,
       amenities: next.amenities,
+      wifi_network: next.wifi_network,
+      wifi_password: next.wifi_password,
       status: next.status,
       max_guests: nextMaxGuests,
       peak_period_ranges: nextPeakRanges,
@@ -230,6 +236,8 @@ export async function updateProperty(
       how_to: current.how_to,
       guidelines: current.guidelines,
       amenities: current.amenities ?? [],
+      wifi_network: current.wifi_network,
+      wifi_password: current.wifi_password,
       status: current.status,
       max_guests: current.max_guests ?? null,
       peak_period_ranges: JSON.stringify(current.peak_period_ranges ?? []),
