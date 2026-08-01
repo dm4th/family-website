@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmButton } from "@/components/confirm-button";
 import { FormStatus } from "@/components/form-status";
+import type { PropertyContactKind } from "@/lib/db/schema";
 import {
   addPropertyContact,
   deletePropertyContact,
@@ -20,11 +21,23 @@ const initial: ContactFormState = { status: "idle" };
 export type ContactRow = {
   id: string;
   label: string;
+  kind: PropertyContactKind;
   name: string | null;
   phone: string | null;
   email: string | null;
   notes: string | null;
 };
+
+/**
+ * Wording for the three homes a contact can have (PRD 36). Phrased as places
+ * on the page rather than as a taxonomy, because that's the question the
+ * person filling this in is actually answering.
+ */
+const KIND_OPTIONS: { value: PropertyContactKind; label: string }[] = [
+  { value: "emergency", label: "Emergencies, at the top of the page" },
+  { value: "on_the_ground", label: "Contacts on the ground" },
+  { value: "service", label: "The service directory" },
+];
 
 export function ContactsEditor({
   propertyId,
@@ -171,6 +184,21 @@ function ContactFieldsGrid({
           defaultValue={defaultValues?.label ?? ""}
           placeholder="Caretaker / Plumber / Emergency…"
         />
+      </FieldInline>
+      <FieldInline label="Shows up in" htmlFor={k("kind")}>
+        <select
+          id={k("kind")}
+          name="kind"
+          disabled={disabled}
+          defaultValue={defaultValues?.kind ?? "on_the_ground"}
+          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {KIND_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </FieldInline>
       <FieldInline label="Name" htmlFor={k("name")}>
         <Input

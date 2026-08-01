@@ -32,7 +32,7 @@ const SOURCE_URL_TTL_SECONDS = 60 * 30;
  * submit. Mirrors `IntakeProperty` in `property-carry-fields.tsx`.
  */
 const CARRY_COLUMNS =
-  "id, slug, name, location, address, description, how_to, guidelines, amenities, status, max_guests";
+  "id, slug, name, location, address, description, how_to, guidelines, amenities, wifi_network, wifi_password, status, max_guests";
 
 export type IntakePropertySnapshot = {
   id: string;
@@ -44,6 +44,8 @@ export type IntakePropertySnapshot = {
   how_to: string | null;
   guidelines: string | null;
   amenities: string[];
+  wifi_network: string | null;
+  wifi_password: string | null;
   status: string;
   max_guests: number | null;
 };

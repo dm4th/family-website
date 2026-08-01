@@ -36,7 +36,7 @@ export default async function PropertyIntakePage({
   const { data: property, error } = await supabase
     .from("properties")
     .select(
-      "id, slug, name, location, address, description, how_to, guidelines, amenities, status, max_guests",
+      "id, slug, name, location, address, description, how_to, guidelines, amenities, wifi_network, wifi_password, status, max_guests",
     )
     .eq("slug", slug)
     .single();
@@ -80,6 +80,8 @@ export default async function PropertyIntakePage({
               how_to: property.how_to,
               guidelines: property.guidelines,
               amenities: property.amenities ?? [],
+              wifi_network: property.wifi_network,
+              wifi_password: property.wifi_password,
               status: property.status,
               max_guests: property.max_guests ?? null,
             }}

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { canManageProperty } from "@/lib/property-auth";
 import { resolveViewer } from "@/lib/guest";
 import { isIntakeConfigured } from "@/lib/intake/extract";
+import type { PropertyContactKind } from "@/lib/db/schema";
 import { LedgerPanel, PageIntro } from "@/components/shell";
 import { AddDetailsBand } from "./add-details-band";
 import { PropertyEditForm } from "./property-edit-form";
@@ -32,7 +33,7 @@ export default async function PropertyEditPage({
   const { data: property, error } = await supabase
     .from("properties")
     .select(
-      "id, slug, name, location, address, description, how_to, guidelines, amenities, status, max_guests, peak_period_ranges",
+      "id, slug, name, location, address, description, how_to, guidelines, amenities, wifi_network, wifi_password, status, max_guests, peak_period_ranges",
     )
     .eq("slug", slug)
     .single();
@@ -46,7 +47,7 @@ export default async function PropertyEditPage({
 
   const { data: contacts } = await supabase
     .from("property_contacts")
-    .select("id, label, name, phone, email, notes, sort_order")
+    .select("id, label, kind, name, phone, email, notes, sort_order")
     .eq("property_id", property.id)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
@@ -122,6 +123,8 @@ export default async function PropertyEditPage({
             how_to: property.how_to,
             guidelines: property.guidelines,
             amenities: property.amenities ?? [],
+            wifi_network: property.wifi_network,
+            wifi_password: property.wifi_password,
             status: property.status,
             max_guests: property.max_guests ?? null,
             peak_period_ranges:
@@ -185,6 +188,7 @@ export default async function PropertyEditPage({
           contacts={(contacts ?? []).map((c) => ({
             id: c.id,
             label: c.label,
+            kind: (c.kind ?? "on_the_ground") as PropertyContactKind,
             name: c.name,
             phone: c.phone,
             email: c.email,
