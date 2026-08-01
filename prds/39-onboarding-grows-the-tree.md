@@ -1,7 +1,7 @@
 # 39 — Onboarding That Grows the Tree
 
 **Phase**: 7 (family growth) · **Depends on**: 24 (invite-only access, shipped), the generations reset (Bibi and Drew = 1, PR #48 + data script), PRD 13 (welcome flow, shipped)
-**Status**: 🚧 built + reviewed 2026-08-01 (branch `prd-39-onboarding`) — both slices code-complete; reviewed against a real local Postgres, two required fixes applied and re-verified. `tsc` / `eslint` / `build` green, 13/13 generation checks. **Migrations validated locally but not applied to prod, and no live walk yet** (see Implementation).
+**Status**: ✅ shipped (PR #49 merged `381d456` 2026-08-01; migrations applied to prod; full live walk same day — see Implementation → Live walk)
 **Parallel-safe with**: property-side PRDs (35–38). Touches `/welcome`, `/invite`, the invitations table, and the tree write path — do not run alongside another onboarding or tree PRD.
 
 ---
@@ -249,3 +249,19 @@ also why any test seeding `auth.users` must insert the invitation first.
   booking/feedback plaintext footers now read slightly differently than before.
 - Reminder emails for stalled invites remain deliberately out of scope: measure
   first, as the PRD says.
+
+### Live walk (2026-08-01, reviewer, on prod)
+
+The full verification recipe ran against prod with a real test invitee (`danny.mathieson233+prd39@gmail.com`, Dan's own alias):
+
+1. **Invite → inbox → in**: invitation created from `/invite` with kinship "My child"; honest success copy ("Invitation sent… they need to sign in with that same address"); the warm email arrived in Gmail and rendered correctly (sentence-case subject, burgundy Family CTA, Title Case "Accept Your Invitation", address stated twice, numbered how-to, invitation-specific footer, no em-dashes). CTA landed on `/login?email=` with the invited address prefilled and the invitation-aware header ("You're invited / Let's get you in.").
+2. **Sign-in**: first magic link came back `otp_expired` (Gmail link-scanner prefetch consumed the one-time token — a real-world hazard worth remembering); the immediate second link worked. `handle_new_user` accepted the invitation; landed on `/welcome` step 1 of 3.
+3. **Tree step**: the kinship suggestion fired exactly — "Add Dan Mathieson as your parent? Dan Mathieson invited you and said you're their child." One tap seeded the picker; **generation auto-suggested "Fourth Generation · Great-grandchildren"** (Dan gen 3 + 1) with the change-it hint. Added a stub parent ("Testy Stub Parent"). Save advanced to step 3; Finish landed on the dashboard welcome panel.
+4. **DB proof** (read-only): profile gen 4 + onboarded; own person row linked + stub row unlinked, both `created_by` the test user; both parent edges present; 4 revisions (`created_via: onboarding`); invitation status accepted.
+5. **Tree render**: `/family/tree` opened centered on the new member, connected to Dan and the stub, chaining into the whole existing tree.
+6. **Guest negative**: role=guest on the invite form hides the kinship fields (property picker shows instead). The RPC/hint guest rejections were proven in the reviewer's local functional suite (`prd39-fn-test.sql`, rolled back), byte-identical SQL to prod.
+7. **Cleanup**: all test rows (2 people + cascaded edges, 4 revisions, invitation, auth user + profile) removed via the reviewer's cleanup script, run by Dan.
+
+**Found during the walk, fixed in PR #51**: dashboard greeting preferred auth metadata over `profiles.full_name` (magic-link invitees greeted by email prefix forever); "Welcome back" on first arrival; plus the Next SSR space-eating bug on the gdoc screen (unrelated surface, same walk).
+
+**Still open**: Dan's four real pending invitations (sent pre-PRD-39) never emailed anyone — use "Email Magic Link" on them or re-invite.
