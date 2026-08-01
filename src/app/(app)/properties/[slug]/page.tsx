@@ -19,6 +19,7 @@ import {
   StatRow,
 } from "@/components/shell";
 import { PropertyGallery } from "./property-gallery";
+import { SetHeroButton } from "./set-hero-button";
 import { GuestAccessPanel, type GuestGrantRow } from "./guests/guest-access-panel";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export default async function PropertyDetailPage({
   const { data: property, error } = await supabase
     .from("properties")
     .select(
-      "id, slug, name, location, address, description, how_to, guidelines, amenities, status, updated_at, updated_by",
+      "id, slug, name, location, address, description, how_to, guidelines, amenities, status, hero_image_path, updated_at, updated_by",
     )
     .eq("slug", slug)
     .single();
@@ -69,8 +70,15 @@ export default async function PropertyDetailPage({
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
-  const heroPhoto = signedPhotos[0];
-  const restPhotos = signedPhotos.slice(1);
+  // Hero resolution (PRD 35), matching the listing cards: an explicit
+  // hero_image_path wins, otherwise the newest photo. A stored path that no
+  // longer matches a photo (deleted, or path drift) falls back silently —
+  // a dangling pointer must never render as a broken image.
+  const explicitHero = property.hero_image_path
+    ? signedPhotos.find((p) => p.storagePath === property.hero_image_path)
+    : undefined;
+  const heroPhoto = explicitHero ?? signedPhotos[0];
+  const restPhotos = signedPhotos.filter((p) => p.id !== heroPhoto?.id);
   const amenities = (property.amenities ?? []) as string[];
 
   const {
@@ -135,27 +143,45 @@ export default async function PropertyDetailPage({
 
       {/* Operations hero — large photo carries the spatial weight. */}
       {heroPhoto ? (
-        <figure className="group relative aspect-[21/9] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={heroPhoto.fallbackUrl ?? heroPhoto.signedUrl}
-            alt={heroPhoto.caption ?? property.name}
-            className="absolute inset-0 h-full w-full object-cover"
-            decoding="async"
-          />
-          {property.status !== "active" && (
-            <Badge variant="status" className="absolute right-4 top-4">
-              {property.status}
-            </Badge>
+        <div className="flex flex-col gap-2">
+          <figure className="group relative aspect-[21/9] overflow-hidden rounded-md bg-surface-sunken ring-1 ring-border">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={heroPhoto.fallbackUrl ?? heroPhoto.signedUrl}
+              alt={heroPhoto.caption ?? property.name}
+              className="absolute inset-0 h-full w-full object-cover"
+              decoding="async"
+            />
+            {property.status !== "active" && (
+              <Badge variant="status" className="absolute right-4 top-4">
+                {property.status}
+              </Badge>
+            )}
+            <RemovePhotoButton
+              photoId={heroPhoto.id}
+              canRemove={heroCanRemove}
+              variant="overlay"
+              confirmTitle="Remove the hero photo?"
+              confirmBody="This will permanently delete the photo from the property. The newest remaining photo will take its place."
+            />
+            {/* Un-set the explicit choice (PRD 30: every choice is reversible). */}
+            {canManage && !!explicitHero && (
+              <SetHeroButton
+                propertyId={property.id}
+                storagePath={null}
+                label="Use Newest Photo"
+                variant="overlay"
+              />
+            )}
+          </figure>
+          {canManage && (
+            <p className="text-xs text-foreground-subtle">
+              {explicitHero
+                ? "Hero: chosen by an admin. New uploads won't replace it."
+                : "Showing the newest photo. Pick one below to keep it here."}
+            </p>
           )}
-          <RemovePhotoButton
-            photoId={heroPhoto.id}
-            canRemove={heroCanRemove}
-            variant="overlay"
-            confirmTitle="Remove the hero photo?"
-            confirmBody="This will permanently delete the photo from the property. The next most recent photo will become the hero."
-          />
-        </figure>
+        </div>
       ) : (
         <div className="relative flex aspect-[21/9] items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-surface/60 text-foreground-subtle">
           <span className="eyebrow">No photo yet. Drop one in below</span>
@@ -331,6 +357,7 @@ export default async function PropertyDetailPage({
           photos={restPhotos}
           currentUserId={currentUserId}
           canManage={canManage}
+          propertyId={property.id}
         />
       </section>
 

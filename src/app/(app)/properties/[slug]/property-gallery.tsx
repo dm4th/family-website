@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RemovePhotoButton } from "@/components/remove-photo-button";
+import { SetHeroButton } from "./set-hero-button";
 
 export type PropertyPhoto = {
   id: string;
@@ -59,10 +60,13 @@ export function PropertyGallery({
   photos,
   currentUserId,
   canManage,
+  propertyId,
 }: {
   photos: PropertyPhoto[];
   currentUserId: string | null;
   canManage: boolean;
+  /** Needed for the admin-only "Make This the Hero" control (PRD 35). */
+  propertyId: string;
 }) {
   if (photos.length === 0) {
     return (
@@ -92,7 +96,16 @@ export function PropertyGallery({
                 {photo.caption}
               </p>
             )}
-            <RemovePhotoButton photoId={photo.id} canRemove={canRemove} />
+            <div className="flex flex-wrap items-center gap-x-3">
+              {canManage && (
+                <SetHeroButton
+                  propertyId={propertyId}
+                  storagePath={photo.storagePath}
+                  label="Make This the Hero"
+                />
+              )}
+              <RemovePhotoButton photoId={photo.id} canRemove={canRemove} />
+            </div>
           </li>
         );
       })}

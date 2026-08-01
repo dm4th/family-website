@@ -1,7 +1,7 @@
 # 35 — Hero Photo Picker
 
 **Phase**: 7 (authoring assist) · **Depends on**: 05 (photo upload/delete), 17 (renditions)
-**Status**: 🟢 ready (2026-07-31)
+**Status**: 🚧 built (2026-07-31) — branch `prd-35-hero-photo-picker`, awaiting review + the live walk
 **Parallel-safe with**: 36, 37, and most feature PRDs (touches the property detail page + gallery + one action; no schema, no intake surface).
 
 ---
@@ -71,6 +71,35 @@ src/lib/properties.ts                             # (read path already correct �
 ```
 
 No migration. Confirm at build time that the PRD-27 trigger covers `hero_image_path`; if it somehow doesn't, one additive migration extends the guard.
+
+## Implementation (2026-07-31)
+
+Built on branch `prd-35-hero-photo-picker` in a dedicated worktree (`../family-website-prd35`) — PRD 36 was being built concurrently in the primary tree, so the two were separated to keep the diffs reviewable. No migration: the PRD-27 trigger (`guard_property_privileged_columns`) was confirmed to already cover `hero_image_path`.
+
+**Key files**
+
+| File | What changed |
+|---|---|
+| `src/app/(app)/properties/[slug]/actions.ts` | New `setHeroPhoto(propertyId, storagePath \| null)`. `canManageProperty()` gate → `storagePath` must match a photo with this `property_id` (null allowed, that's the clear) → update `hero_image_path` + `updated_by` → `recordRevision` → revalidate slug + `/properties`. |
+| `src/app/(app)/properties/[slug]/set-hero-button.tsx` (new) | Client control, `inline` and `overlay` variants, `useTransition` + toast + `router.refresh()`. |
+| `src/app/(app)/properties/[slug]/page.tsx` | Selects `hero_image_path`; hero = explicit path matched against the signed photos, else `signedPhotos[0]`. `restPhotos` filters by the resolved hero's id (not `slice(1)`). Admin-only "Use Newest Photo" overlay when the hero is explicit, plus a one-line status caption. |
+| `src/app/(app)/properties/[slug]/property-gallery.tsx` | Takes `propertyId`; renders "Make This the Hero" beside Remove for `canManage`. |
+| `src/app/(app)/photos/actions.ts` | `deletePhoto` nulls a matching `hero_image_path` after the row delete. |
+| `src/lib/properties.ts` | Listing cards ignore a `hero_image_path` that no longer matches a live photo. |
+
+**Decisions made during the build**
+
+- **Hero-delete clearing is admin-gated.** The column write is blocked by the PRD-27 trigger for anyone who isn't a property/site admin, but `deletePhoto` is reachable by any photo's uploader. Attempting the clear unconditionally would make an ordinary member's own-photo delete throw a 42501. So the clear runs only when `canManageProperty()` passes; the read-side fallback (explicit path → newest) covers the member case and the racy ones. The dangling pointer is therefore possible by design, and harmless.
+- **The update is scoped `.eq("hero_image_path", photo.storage_path)`** so a concurrent hero change isn't clobbered by a delete of the *old* hero.
+- **Listing hardening was added even though the PRD said "read path already correct".** It wasn't, for the dangling case: `loadPropertyCards` would sign a URL for a deleted object and render a broken card. One `Set` of live paths in the existing photo query, no extra round-trip.
+- **`restPhotos` by id, not index** — with an explicit hero the newest photo has to stay in the gallery.
+
+**Verification** — `tsc`, `eslint`, and `npm run build` green in the worktree. Recipe steps 1-6 (set / clear / delete-the-hero / dangling / non-admin / guest) are **not** yet walked live; that plus the prod Loon-A-See walk is the review gate.
+
+**Follow-ups**
+
+- Reordering the gallery is still unbuilt (deliberately out of scope) — if Dad asks for it, it's a separate PRD, not an extension of this one.
+- The status caption under the hero is admin-only text. If PRD 36 rewrites the hero block, keep the caption or fold it into whatever replaces it.
 
 ## Reviewer sign-off (I check these)
 

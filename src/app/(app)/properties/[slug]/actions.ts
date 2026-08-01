@@ -28,6 +28,80 @@ function readText(formData: FormData, key: string): string | null {
   return t.length ? t : null;
 }
 
+export type SetHeroPhotoResult = { ok: true } | { ok: false; message: string };
+
+/**
+ * Choose which photo is a property's face (PRD 35). Stores the photo's
+ * storage_path in `properties.hero_image_path` — the same format the listing
+ * cards already read (`src/lib/properties.ts`). Passing `null` clears the
+ * choice and returns the property to newest-photo behavior.
+ *
+ * Authorization is belt-and-braces: `canManageProperty()` here, and the
+ * PRD-27 `properties_guard_privileged_columns` trigger behind it (which
+ * rejects hero_image_path writes from anyone but a property/site admin).
+ */
+export async function setHeroPhoto(
+  propertyId: string,
+  storagePath: string | null,
+): Promise<SetHeroPhotoResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { ok: false, message: "Not signed in" };
+  }
+
+  const { ok: canManage } = await canManageProperty(propertyId);
+  if (!canManage) {
+    return { ok: false, message: "Only property admins can choose the hero photo." };
+  }
+
+  const { data: current, error: currentErr } = await supabase
+    .from("properties")
+    .select("slug, hero_image_path")
+    .eq("id", propertyId)
+    .single();
+  if (currentErr || !current) {
+    return { ok: false, message: "Property not found" };
+  }
+
+  // Never write an arbitrary storage path into the column — it has to be a
+  // photo that actually belongs to this property.
+  if (storagePath !== null) {
+    const { data: photo } = await supabase
+      .from("photos")
+      .select("id")
+      .eq("property_id", propertyId)
+      .eq("storage_path", storagePath)
+      .maybeSingle();
+    if (!photo) {
+      return { ok: false, message: "That photo isn't on this property." };
+    }
+  }
+
+  const { error: updateErr } = await supabase
+    .from("properties")
+    .update({ hero_image_path: storagePath, updated_by: user.id })
+    .eq("id", propertyId);
+  if (updateErr) {
+    return { ok: false, message: updateErr.message };
+  }
+
+  await recordRevision({
+    entityType: "property",
+    entityId: propertyId,
+    changedBy: user.id,
+    before: { hero_image_path: current.hero_image_path ?? null },
+    after: { hero_image_path: storagePath },
+  });
+
+  revalidatePath(`/properties/${current.slug}`);
+  revalidatePath("/properties");
+  return { ok: true };
+}
+
 export async function updateProperty(
   propertyId: string,
   _prev: PropertyFormState,
