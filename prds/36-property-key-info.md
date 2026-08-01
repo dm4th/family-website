@@ -163,12 +163,17 @@ sits next to 36's contact split. 35's explicit-hero-else-newest logic and
   file". New how-to hint copy confirmed live. Guard trigger read from prod:
   wifi columns absent from `guard_property_privileged_columns` (structurally
   member-editable, as designed).
-- ⏳ **Wi-Fi panel + QR: verified at PRD 37's first real run, by design.** Dan's
-  call: the Wi-Fi fields' first data comes from the extractor parsing Dad's
-  existing "How things work here" blob and proposing the value for approval —
-  nobody hand-types the password, including the reviewer (password entry into
-  fields is outside the reviewer's operating rules anyway). The QR phone-scan
-  check happens at that same moment.
+- ✅ **Wi-Fi panel verified live (2026-08-01)** with owner-entered test data
+  ("Test WiFi" / "atest"; one property revision with both before/after values).
+  Panel renders between Emergencies and On the Ground: network + password in
+  mono, Copy Password announced "Password copied." through the live region, QR
+  on its white card with the join caption. **QR payload proven, not assumed**:
+  the dark-module path of the page's inline SVG is byte-identical to one
+  generated locally from `WIFI:T:WPA;S:Test WiFi;P:atest;;` with the same
+  library and options — the code encodes exactly the stored values. In
+  production use the fields are filled by the PRD-37 extractor proposing values
+  from Dad's existing blob (Dan's call: nobody hand-types the password); the
+  real-phone camera-join check happens then, with the real SSID.
 - Guest view: inspection-only (RLS select policies unchanged; wifi columns
   covered by the existing property policy; guests still have no write path).
   `supabase/tests/prd36-property-key-info.sql` remains available but its
