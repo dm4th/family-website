@@ -1,5 +1,6 @@
 /**
- * The family branches — the three Gen-1 siblings. Stored on
+ * The family branches — the three Gen-2 siblings (Bibi and Drew's children,
+ * under the top-anchored numbering adopted 2026-08-01). Stored on
  * profiles.family_branch as free text historically; the format here
  * ("<Name>'s Family") matches the seeded `people` / `profiles` rows so a
  * dropdown selection reconciles with existing data (PRD 13, slice 2).

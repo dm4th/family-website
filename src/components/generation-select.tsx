@@ -3,7 +3,11 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { GENERATIONS, generationLabel } from "@/lib/generations";
+import {
+  GENERATIONS,
+  generationAnchor,
+  generationLabel,
+} from "@/lib/generations";
 
 /**
  * Generation picker (PRD 13, slice 13-R2). A native <select> like
@@ -50,11 +54,14 @@ export function GenerationSelect({
       )}
     >
       <option value="">Select your generation…</option>
-      {GENERATIONS.map((g) => (
-        <option key={g} value={g}>
-          {generationLabel(g)}
-        </option>
-      ))}
+      {GENERATIONS.map((g) => {
+        const anchor = generationAnchor(g);
+        return (
+          <option key={g} value={g}>
+            {anchor ? `${generationLabel(g)} · ${anchor}` : generationLabel(g)}
+          </option>
+        );
+      })}
       {current && !isKnown && (
         <option value={current}>{generationLabel(Number(current))}</option>
       )}

@@ -7,9 +7,11 @@
  * the directory, the edit form had its own hint, and admin rendered "Gen N"
  * ad-hoc.
  *
- * Numbering is the family's own scheme: 1 = the founding siblings, then each
- * descending generation. Kept as a constant because there are a handful today;
- * if the family outgrows it, widen GENERATIONS here and every consumer follows.
+ * Numbering is the family's own scheme, anchored at the top of the tree
+ * (Dad's call, 2026-08-01): 1 = Bibi (Helen) and Drew, 2 = their children and
+ * spouses (Peter, Peggy, and Andy), 3 = grandchildren and spouses, and so on
+ * down. Kept as a constant because there are a handful today; if the family
+ * outgrows it, widen GENERATIONS here and every consumer follows.
  */
 export const GENERATIONS = [1, 2, 3, 4, 5] as const;
 
@@ -35,12 +37,31 @@ export function generationShort(generation: number): string {
   return `Gen ${generation}`;
 }
 
+/**
+ * Who each generation is, in the family's own words. Rendered inside the
+ * generation picker so nobody has to guess a number, and available anywhere
+ * else a reminder helps. First names in code match the precedent set by
+ * FAMILY_BRANCHES.
+ */
+const GENERATION_ANCHOR: Record<number, string> = {
+  1: "Bibi and Drew",
+  2: "Their children and spouses",
+  3: "Grandchildren and spouses",
+  4: "Great-grandchildren",
+  5: "Great-great-grandchildren",
+};
+
+/** "Bibi and Drew"-style anchor for a generation, or null past the known set. */
+export function generationAnchor(generation: number): string | null {
+  return GENERATION_ANCHOR[generation] ?? null;
+}
+
 /** Shown in the directory when a member has no generation set. */
 export const GENERATION_UNSET_LABEL = "Generation Not Set";
 
 /** Hint shown under the generation control on the welcome + edit forms. */
 export const GENERATION_HINT =
-  "1 = siblings, 2 = grandchildren + spouses, 3 = great-grandchildren.";
+  "Count down from the top of the tree: Bibi and Drew are 1, their children and spouses (Peter, Peggy, and Andy) are 2, grandchildren are 3, great-grandchildren are 4.";
 
 /**
  * Validate a raw form value for `generation`. Returns the parsed integer, or
