@@ -65,13 +65,14 @@ The seven open questions from PRD 07's grid, now with concrete recommendations �
 |---|---|---|
 | **Docs at rest** | Supabase Storage, private `trust` bucket, default-deny RLS | See comparison above. Revisit S3+KMS only on lawyer's demand. |
 | **App-layer envelope encryption** (encrypt objects with a server-held key before upload) | ✅ **Decided 2026-08-30: defer, keep the door open** | Protects against a Supabase-storage-layer breach or a misconfigured policy, at the cost of losing signed URLs (all bytes proxy through our server) and a key-management burden. Store objects under a per-document path scheme that doesn't leak names (UUID paths, real names only in the DB row) so this can be added later without re-uploading. Put the question to the lawyer explicitly. |
-| **LLM + data terms** | ✅ **Decided 2026-08-30: standard commercial terms now** (no training on API data); pursue **zero-data-retention** in writing only if the lawyer asks | Already the vendor (`ANTHROPIC_API_KEY` in Vercel since PRD 32). No new vendor surface. |
+| **LLM + data terms** | ✅ **Decided 2026-08-30: standard commercial terms, full stop** (no training on API data) | Dan's call: the lawyer conversation will never demand ZDR — dropped from the open list entirely. Already the vendor (`ANTHROPIC_API_KEY` in Vercel since PRD 32). No new vendor surface. |
 | **Who reads a document** | Explicit `trust_document_access` grant only — members included | The one place on the site where family membership grants nothing by default. |
 | **Who manages** (upload, grant, approve) | ✅ **Decided 2026-08-30: Dad + Dan** | Not `is_admin()`. Managers implicitly read everything; every grant change is audited. |
 | **Adviser + accountant accounts** | Existing `guest` role + grants, invited via the PRD 24/39 invite flow | No fourth role. Needs the guest-route allowlist widened for `/advisory/*`. |
 | **Who approves scans** | ✅ **Decided 2026-08-30: any trust manager, uploader included** | Two-person approval (uploader ≠ approver) was considered and declined at N=2 managers — it would make Dad wait on Dan for every page. Flip later by policy, not schema, if the lawyer wants it. |
 | **Audit requirements** | `trust_document_events`, append-only, manager-readable; every read logged | Sign-off question for the lawyer: any retention minimum for the log itself? |
 | **Dropbox originals** | ✅ **Decided 2026-08-30 (Dan): keep Dropbox as a frozen cold backup** | The vault becomes the working copy; nothing new goes to Dropbox. The container stays untouched as a second copy. Note: Dad has said he wants out of Dropbox entirely — worth confirming with him that "frozen backup" (vs. delete-after-verification) matches his intent; deleting later is a one-way door he can take any time. |
+| **Taxonomy** | ✅ **Decided 2026-08-30: inferred, not predefined.** Documents upload uncategorized; once the corpus is in, an AI pass **proposes** a taxonomy + per-document assignments, and a manager approves/edits before anything is applied | Kills the "taxonomy conversation with Dad" blocker — the documents themselves answer it. Categories are **data (`trust_categories` rows), never a hard-coded enum**, because Dan wants this see-the-corpus-first, human-approved-taxonomy pattern reusable for any future family built on this infrastructure. Same posture as everything else: AI proposes, a manager confirms, audited. |
 | **Vector DB / embeddings** | **Deferred to PRD 07** — pgvector in Supabase, over the same `trust_document_pages` text this PRD extracts | Nothing in this PRD blocks on it. |
 | **"Not legal advice" disclaimer** | Deferred to PRD 07 (no Q&A surface ships here) | Lawyer wording sign-off still required before 07. |
 
@@ -86,9 +87,10 @@ Dad's real workflow is **desktop drag-and-drop out of the Dropbox folder**. The 
 
 ## Build slices (each its own session/branch, in order)
 
-1. **Slice 1 — the vault.** Migration: `trust` bucket + `trust_documents` (id, name, storage_path, category, version, `replaces_id`, uploaded_by, timestamps) + `trust_managers` + `is_trust_manager()` + `trust_document_access` + `trust_document_events`, RLS on everything, default deny. `/advisory/documents`: manager upload (reusing the direct-to-Storage pattern), document list filtered by grant, per-document grant management, audited signed-URL open. Page-level text extraction on upload → `trust_document_pages`. Negative suite before anything real is uploaded: ungranted member, granted guest, revoked guest, deactivated account, direct-URL probing.
-2. **Slice 2 — notebook intake.** Scan upload + `trust_note` OCR intent + handwriting eval + the approve/deny review window + `trust_annotations`. Depends on slice 1's pages table for mapping proposals.
-3. **Then PRD 07 unblocks** — embeddings + retrieval + the chat/agent surface, over this vault, through the same RLS-as-the-user posture.
+1. **Slice 1 — the vault.** Migration: `trust` bucket + `trust_documents` (id, name, storage_path, `category_id` **nullable FK → `trust_categories`** — empty at first, filled by the slice-2 taxonomy pass, never an enum, version, `replaces_id`, uploaded_by, timestamps) + `trust_categories` + `trust_managers` + `is_trust_manager()` + `trust_document_access` + `trust_document_events`, RLS on everything, default deny. `/advisory/documents`: manager upload built around the **two-drop-zone drag-and-drop surface** (see UI requirements), document list filtered by grant (uncategorized at this stage — sorted by name/date), per-document grant management, audited signed-URL open. Page-level text extraction on upload → `trust_document_pages`. Negative suite before anything real is uploaded: ungranted member, granted guest, revoked guest, deactivated account, direct-URL probing.
+2. **Slice 2 — inferred taxonomy.** Once the corpus is in: a manager-only "Propose an Organization" action reads document names + first-page text and proposes `trust_categories` + per-document assignments; a review screen approves/edits/denies before anything is applied; approved categories group the document list. Audited. Small slice, but it's the reusable multi-family pattern, so it gets its own review.
+3. **Slice 3 — notebook intake.** Scan upload + `trust_note` OCR intent + handwriting eval + the approve/deny review window + `trust_annotations`. Depends on slice 1's pages table for mapping proposals.
+4. **Then PRD 07 unblocks** — embeddings + retrieval + the chat/agent surface, over this vault, through the same RLS-as-the-user posture.
 
 **Migration order note:** Dad's real documents go in only after slice 1's negative suite has passed on prod — the same discipline as PRD 24 ("nothing shared with family until this ships + is live-tested").
 
@@ -128,6 +130,7 @@ evals/trust-note/                     # handwriting OCR eval (required before sl
 
 ## Open follow-ups
 
-- Lawyer conversation: envelope encryption, zero-data-retention terms, audit-log retention, disclaimer wording (before 07).
-- Trust-doc taxonomy conversation with Dad (master-plan open decision) — feeds `category` values and the document list's grouping; doesn't block slice 1.
+- Lawyer conversation: envelope encryption, audit-log retention, disclaimer wording (before 07). *(ZDR dropped 2026-08-30 — Dan's call that it will never be required.)*
+- ~~Trust-doc taxonomy conversation with Dad~~ — resolved by the inferred-taxonomy decision above (slice 2); no conversation needed, the corpus + an approval pass answers it.
+- Confirm with Dad that "Dropbox as frozen cold backup" matches his intent (he originally wanted out entirely; deleting later stays a one-way door he can take any time).
 - PRD 08 remains gated on its own scoping conversation (what financial data belongs in-app at all).

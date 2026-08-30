@@ -101,9 +101,9 @@ Small, scoped fixes from [docs/testing-playbook-round-2.md](../docs/testing-play
 
 These need a real conversation (not just a one-person call) before the gated PRDs can start:
 
-- **Trust-doc security model** — gates 07 + 08. **Recommendation drafted 2026-08-30 in [40 — Trust Document Vault](40-trust-document-vault.md)** (Supabase private bucket + default-deny grants + audit log + agent-through-RLS; full decision grid there). Needs Dan + Dad (and ideally lawyer) sign-off; the remaining open items are envelope encryption, zero-data-retention terms, and audit-log retention.
+- **Trust-doc security model** — gates 07 + 08. **Decided 2026-08-30 — grid signed off by Dan in [40 — Trust Document Vault](40-trust-document-vault.md)** (Supabase private bucket + default-deny grants + audit log + agent-through-RLS; managers = Dad + Dan; standard Anthropic terms, ZDR explicitly dropped; envelope encryption deferred). Only lawyer follow-ups remain (encryption revisit, audit-log retention, 07's disclaimer wording) and none block the build.
 - **Property access scoping** — should some properties be hidden from some family branches, or is it open-by-default forever? Currently open. _Partially addressed_: [15 — Guest Access](15-guest-access.md) delivers per-property scoping **for guests** (via a `property_guests` grant). Member-to-family-branch scoping remains open and out of scope for 15.
-- **Trust-doc taxonomy** — needs a conversation with Dan's dad about how the trust docs are actually organized today. Required before 07.
+- **Trust-doc taxonomy** — ✅ resolved 2026-08-30 without the conversation: [40](40-trust-document-vault.md) slice 2 **infers** the taxonomy from the uploaded corpus (AI proposes categories + assignments, a manager approves before anything is applied; categories are data, not an enum). Dan wants this see-the-documents-first pattern reusable for any future family built on this infrastructure.
 - **Financial data surface** — what numbers belong in-app vs. in your existing family-office tools? Required before 08.
 
 ## Foundation that's already built (use these — don't reinvent)
