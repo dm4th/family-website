@@ -125,7 +125,7 @@ evals/trust-note/                     # handwriting OCR eval (required before sl
 1. Manager uploads a PDF → document row + pages rows + `uploaded` event; opens it → `viewed` event, signed URL expires on schedule.
 2. Member **without** a grant: `/advisory/documents` shows nothing; direct storage-path and signed-URL-guess probes fail; RLS does the work, not the page.
 3. Guest (adviser stand-in) **with** a grant: sees exactly the granted documents, nothing else on the site changes for them; revoke the grant → gone on next load, `grant revoked` event recorded.
-4. Audit log: every step above visible to a manager, in order; `update`/`delete` on `trust_document_events` fails for every role at the SQL level.
+4. Audit log: every step above visible to a manager, in order; `update`/`delete` on `trust_document_events` fails for every role at the SQL level. **Forgery check** (added after the 2026-08-30 security review): as the granted guest, a direct insert of a `grant_revoked` / `manager_added` / `document_deleted` event fails, a `viewed` event naming a non-granted document fails, and a `viewed` event on their granted document succeeds.
 5. Deactivated-member check (PRD 26 restrictive policy) covers the new tables — verify, don't assume.
 
 ## Implementation (slice 1 — built 2026-08-30)

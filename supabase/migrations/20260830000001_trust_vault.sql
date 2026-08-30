@@ -342,18 +342,37 @@ create index if not exists trust_document_events_created_idx
 
 alter table public.trust_document_events enable row level security;
 
+-- Who may write WHAT is pinned per event kind, not just per standing: an
+-- append-only log is only as good as what it accepts, and a grantee (the
+-- outside adviser is exactly this) must not be able to fabricate permanent
+-- governance entries ("grant_revoked", "manager_added") or reference
+-- documents they hold no grant on. A non-manager can record precisely one
+-- thing: that they viewed a document they are actually granted — the only
+-- event the app ever writes for them.
 create policy "trust_document_events: involved insert as self"
   on public.trust_document_events for insert
   to authenticated
   with check (
     actor_id = (select auth.uid())
     and (
-      public.is_trust_manager()
-      or public.is_admin()
-      or exists (
-        select 1
-          from public.trust_document_access a
-         where a.profile_id = (select auth.uid())
+      (
+        public.is_trust_manager()
+        and event in
+          ('uploaded', 'viewed', 'grant_added', 'grant_revoked', 'document_deleted')
+      )
+      or (
+        (public.is_trust_manager() or public.is_admin())
+        and event in ('manager_added', 'manager_removed')
+      )
+      or (
+        event = 'viewed'
+        and document_id is not null
+        and exists (
+          select 1
+            from public.trust_document_access a
+           where a.document_id = trust_document_events.document_id
+             and a.profile_id = (select auth.uid())
+        )
       )
     )
   );
