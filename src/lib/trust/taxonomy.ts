@@ -265,7 +265,12 @@ export async function proposeTrustTaxonomy(opts: {
   try {
     const response = await client.messages.create({
       model,
-      max_tokens: 6000,
+      // Sonnet 5 runs adaptive thinking when `thinking` is omitted, and
+      // thinking tokens count against max_tokens — so this ceiling covers
+      // reasoning + the JSON, not the JSON alone. 16000 keeps a large real
+      // register out of truncation range while staying under the SDK's
+      // non-streaming timeout guidance (PR #53 review).
+      max_tokens: 16000,
       output_config: {
         format: { type: "json_schema", schema: TAXONOMY_JSON_SCHEMA },
       },
@@ -284,6 +289,19 @@ export async function proposeTrustTaxonomy(opts: {
 
     if (response.stop_reason === "refusal") {
       return { ok: false, message: "We couldn't organize these documents. Please try again." };
+    }
+    // A truncated response is not retryable — the register simply outgrew the
+    // output ceiling — so say that honestly instead of letting the JSON parse
+    // fail into a generic "try again" a retry will never fix.
+    if (response.stop_reason === "max_tokens") {
+      console.error(
+        `[trust] taxonomy proposal truncated at max_tokens (${opts.documents.length} docs)`,
+      );
+      return {
+        ok: false,
+        message:
+          "The register has grown past what the organizer can handle in one pass. This needs a settings change rather than a retry.",
+      };
     }
     const textBlock = response.content.find((b) => b.type === "text");
     if (!textBlock || textBlock.type !== "text") {

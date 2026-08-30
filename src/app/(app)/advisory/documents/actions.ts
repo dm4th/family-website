@@ -720,6 +720,25 @@ export async function applyTrustTaxonomy(
     };
   }
 
+  // Removed categories go FIRST (PR #53 review): trust_categories.name is
+  // unique, so a manager who removes a category and recreates one with the
+  // same name (or renames a kept category onto a removed one's name) would
+  // otherwise collide with the not-yet-deleted row, and every retry would
+  // replay the same failure. Deleting up front is safe: the FK is SET NULL,
+  // and every affected document is re-pointed or explicitly cleared below.
+  // (A pure A<->B name swap between two KEPT categories can still collide —
+  // rare enough to accept; the error message names the duplicate.)
+  if (removedCategoryIds.length > 0) {
+    const { error } = await supabase
+      .from("trust_categories")
+      .delete()
+      .in("id", removedCategoryIds);
+    if (error) {
+      console.error("[trust] taxonomy: category removal failed", error);
+      return { ok: false, message: "We couldn't apply the organization. Please try again." };
+    }
+  }
+
   for (let i = 0; i < categories.length; i++) {
     const c = categories[i]!;
     let categoryId = c.existingCategoryId;
@@ -767,19 +786,6 @@ export async function applyTrustTaxonomy(
       .in("id", uncategorized);
     if (error) {
       console.error("[trust] taxonomy: clearing failed", error);
-      return { ok: false, message: "We couldn't apply the organization. Please try again." };
-    }
-  }
-
-  if (removedCategoryIds.length > 0) {
-    // Documents pointing at these were re-pointed or cleared above; the FK is
-    // SET NULL regardless, so this can't strand an assignment.
-    const { error } = await supabase
-      .from("trust_categories")
-      .delete()
-      .in("id", removedCategoryIds);
-    if (error) {
-      console.error("[trust] taxonomy: category removal failed", error);
       return { ok: false, message: "We couldn't apply the organization. Please try again." };
     }
   }

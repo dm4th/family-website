@@ -45,5 +45,11 @@ intake convention.
 
 ## Results
 
-_None recorded yet — the eval was authored in the slice 2 build session,
-which had no API key. Run it before the first real Organize press._
+**2026-08-30 — GATE: PASS** (reviewer-run, Sonnet 5 default model, against the
+shipped wrapper). 3 paired first-run + re-run calls: **0 hard failures, 0
+theme misses**. Every clean-corpus run produced 4–5 sane categories with
+every document accounted for; every re-run extended the approved structure
+with no drops, renames, or reshuffles (0 moves in all 3). Both deliberately
+awkward documents landed somewhere defensible each time. ~17K in / ~7K out
+tokens total. Full record: the reviewer pass comment on
+[PR #53](https://github.com/dm4th/family-website/pull/53).
