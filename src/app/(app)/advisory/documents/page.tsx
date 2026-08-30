@@ -98,6 +98,12 @@ function eventTitle(event: EventRow, docNames: Map<string, string>): string {
         ? `Organized the register into ${n} ${n === 1 ? "category" : "categories"}`
         : "Organized the register";
     }
+    case "scan_read":
+      return `Read the notebook page ${d("name") ?? docName}`;
+    case "annotation_approved":
+      return `Approved a point from ${d("scanName") ?? docName}`;
+    case "annotation_denied":
+      return `Set aside a point from ${d("scanName") ?? docName}`;
   }
 }
 
@@ -343,8 +349,20 @@ export default async function TrustDocumentsPage() {
                 <PanelTitle>Notebook Pages</PanelTitle>
                 <PanelDescription>
                   Photographed pages from the handwritten notebook, stored
-                  safely. Reading them and matching them to the documents is
-                  the next piece to arrive.
+                  safely.
+                  {viewer.isTrustManager && (
+                    <>
+                      {" "}
+                      Read and review them in{" "}
+                      <Link
+                        href="/advisory/notebook"
+                        className="text-accent-advisory underline-offset-4 hover:underline"
+                      >
+                        the Notebook
+                      </Link>
+                      .
+                    </>
+                  )}
                 </PanelDescription>
               </PanelHeader>
               <PanelBody>
