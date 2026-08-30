@@ -115,14 +115,21 @@ export const NAV_GROUPS: NavGroupDef[] = [
   },
   {
     // Advisory is the financial-stewardship zone — trust documents and finances.
-    // None of it is built yet, so this group holds only `soon` items: it never
-    // renders a top-nav trigger, and shows as muted "Soon" rows on the homepage
-    // door. Admin + Feedback are NOT advisory (they're account utilities) and
-    // live in the user menu, not here.
+    // Trust Documents (PRD 40) is its first built page: it renders for every
+    // member because the page itself explains the by-name access model (and
+    // RLS shows a non-granted member nothing) — hiding it would make the vault
+    // undiscoverable to the very people meant to ask about it. Admin +
+    // Feedback are NOT advisory (they're account utilities) and live in the
+    // user menu, not here.
     mode: "advisory",
     label: "Advisory",
     blurb: "Governance, trust, and finances. The family's stewardship desk.",
     items: [
+      {
+        label: "Trust Documents",
+        href: "/advisory/documents",
+        description: "The trust's papers, shared by name",
+      },
       {
         label: "Documents & AI",
         href: "/coming-soon/documents",
