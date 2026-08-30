@@ -1,7 +1,7 @@
 # 40 — Trust Document Vault & Security Foundation
 
 **Phase**: 3 (Advisory) · **Depends on**: nothing to build; **unblocks** [07 — Trust-doc RAG](07-trust-doc-rag.md) and (partially) [08 — Financial dashboard](08-financial-dashboard.md)
-**Status**: 🟡 recommendation drafted (2026-08-30) — the decision grid below needs sign-off from Dan + Dad (and ideally the family lawyer) before the build slices start. This PRD **is** the "trust-doc security model" conversation the master plan has been gating on.
+**Status**: 🚧 grid signed off by Dan 2026-08-30 · **slice 1 (the vault) built same day — migration NOT yet applied to prod, negative suite NOT yet run**. Slices 2 (inferred taxonomy) and 3 (notebook intake) not started. See Implementation below.
 **Parallel-safe with**: most feature PRDs (new bucket, new tables, new `/advisory` routes; touches no existing surface except nav).
 
 ---
@@ -127,6 +127,34 @@ evals/trust-note/                     # handwriting OCR eval (required before sl
 3. Guest (adviser stand-in) **with** a grant: sees exactly the granted documents, nothing else on the site changes for them; revoke the grant → gone on next load, `grant revoked` event recorded.
 4. Audit log: every step above visible to a manager, in order; `update`/`delete` on `trust_document_events` fails for every role at the SQL level.
 5. Deactivated-member check (PRD 26 restrictive policy) covers the new tables — verify, don't assume.
+
+## Implementation (slice 1 — built 2026-08-30)
+
+**Key files**
+
+- `supabase/migrations/20260830000001_trust_vault.sql` — the whole security model: private `trust` bucket; `trust_managers` + `is_trust_manager()` (roster writes are `is_admin()` — the bootstrap has to live somewhere, and roster changes are audited); `trust_categories` (empty until slice 2); `trust_documents` (kind `document`/`scan`, `category_id` nullable FK, `uploaded_by` SET NULL so a departed uploader never takes documents with them); `trust_document_access`; `trust_document_pages`; `trust_document_events` (insert + select policies only — append-only at the SQL level); storage policies incl. `can_read_trust_object()` definer fn; PRD-26-style active-only restrictive policies on every new table **and** the trust bucket.
+- `src/lib/trust/` — `shared.ts` (browser-safe constants, UUID path scheme per the envelope-encryption door), `auth.ts` (`resolveTrustViewer`), `audit.ts` (`recordTrustEvent`, the one event write path), `pages.ts` (`extractPdfPages` via `unpdf` — new dependency, serverless pdf.js, no network egress).
+- `src/app/(app)/advisory/documents/` — `page.tsx` (Advisory/briefing mode; register + notebook + roster + activity digest; RLS shapes every query), `actions.ts` (register / open / grant / revoke / delete / roster), `trust-upload.tsx` (the two drop zones), `document-controls.tsx`, `manager-roster.tsx`.
+- `nav-config.ts` — Trust Documents is Advisory's first built page (visible to members; the page explains by-name access and RLS shows non-granted members nothing). `src/lib/supabase/middleware.ts` — `/advisory` added to the guest allowlist (RLS is the guarantee, per that file's standing posture).
+
+**Decisions made during build**
+
+- **Audit-or-abort on writes**: an upload that can't write its `uploaded` event is rolled back (row + object); an open that can't write `viewed` doesn't mint the URL; deletion logs *before* removing (over-log beats under-log). Reads of the log stay manager-only.
+- **Open TTL is 5 minutes** (vs. intake's 30): every open is a deliberate, audited act; re-opening costs one click and one more audit row.
+- Files route by what they *are*: an image dropped on the Documents zone is filed as a notebook page and the per-file result says so — no wrong-box errors for Dad.
+- Scan images go through the existing PRD-17 browser downscale (HEIC → JPEG when decodable), which also feeds slice 3's OCR a readable format. PDFs upload as-is, direct to Storage (PRD 05 body-limit lesson).
+- Page text extraction is best-effort at register time; image-only PDFs store empty page rows ("exists but unread" — exactly what slice 3 needs to know).
+
+**Verified**: `tsc`, `eslint`, `next build` green; route `/advisory/documents` builds.
+
+**NOT yet done (owner + reviewer steps, in order)**
+
+1. `supabase db push` — apply the migration to prod (Dan).
+2. Seat the managers: Dan (admin) adds Dad + himself on the page's roster panel.
+3. **Run the verification recipe / negative suite below on prod** — before any real document is uploaded.
+4. First real use: Dad drags the Dropbox folder in.
+
+**Follow-up spotted during build**: tables shipped after PRD 26 (`intake_documents`, `property_reminders`, intake bucket) never got the active-only restrictive policies; queued as its own task.
 
 ## Open follow-ups
 

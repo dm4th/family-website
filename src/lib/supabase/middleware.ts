@@ -102,6 +102,11 @@ function isGuestAllowedPath(pathname: string): boolean {
     pathname.startsWith("/properties/") ||
     pathname === "/profile" ||
     pathname.startsWith("/profile/") ||
+    // Advisory (PRD 40): the trust's adviser and accountant are guest-role
+    // accounts holding per-document grants. Same posture as the properties
+    // prefix — RLS + the page's default-deny access model do the real work,
+    // so an ungranted guest who navigates here sees an empty shell, not data.
+    pathname.startsWith("/advisory") ||
     pathname.startsWith("/sign-out")
   );
 }

@@ -902,3 +902,160 @@ export const propertyReminders = pgTable(
 
 export type PropertyReminder = typeof propertyReminders.$inferSelect;
 export type NewPropertyReminder = typeof propertyReminders.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// Trust Document Vault (PRD 40, slice 1). The Advisory zone's document store:
+// default-deny with explicit per-(document, person) grants, a named manager
+// roster, and an append-only audit log. See the migration for the full
+// security rationale — these mirrors exist for TypeScript types only.
+// ----------------------------------------------------------------------------
+
+export const trustManagers = pgTable("trust_managers", {
+  profileId: uuid("profile_id")
+    .primaryKey()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  addedBy: uuid("added_by").references(() => authUsers.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type TrustManager = typeof trustManagers.$inferSelect;
+export type NewTrustManager = typeof trustManagers.$inferInsert;
+
+// Inferred taxonomy (decided 2026-08-30): categories are rows a manager
+// approves from an AI proposal over the uploaded corpus — never an enum.
+export const trustCategories = pgTable("trust_categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  position: integer("position").notNull().default(0),
+  createdBy: uuid("created_by").references(() => profiles.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type TrustCategory = typeof trustCategories.$inferSelect;
+export type NewTrustCategory = typeof trustCategories.$inferInsert;
+
+/** 'document' = digital original; 'scan' = photographed notebook page. */
+export type TrustDocumentKind = "document" | "scan";
+
+export const trustDocuments = pgTable(
+  "trust_documents",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    kind: text("kind").$type<TrustDocumentKind>().notNull(),
+    categoryId: uuid("category_id").references(() => trustCategories.id, {
+      onDelete: "set null",
+    }),
+    storagePath: text("storage_path").notNull().unique(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    version: integer("version").notNull().default(1),
+    // Self-reference typed loosely: Drizzle can't reference the table inside
+    // its own definition without an explicit AnyPgColumn cast; the SQL is
+    // authoritative anyway.
+    replacesId: uuid("replaces_id"),
+    // SET NULL, not CASCADE: a departed uploader never takes trust documents
+    // with them.
+    uploadedBy: uuid("uploaded_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trust_documents_category_idx").on(table.categoryId, table.createdAt),
+    index("trust_documents_kind_idx").on(table.kind, table.createdAt),
+  ],
+);
+
+export type TrustDocument = typeof trustDocuments.$inferSelect;
+export type NewTrustDocument = typeof trustDocuments.$inferInsert;
+
+export const trustDocumentAccess = pgTable(
+  "trust_document_access",
+  {
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => trustDocuments.id, { onDelete: "cascade" }),
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    grantedBy: uuid("granted_by").references(() => authUsers.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.documentId, table.profileId] }),
+    index("trust_document_access_profile_idx").on(table.profileId),
+  ],
+);
+
+export type TrustDocumentAccess = typeof trustDocumentAccess.$inferSelect;
+export type NewTrustDocumentAccess = typeof trustDocumentAccess.$inferInsert;
+
+export const trustDocumentPages = pgTable(
+  "trust_document_pages",
+  {
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => trustDocuments.id, { onDelete: "cascade" }),
+    pageNumber: integer("page_number").notNull(),
+    text: text("text").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.documentId, table.pageNumber] })],
+);
+
+export type TrustDocumentPage = typeof trustDocumentPages.$inferSelect;
+export type NewTrustDocumentPage = typeof trustDocumentPages.$inferInsert;
+
+export type TrustEventKind =
+  | "uploaded"
+  | "viewed"
+  | "grant_added"
+  | "grant_revoked"
+  | "document_deleted"
+  | "manager_added"
+  | "manager_removed";
+
+// Append-only at the SQL level: the table has insert + select policies and
+// deliberately NO update or delete policy for any role.
+export const trustDocumentEvents = pgTable(
+  "trust_document_events",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    documentId: uuid("document_id").references(() => trustDocuments.id, {
+      onDelete: "set null",
+    }),
+    actorId: uuid("actor_id").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    event: text("event").$type<TrustEventKind>().notNull(),
+    detail: jsonb("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trust_document_events_document_idx").on(
+      table.documentId,
+      table.createdAt,
+    ),
+    index("trust_document_events_created_idx").on(table.createdAt),
+  ],
+);
+
+export type TrustDocumentEvent = typeof trustDocumentEvents.$inferSelect;
+export type NewTrustDocumentEvent = typeof trustDocumentEvents.$inferInsert;
