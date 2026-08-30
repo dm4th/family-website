@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { format } from "date-fns";
+
+import { Button } from "@/components/ui/button";
 
 import {
   ActivityDigest,
@@ -37,7 +40,15 @@ type DocumentRow = {
   content_type: string;
   byte_size: number;
   uploaded_by: string | null;
+  category_id: string | null;
   created_at: string;
+};
+
+type CategoryRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  position: number;
 };
 
 type GrantRow = { document_id: string; profile_id: string };
@@ -81,6 +92,12 @@ function eventTitle(event: EventRow, docNames: Map<string, string>): string {
       return `Seated ${d("managerName") ?? "someone"} as a trust manager`;
     case "manager_removed":
       return `Removed ${d("managerName") ?? "someone"} as a trust manager`;
+    case "taxonomy_applied": {
+      const n = event.detail?.["categories"];
+      return typeof n === "number"
+        ? `Organized the register into ${n} ${n === 1 ? "category" : "categories"}`
+        : "Organized the register";
+    }
   }
 }
 
@@ -93,11 +110,18 @@ export default async function TrustDocumentsPage() {
   // RLS shapes every one of these to the viewer: a manager sees everything, a
   // grant holder sees their documents and their own grants, everyone else
   // sees empty sets. The page renders what comes back and nothing more.
-  const [{ data: documents }, { data: grants }, { data: managerRows }] =
+  const [
+    { data: documents },
+    { data: grants },
+    { data: managerRows },
+    { data: categoryRows },
+  ] =
     await Promise.all([
       supabase
         .from("trust_documents")
-        .select("id, name, kind, content_type, byte_size, uploaded_by, created_at")
+        .select(
+          "id, name, kind, content_type, byte_size, uploaded_by, category_id, created_at",
+        )
         .order("created_at", { ascending: false })
         .returns<DocumentRow[]>(),
       supabase
@@ -105,6 +129,11 @@ export default async function TrustDocumentsPage() {
         .select("document_id, profile_id")
         .returns<GrantRow[]>(),
       supabase.from("trust_managers").select("profile_id"),
+      supabase
+        .from("trust_categories")
+        .select("id, name, description, position")
+        .order("position")
+        .returns<CategoryRow[]>(),
     ]);
 
   const docs = documents ?? [];
@@ -151,6 +180,28 @@ export default async function TrustDocumentsPage() {
   const scans = docs.filter((d) => d.kind === "scan");
   const hasStanding = viewer.isTrustManager || docs.length > 0;
 
+  // The register, grouped by the approved taxonomy (PRD 40 slice 2). A viewer
+  // sees only categories that hold documents they can read; before any
+  // taxonomy is applied there is exactly one unnamed group and the register
+  // renders as the flat list it was in slice 1.
+  const categories = categoryRows ?? [];
+  const registerGroups = [
+    ...categories.map((c) => ({
+      key: c.id,
+      name: c.name,
+      description: c.description,
+      docs: originals.filter((d) => d.category_id === c.id),
+    })),
+    {
+      key: "uncategorized",
+      name: "Not Yet Categorized",
+      description: null as string | null,
+      docs: originals.filter(
+        (d) => !d.category_id || !categories.some((c) => c.id === d.category_id),
+      ),
+    },
+  ].filter((g) => g.docs.length > 0);
+
   return (
     // The (app) layout supplies the outer container + padding; Advisory pages
     // take a narrower measure inside it for the memo feel.
@@ -165,6 +216,13 @@ export default async function TrustDocumentsPage() {
             : hasStanding
               ? "The documents shared with you by the trust's managers. Every open is recorded."
               : "The trust's private document vault."
+        }
+        action={
+          viewer.isTrustManager && originals.length > 0 ? (
+            <Button asChild variant="outline">
+              <Link href="/advisory/documents/organize">Organize</Link>
+            </Button>
+          ) : undefined
         }
       />
 
@@ -206,8 +264,9 @@ export default async function TrustDocumentsPage() {
               <PanelTitle>Documents</PanelTitle>
               {viewer.isTrustManager && originals.length > 0 && (
                 <PanelDescription>
-                  Sorting these into categories comes next; for now the newest
-                  additions sit on top.
+                  {categories.length === 0
+                    ? "Once a few documents are in, Organize proposes categories for you to approve; until then the newest additions sit on top."
+                    : "Grouped by the organization you approved. Run Organize again any time to fit new additions in."}
                 </PanelDescription>
               )}
             </PanelHeader>
@@ -219,44 +278,60 @@ export default async function TrustDocumentsPage() {
                     : "No documents have been shared with you yet."}
                 </p>
               ) : (
-                <ul className="flex flex-col divide-y divide-border border-y border-border">
-                  {originals.map((doc) => (
-                    <li key={doc.id} className="flex flex-col gap-3 py-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="truncate text-base text-foreground">
-                            {doc.name}
-                          </span>
+                registerGroups.map((group) => (
+                  <section key={group.key} className="flex flex-col gap-2">
+                    {registerGroups.length > 1 && (
+                      <div className="flex items-baseline gap-3">
+                        <h3 className="eyebrow text-accent-advisory">
+                          {group.name}
+                        </h3>
+                        {group.description && (
                           <span className="text-xs text-foreground-subtle">
-                            Added {format(new Date(doc.created_at), "MMMM d, yyyy")}
-                            {doc.uploaded_by
-                              ? ` by ${nameOf.get(doc.uploaded_by) ?? "a manager"}`
-                              : ""}
-                            {" · "}
-                            {formatBytes(doc.byte_size)}
+                            {group.description}
                           </span>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <OpenDocumentButton documentId={doc.id} />
+                        )}
+                      </div>
+                    )}
+                    <ul className="flex flex-col divide-y divide-border border-y border-border">
+                      {group.docs.map((doc) => (
+                        <li key={doc.id} className="flex flex-col gap-3 py-4">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex min-w-0 flex-col gap-0.5">
+                              <span className="truncate text-base text-foreground">
+                                {doc.name}
+                              </span>
+                              <span className="text-xs text-foreground-subtle">
+                                Added {format(new Date(doc.created_at), "MMMM d, yyyy")}
+                                {doc.uploaded_by
+                                  ? ` by ${nameOf.get(doc.uploaded_by) ?? "a manager"}`
+                                  : ""}
+                                {" · "}
+                                {formatBytes(doc.byte_size)}
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              <OpenDocumentButton documentId={doc.id} />
+                              {viewer.isTrustManager && (
+                                <DeleteDocumentButton
+                                  documentId={doc.id}
+                                  documentName={doc.name}
+                                />
+                              )}
+                            </div>
+                          </div>
                           {viewer.isTrustManager && (
-                            <DeleteDocumentButton
+                            <ShareControls
                               documentId={doc.id}
                               documentName={doc.name}
+                              grants={grantsByDoc.get(doc.id) ?? []}
+                              people={people}
                             />
                           )}
-                        </div>
-                      </div>
-                      {viewer.isTrustManager && (
-                        <ShareControls
-                          documentId={doc.id}
-                          documentName={doc.name}
-                          grants={grantsByDoc.get(doc.id) ?? []}
-                          people={people}
-                        />
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))
               )}
             </PanelBody>
           </BriefingPanel>
