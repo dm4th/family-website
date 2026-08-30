@@ -73,66 +73,77 @@ export function TrustUpload() {
       setStatus({ phase: "uploading", current: i + 1, total: files.length });
       const file = files[i]!;
 
-      const kind = routeFile(file, droppedOn);
-      if (!kind) {
+      // One file's failure must never strand the rest of the batch (a network
+      // blip mid-drag of 40 PDFs would otherwise freeze the progress line and
+      // swallow every outcome — the silent partial batch the PRD forbids).
+      try {
+        const kind = routeFile(file, droppedOn);
+        if (!kind) {
+          outcomes.push({
+            name: file.name,
+            status: "failed",
+            message: "Only PDF files and photos can be added.",
+          });
+          continue;
+        }
+        if (file.size > MAX_TRUST_BYTES) {
+          outcomes.push({
+            name: file.name,
+            status: "failed",
+            message: `Larger than ${MAX_MB}MB.`,
+          });
+          continue;
+        }
+
+        // Notebook photos go through the same in-browser downscale as the
+        // photo pipeline (HEIC included, when decodable) — smaller stored
+        // objects and a format slice 3's OCR can actually read. PDFs upload
+        // as-is.
+        let blob: Blob = file;
+        let contentType = file.type;
+        let outputName = file.name;
+        if (kind === "scan" && file.type.startsWith("image/")) {
+          const prepared = await prepareImageForUpload(file);
+          blob = prepared.display;
+          contentType = prepared.contentType;
+          outputName = prepared.outputName;
+        }
+
+        const storagePath = generateTrustPath(kind, outputName);
+        const { error: uploadError } = await supabase.storage
+          .from(TRUST_BUCKET)
+          .upload(storagePath, blob, { contentType, upsert: false });
+        if (uploadError) {
+          outcomes.push({
+            name: file.name,
+            status: "failed",
+            message: uploadError.message,
+          });
+          continue;
+        }
+
+        const result = await registerTrustDocument({
+          storagePath,
+          name: file.name,
+          contentType,
+        });
+        if (!result.ok) {
+          outcomes.push({ name: file.name, status: "failed", message: result.message });
+          continue;
+        }
+
+        outcomes.push({
+          name: file.name,
+          status: "added",
+          rerouted: kind !== droppedOn ? kind : undefined,
+        });
+      } catch {
         outcomes.push({
           name: file.name,
           status: "failed",
-          message: "Only PDF files and photos can be added.",
+          message: "Something went wrong with this file. Please try it again.",
         });
-        continue;
       }
-      if (file.size > MAX_TRUST_BYTES) {
-        outcomes.push({
-          name: file.name,
-          status: "failed",
-          message: `Larger than ${MAX_MB}MB.`,
-        });
-        continue;
-      }
-
-      // Notebook photos go through the same in-browser downscale as the photo
-      // pipeline (HEIC included, when decodable) — smaller stored objects and
-      // a format slice 3's OCR can actually read. PDFs upload as-is.
-      let blob: Blob = file;
-      let contentType = file.type;
-      let outputName = file.name;
-      if (kind === "scan" && file.type.startsWith("image/")) {
-        const prepared = await prepareImageForUpload(file);
-        blob = prepared.display;
-        contentType = prepared.contentType;
-        outputName = prepared.outputName;
-      }
-
-      const storagePath = generateTrustPath(kind, outputName);
-      const { error: uploadError } = await supabase.storage
-        .from(TRUST_BUCKET)
-        .upload(storagePath, blob, { contentType, upsert: false });
-      if (uploadError) {
-        outcomes.push({
-          name: file.name,
-          status: "failed",
-          message: uploadError.message,
-        });
-        continue;
-      }
-
-      const result = await registerTrustDocument({
-        storagePath,
-        name: file.name,
-        contentType,
-        byteSize: blob.size,
-      });
-      if (!result.ok) {
-        outcomes.push({ name: file.name, status: "failed", message: result.message });
-        continue;
-      }
-
-      outcomes.push({
-        name: file.name,
-        status: "added",
-        rerouted: kind !== droppedOn ? kind : undefined,
-      });
     }
 
     setStatus({ phase: "done", outcomes });

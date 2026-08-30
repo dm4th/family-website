@@ -70,7 +70,6 @@ export async function registerTrustDocument(input: {
   storagePath: string;
   name: string;
   contentType: string;
-  byteSize: number;
 }): Promise<RegisterTrustDocumentResult> {
   const gate = await requireTrustManager();
   if (!gate.ok) return gate;
@@ -269,19 +268,19 @@ export async function grantTrustAccess(
   if (!doc) return { ok: false, message: "That document couldn't be found." };
   if (!person) return { ok: false, message: "That person couldn't be found." };
 
-  const { error } = await supabase.from("trust_document_access").insert({
-    document_id: documentId,
-    profile_id: profileId,
-    granted_by: gate.userId,
-  });
-  if (error) {
-    // Unique violation = already granted; treat as done rather than an error.
-    if (error.code === "23505") return { ok: true };
-    console.error("[trust] could not grant access", error);
-    return { ok: false, message: "We couldn't share that document. Please try again." };
-  }
+  // Already granted is done, not an error — and not a new audit row.
+  const { data: existing } = await supabase
+    .from("trust_document_access")
+    .select("document_id")
+    .eq("document_id", documentId)
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (existing) return { ok: true };
 
-  await recordTrustEvent({
+  // Audit-or-abort, log-first (the deleteTrustDocument pattern): an unaudited
+  // grant to an outside adviser is exactly the row this log exists to prevent,
+  // so if the event can't be written the access change doesn't happen.
+  const audited = await recordTrustEvent({
     event: "grant_added",
     actorId: gate.userId,
     documentId,
@@ -291,6 +290,25 @@ export async function grantTrustAccess(
       granteeName: person.full_name ?? person.email,
     },
   });
+  if (!audited) {
+    return {
+      ok: false,
+      message:
+        "We couldn't record this change, so the document wasn't shared. Please try again.",
+    };
+  }
+
+  const { error } = await supabase.from("trust_document_access").insert({
+    document_id: documentId,
+    profile_id: profileId,
+    granted_by: gate.userId,
+  });
+  if (error && error.code !== "23505") {
+    // The event row stands for a grant that then failed — over-logging is the
+    // accepted direction for an append-only log.
+    console.error("[trust] could not grant access", error);
+    return { ok: false, message: "We couldn't share that document. Please try again." };
+  }
 
   revalidatePath(ADVISORY_DOCUMENTS_PATH);
   return { ok: true };
@@ -318,17 +336,17 @@ export async function revokeTrustAccess(
   ]);
   if (!doc) return { ok: false, message: "That document couldn't be found." };
 
-  const { error } = await supabase
+  // Nothing to revoke is done, not an error — and not a new audit row.
+  const { data: existing } = await supabase
     .from("trust_document_access")
-    .delete()
+    .select("document_id")
     .eq("document_id", documentId)
-    .eq("profile_id", profileId);
-  if (error) {
-    console.error("[trust] could not revoke access", error);
-    return { ok: false, message: "We couldn't remove that access. Please try again." };
-  }
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (!existing) return { ok: true };
 
-  await recordTrustEvent({
+  // Audit-or-abort, log-first, same as grant.
+  const audited = await recordTrustEvent({
     event: "grant_revoked",
     actorId: gate.userId,
     documentId,
@@ -338,6 +356,23 @@ export async function revokeTrustAccess(
       granteeName: person?.full_name ?? person?.email ?? null,
     },
   });
+  if (!audited) {
+    return {
+      ok: false,
+      message:
+        "We couldn't record this change, so the access wasn't removed. Please try again.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("trust_document_access")
+    .delete()
+    .eq("document_id", documentId)
+    .eq("profile_id", profileId);
+  if (error) {
+    console.error("[trust] could not revoke access", error);
+    return { ok: false, message: "We couldn't remove that access. Please try again." };
+  }
 
   revalidatePath(ADVISORY_DOCUMENTS_PATH);
   return { ok: true };
@@ -379,13 +414,18 @@ export async function deleteTrustDocument(documentId: string): Promise<void> {
     );
   }
 
-  const folder = doc.storage_path.split("/")[0];
+  // Exact probe by name (search + exact compare), not a capped folder listing:
+  // a truncated listing would misjudge a real object as absent, delete the row,
+  // and orphan trust-document bytes forever. Listing (vs. inferring from an
+  // empty remove result) still distinguishes "missing" from "permission
+  // failure", per the PRD 33 lesson.
+  const slash = doc.storage_path.indexOf("/");
+  const folder = doc.storage_path.slice(0, slash);
+  const fileName = doc.storage_path.slice(slash + 1);
   const { data: listing } = await supabase.storage
     .from(TRUST_BUCKET)
-    .list(folder, { limit: 1000 });
-  const exists = (listing ?? []).some(
-    (o) => `${folder}/${o.name}` === doc.storage_path,
-  );
+    .list(folder, { limit: 1, search: fileName });
+  const exists = (listing ?? []).some((o) => o.name === fileName);
   if (exists) {
     const { data: removed, error: removeError } = await supabase.storage
       .from(TRUST_BUCKET)
@@ -427,21 +467,36 @@ export async function addTrustManager(profileId: string): Promise<ActionResult> 
     .maybeSingle<{ id: string; full_name: string | null; email: string }>();
   if (!person) return { ok: false, message: "That person couldn't be found." };
 
-  const { error } = await supabase.from("trust_managers").insert({
-    profile_id: profileId,
-    added_by: viewer.userId,
-  });
-  if (error) {
-    if (error.code === "23505") return { ok: true };
-    console.error("[trust] could not add manager", error);
-    return { ok: false, message: "We couldn't add that manager. Please try again." };
-  }
+  // Already seated is done, not an error — and not a new audit row.
+  const { data: seated } = await supabase
+    .from("trust_managers")
+    .select("profile_id")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (seated) return { ok: true };
 
-  await recordTrustEvent({
+  // Audit-or-abort, log-first: a silent roster change defeats the log.
+  const audited = await recordTrustEvent({
     event: "manager_added",
     actorId: viewer.userId,
     detail: { managerId: person.id, managerName: person.full_name ?? person.email },
   });
+  if (!audited) {
+    return {
+      ok: false,
+      message:
+        "We couldn't record this change, so the manager wasn't added. Please try again.",
+    };
+  }
+
+  const { error } = await supabase.from("trust_managers").insert({
+    profile_id: profileId,
+    added_by: viewer.userId,
+  });
+  if (error && error.code !== "23505") {
+    console.error("[trust] could not add manager", error);
+    return { ok: false, message: "We couldn't add that manager. Please try again." };
+  }
 
   revalidatePath(ADVISORY_DOCUMENTS_PATH);
   return { ok: true };
@@ -461,6 +516,29 @@ export async function removeTrustManager(profileId: string): Promise<void> {
     .eq("id", profileId)
     .maybeSingle<{ id: string; full_name: string | null; email: string }>();
 
+  // Not seated is done — nothing to remove, nothing to log.
+  const { data: seated } = await supabase
+    .from("trust_managers")
+    .select("profile_id")
+    .eq("profile_id", profileId)
+    .maybeSingle();
+  if (!seated) return;
+
+  // Audit-or-abort, log-first, same as the rest of the vault's writes.
+  const audited = await recordTrustEvent({
+    event: "manager_removed",
+    actorId: viewer.userId,
+    detail: {
+      managerId: profileId,
+      managerName: person?.full_name ?? person?.email ?? null,
+    },
+  });
+  if (!audited) {
+    throw new Error(
+      "We couldn't record this change, so the manager wasn't removed. Please try again.",
+    );
+  }
+
   const { error } = await supabase
     .from("trust_managers")
     .delete()
@@ -469,15 +547,6 @@ export async function removeTrustManager(profileId: string): Promise<void> {
     console.error("[trust] could not remove manager", error);
     throw new Error("We couldn't remove that manager. Please try again.");
   }
-
-  await recordTrustEvent({
-    event: "manager_removed",
-    actorId: viewer.userId,
-    detail: {
-      managerId: profileId,
-      managerName: person?.full_name ?? person?.email ?? null,
-    },
-  });
 
   revalidatePath(ADVISORY_DOCUMENTS_PATH);
 }

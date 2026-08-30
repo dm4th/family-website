@@ -106,7 +106,8 @@ function isGuestAllowedPath(pathname: string): boolean {
     // accounts holding per-document grants. Same posture as the properties
     // prefix — RLS + the page's default-deny access model do the real work,
     // so an ungranted guest who navigates here sees an empty shell, not data.
-    pathname.startsWith("/advisory") ||
+    pathname === "/advisory" ||
+    pathname.startsWith("/advisory/") ||
     pathname.startsWith("/sign-out")
   );
 }

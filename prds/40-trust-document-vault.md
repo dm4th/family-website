@@ -156,6 +156,8 @@ evals/trust-note/                     # handwriting OCR eval (required before sl
 
 **Follow-up spotted during build**: tables shipped after PRD 26 (`intake_documents`, `property_reminders`, intake bucket) never got the active-only restrictive policies; queued as its own task.
 
+**Review outcomes (PR #52, 2026-08-30)**: the reviewer's independent 21-check RLS suite passed in full and cleared the migration for prod as-is; their three app-layer fixes landed same day (audit-or-abort extended to grant/revoke/roster with log-first ordering; exact uncapped storage existence probe in delete; per-file error isolation in the upload batch). Two nits deliberately deferred to slice 2's migration/build: pin `created_by = auth.uid()` in the `trust_categories` insert policy when slice 2 starts writing categories; and the recorded-as-intentional observation that a site admin who isn't a manager can change the roster but cannot read the audit log (their `manager_added` rows are visible to managers, not to them) — fine while Dan holds both hats.
+
 ## Open follow-ups
 
 - Lawyer conversation: envelope encryption, audit-log retention, disclaimer wording (before 07). *(ZDR dropped 2026-08-30 — Dan's call that it will never be required.)*
