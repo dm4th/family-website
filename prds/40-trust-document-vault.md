@@ -1,7 +1,7 @@
 # 40 — Trust Document Vault & Security Foundation
 
 **Phase**: 3 (Advisory) · **Depends on**: nothing to build; **unblocks** [07 — Trust-doc RAG](07-trust-doc-rag.md) and (partially) [08 — Financial dashboard](08-financial-dashboard.md)
-**Status**: 🚧 **slice 1 (the vault) ✅ live on prod** (grid signed off, built, reviewed via PR #52, migration applied, managers seated, negative suite passed, all 2026-08-30 — cleared for Dad's first real Dropbox drag). **Slice 2 (inferred taxonomy) built 2026-08-30 — migration apply + eval run pending (owner steps, listed in its Implementation section)**. Slice 3 (notebook intake) not started. See Implementation below.
+**Status**: 🚧 **slices 1 + 2 ✅ live on prod** (slice 1: the vault, PR #52; slice 2: inferred taxonomy, PR #53 merged `604d5e1` 2026-08-30 — reviewed, eval GATE PASS, migration `20260831000001` applied and verified on prod). Cleared for Dad's first real Dropbox drag; the first real Organize press follows it (the on-prod Organize walk needs a non-empty register). Slice 3 (notebook intake) not started. See Implementation below.
 **Parallel-safe with**: most feature PRDs (new bucket, new tables, new `/advisory` routes; touches no existing surface except nav).
 
 ---
