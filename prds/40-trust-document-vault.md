@@ -1,7 +1,7 @@
 # 40 — Trust Document Vault & Security Foundation
 
 **Phase**: 3 (Advisory) · **Depends on**: nothing to build; **unblocks** [07 — Trust-doc RAG](07-trust-doc-rag.md) and (partially) [08 — Financial dashboard](08-financial-dashboard.md)
-**Status**: 🚧 grid signed off by Dan 2026-08-30 · **slice 1 (the vault) built same day — migration NOT yet applied to prod, negative suite NOT yet run**. Slices 2 (inferred taxonomy) and 3 (notebook intake) not started. See Implementation below.
+**Status**: 🚧 **slice 1 (the vault) ✅ live on prod** — grid signed off, built, reviewed (PR #52), migration applied, managers seated (Dan + Dad), and the negative suite passed on prod, all 2026-08-30. Cleared for Dad's first real Dropbox drag. Slices 2 (inferred taxonomy) and 3 (notebook intake) not started. See Implementation below.
 **Parallel-safe with**: most feature PRDs (new bucket, new tables, new `/advisory` routes; touches no existing surface except nav).
 
 ---
@@ -147,12 +147,13 @@ evals/trust-note/                     # handwriting OCR eval (required before sl
 
 **Verified**: `tsc`, `eslint`, `next build` green; route `/advisory/documents` builds.
 
-**NOT yet done (owner + reviewer steps, in order)**
+**Ship record (all 2026-08-30, in order)**
 
-1. `supabase db push` — apply the migration to prod (Dan).
-2. Seat the managers: Dan (admin) adds Dad + himself on the page's roster panel.
-3. **Run the verification recipe / negative suite below on prod** — before any real document is uploaded.
-4. First real use: Dad drags the Dropbox folder in.
+1. ✅ Migration applied to prod (`supabase db push`, Dan, from the PR branch before merge — the page queries the new tables on load).
+2. ✅ PR #52 merged (`d061fb3`), deploy green; page verified rendering live (admin-not-manager view showed the access explanation and roster panel, zero data).
+3. ✅ Managers seated: Dan + Dad via the roster panel — both `manager_added` audit rows present, written log-first before the seats.
+4. ✅ **Negative suite passed on prod** (reviewer): 20 checks as real users' JWTs inside a rolled-back transaction (fixture rows never persisted; vault confirmed empty after). Ungranted member: zero docs/pages/grants/audit rows, storage fn denies, cannot insert documents, self-grant, self-seat, or log a view. Granted member: sees exactly the fixture doc + pages, storage fn allows, can log `viewed`, cannot read the audit log, cannot forge governance events or spoof another actor. Manager: update/delete on the audit log touch 0 rows (append-only holds). Revoke: visibility and storage fn both cut off.
+5. ⏳ First real use: Dad drags the Dropbox folder in — cleared to proceed.
 
 **Follow-up spotted during build**: tables shipped after PRD 26 (`intake_documents`, `property_reminders`, intake bucket) never got the active-only restrictive policies; queued as its own task.
 
