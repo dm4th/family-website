@@ -1,7 +1,7 @@
 # 07 — Trust Document RAG / Agentic Search
 
-**Phase**: 3 · **Depends on**: trust-doc security model decision (see Open decisions in [00-master-plan.md](00-master-plan.md))
-**Status**: 🔴 blocked. Do not start build until the security model decision has happened. See `Pre-flight decisions` below.
+**Phase**: 3 · **Depends on**: trust-doc security model decision — **recommendation now drafted in [40 — Trust Document Vault](40-trust-document-vault.md)** (2026-08-30); this PRD builds on 40's vault, access model, and audit log once 40 is signed off and its slice 1 ships
+**Status**: 🔴 blocked. Do not start build until PRD 40 is signed off + its slice 1 (the vault) is shipped. PRD 40's decision grid answers most of the `Pre-flight decisions` below; the still-open items for this PRD are the embeddings provider and the disclaimer wording (lawyer).
 
 ## Onboarding (read first if you're picking this up cold)
 
