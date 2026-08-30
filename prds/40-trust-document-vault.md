@@ -64,16 +64,25 @@ The seven open questions from PRD 07's grid, now with concrete recommendations �
 | Decision | Recommendation | Notes |
 |---|---|---|
 | **Docs at rest** | Supabase Storage, private `trust` bucket, default-deny RLS | See comparison above. Revisit S3+KMS only on lawyer's demand. |
-| **App-layer envelope encryption** (encrypt objects with a server-held key before upload) | **Defer, but keep the door open.** | Protects against a Supabase-storage-layer breach or a misconfigured policy, at the cost of losing signed URLs (all bytes proxy through our server) and a key-management burden. Store objects under a per-document path scheme that doesn't leak names (UUID paths, real names only in the DB row) so this can be added later without re-uploading. Put the question to the lawyer explicitly. |
-| **LLM + data terms** | Anthropic API under commercial terms (no training on API data); pursue **zero-data-retention** in writing if the lawyer wants it | Already the vendor (`ANTHROPIC_API_KEY` in Vercel since PRD 32). No new vendor surface. |
+| **App-layer envelope encryption** (encrypt objects with a server-held key before upload) | ✅ **Decided 2026-08-30: defer, keep the door open** | Protects against a Supabase-storage-layer breach or a misconfigured policy, at the cost of losing signed URLs (all bytes proxy through our server) and a key-management burden. Store objects under a per-document path scheme that doesn't leak names (UUID paths, real names only in the DB row) so this can be added later without re-uploading. Put the question to the lawyer explicitly. |
+| **LLM + data terms** | ✅ **Decided 2026-08-30: standard commercial terms now** (no training on API data); pursue **zero-data-retention** in writing only if the lawyer asks | Already the vendor (`ANTHROPIC_API_KEY` in Vercel since PRD 32). No new vendor surface. |
 | **Who reads a document** | Explicit `trust_document_access` grant only — members included | The one place on the site where family membership grants nothing by default. |
-| **Who manages** (upload, grant, approve) | `trust_managers` table: Dad + Dan initially | Not `is_admin()`. Managers implicitly read everything; every grant change is audited. |
+| **Who manages** (upload, grant, approve) | ✅ **Decided 2026-08-30: Dad + Dan** | Not `is_admin()`. Managers implicitly read everything; every grant change is audited. |
 | **Adviser + accountant accounts** | Existing `guest` role + grants, invited via the PRD 24/39 invite flow | No fourth role. Needs the guest-route allowlist widened for `/advisory/*`. |
-| **Who approves scans** | Any trust manager, uploader included | Two-person approval (uploader ≠ approver) is noted as an option; recommend against at N=2 managers — it would make Dad wait on Dan for every page. Flip later by policy, not schema, if the lawyer wants it. |
+| **Who approves scans** | ✅ **Decided 2026-08-30: any trust manager, uploader included** | Two-person approval (uploader ≠ approver) was considered and declined at N=2 managers — it would make Dad wait on Dan for every page. Flip later by policy, not schema, if the lawyer wants it. |
 | **Audit requirements** | `trust_document_events`, append-only, manager-readable; every read logged | Sign-off question for the lawyer: any retention minimum for the log itself? |
-| **Dropbox originals** | Dad's call after migration is verified complete | Recommend keeping the Dropbox container frozen (no new docs) until the vault has been live-walked, then deleting on his say-so. |
+| **Dropbox originals** | ✅ **Decided 2026-08-30 (Dan): keep Dropbox as a frozen cold backup** | The vault becomes the working copy; nothing new goes to Dropbox. The container stays untouched as a second copy. Note: Dad has said he wants out of Dropbox entirely — worth confirming with him that "frozen backup" (vs. delete-after-verification) matches his intent; deleting later is a one-way door he can take any time. |
 | **Vector DB / embeddings** | **Deferred to PRD 07** — pgvector in Supabase, over the same `trust_document_pages` text this PRD extracts | Nothing in this PRD blocks on it. |
 | **"Not legal advice" disclaimer** | Deferred to PRD 07 (no Q&A surface ships here) | Lawyer wording sign-off still required before 07. |
+
+## UI requirements (from Dan, 2026-08-30)
+
+Dad's real workflow is **desktop drag-and-drop out of the Dropbox folder**. The manager surface must be built around that:
+
+- **Two large, visually unmistakable drop zones**, side by side on the manager view: **"Trust Documents"** (PDFs and files — the digital originals) and **"Notebook Pages"** (photos/scans of the handwritten notebook). Labeled in plain words with a one-line description each, so there is never a "which box does this go in?" moment. A file dropped on the wrong zone by type (a JPG on Documents, a PDF on Notebook Pages) should be gently routed or asked about, not errored.
+- **Multi-file drop is the primary path** — he will select a batch in Dropbox and drag the lot. Per-file progress, and a clear per-file success/failure list at the end (no silent partial batches).
+- Drag-and-drop everywhere a click-to-browse exists (the existing `PhotoUpload` drag idiom, generalized), with the whole zone as the target, desktop-first sizing.
+- Older-user bar applies (PRD 29 posture): big targets, calm copy, obvious next step after a drop ("3 documents added. They're listed below.").
 
 ## Build slices (each its own session/branch, in order)
 
