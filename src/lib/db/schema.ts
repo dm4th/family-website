@@ -1028,7 +1028,8 @@ export type TrustEventKind =
   | "grant_revoked"
   | "document_deleted"
   | "manager_added"
-  | "manager_removed";
+  | "manager_removed"
+  | "taxonomy_applied";
 
 // Append-only at the SQL level: the table has insert + select policies and
 // deliberately NO update or delete policy for any role.

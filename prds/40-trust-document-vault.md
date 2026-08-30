@@ -1,7 +1,7 @@
 # 40 — Trust Document Vault & Security Foundation
 
 **Phase**: 3 (Advisory) · **Depends on**: nothing to build; **unblocks** [07 — Trust-doc RAG](07-trust-doc-rag.md) and (partially) [08 — Financial dashboard](08-financial-dashboard.md)
-**Status**: 🚧 **slice 1 (the vault) ✅ live on prod** — grid signed off, built, reviewed (PR #52), migration applied, managers seated (Dan + Dad), and the negative suite passed on prod, all 2026-08-30. Cleared for Dad's first real Dropbox drag. Slices 2 (inferred taxonomy) and 3 (notebook intake) not started. See Implementation below.
+**Status**: 🚧 **slice 1 (the vault) ✅ live on prod** (grid signed off, built, reviewed via PR #52, migration applied, managers seated, negative suite passed, all 2026-08-30 — cleared for Dad's first real Dropbox drag). **Slice 2 (inferred taxonomy) built 2026-08-30 — migration apply + eval run pending (owner steps, listed in its Implementation section)**. Slice 3 (notebook intake) not started. See Implementation below.
 **Parallel-safe with**: most feature PRDs (new bucket, new tables, new `/advisory` routes; touches no existing surface except nav).
 
 ---
@@ -158,6 +158,24 @@ evals/trust-note/                     # handwriting OCR eval (required before sl
 **Follow-up spotted during build**: tables shipped after PRD 26 (`intake_documents`, `property_reminders`, intake bucket) never got the active-only restrictive policies; queued as its own task.
 
 **Review outcomes (PR #52, 2026-08-30)**: the reviewer's independent 21-check RLS suite passed in full and cleared the migration for prod as-is; their three app-layer fixes landed same day (audit-or-abort extended to grant/revoke/roster with log-first ordering; exact uncapped storage existence probe in delete; per-file error isolation in the upload batch). Two nits deliberately deferred to slice 2's migration/build: pin `created_by = auth.uid()` in the `trust_categories` insert policy when slice 2 starts writing categories; and the recorded-as-intentional observation that a site admin who isn't a manager can change the roster but cannot read the audit log (their `manager_added` rows are visible to managers, not to them) — fine while Dan holds both hats.
+
+## Implementation (slice 2 — inferred taxonomy, built 2026-08-30)
+
+**Status**: built + validated (`tsc`/`eslint`/`build` green); **migration NOT applied, eval NOT run** — this session had no `ANTHROPIC_API_KEY`, so the eval run is an owner step (see below). No real documents existed yet at build time, by design: the fixture corpus is the eval's, never prod's.
+
+**Key files**
+
+- `supabase/migrations/20260831000001_trust_taxonomy.sql` — the two deferred policy changes, now that categories are first written: `created_by = auth.uid()` pinned on `trust_categories` inserts, and the `taxonomy_applied` event kind added to the events check constraint + the manager list in the (PR #52-hardened) insert policy. No new tables.
+- `src/lib/trust/taxonomy.ts` — `proposeTrustTaxonomy()`: one structured-output call (default `claude-sonnet-5`, override `TRUST_TAXONOMY_MODEL`) over document names + capped first-page text, fenced as material; `parseTaxonomyProposal()` is the validate-don't-trust gate (unknown ids dropped, duplicates first-wins, empty categories removed, forgotten documents forced into `unassigned` so the review screen always accounts for the whole register). Re-runs pass the approved categories in and the prompt treats them as standing structure to extend, not reshuffle.
+- `actions.ts` — `proposeTaxonomyAction()` (reads only) + `applyTrustTaxonomy()` (manager-gated, audit-or-abort log-first, **one** `taxonomy_applied` summary event). Apply is **whole-register semantics**: the payload is the entire mapping; unlisted documents become uncategorized, existing categories absent from the payload are deleted, and re-applying the same state is a no-op. Every write is idempotent so a mid-apply failure is fixed by re-running the flow.
+- `/advisory/documents/organize` — manager-only. Idle → "Propose an Organization" → full-edit review (rename, one-line descriptions, set documents aside, move unassigned in via dropdown, add/remove categories; Apply disabled while any category is unnamed, duplicated, or empty) → Apply. The register page groups by category once any exist ("Not Yet Categorized" last) and the PageIntro gains an Organize action for managers.
+- `evals/trust-taxonomy/` — fictional **Birchwater Family Trust** corpus (10 base + 4 addition docs, two deliberately awkward fits scored as fine-either-way). Gating checks: structural invariants and **re-run preservation** (existing categories kept + not renamed, ≤1 placed document moved); theme placement is reported, not gated (a miss costs one dropdown fix). Harness verified end-to-end without a key (degrades to the honest not-configured message).
+
+**Owner steps before the first real Organize press (in order)**
+
+1. `supabase db push` — applies `20260831000001_trust_taxonomy.sql`.
+2. `npx tsx --env-file=.env.local evals/trust-taxonomy/eval.mts` — must gate PASS; record a `results-YYYY-MM-DD.md` (intake convention). Every prior PRD-32-family eval caught a shipping bug; do not skip.
+3. Verification: forged `taxonomy_applied` insert by a granted guest fails at RLS; a member/guest sees category groupings only for documents they hold grants on; apply → re-open register shows groups; re-run Organize → approved categories come back as the starting structure.
 
 ## Open follow-ups
 

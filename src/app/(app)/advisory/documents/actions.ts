@@ -7,6 +7,10 @@ import { resolveTrustViewer } from "@/lib/trust/auth";
 import { recordTrustEvent } from "@/lib/trust/audit";
 import { extractPdfPages } from "@/lib/trust/pages";
 import {
+  proposeTrustTaxonomy,
+  type TaxonomyProposal,
+} from "@/lib/trust/taxonomy";
+import {
   MAX_TRUST_BYTES,
   TRUST_BUCKET,
   TRUST_DOCUMENT_MIMES,
@@ -549,4 +553,238 @@ export async function removeTrustManager(profileId: string): Promise<void> {
   }
 
   revalidatePath(ADVISORY_DOCUMENTS_PATH);
+}
+
+// ── Inferred taxonomy (PRD 40 slice 2) ──────────────────────────────────────
+
+export type RegisterDocument = { id: string; name: string };
+
+export type ProposeTaxonomyState =
+  | { ok: true; proposal: TaxonomyProposal }
+  | { ok: false; message: string };
+
+/**
+ * Ask for a proposed organization of the register. Reads only; the proposal
+ * lives in the manager's review screen until applyTrustTaxonomy. Existing
+ * categories ride along so a re-run extends the approved structure instead of
+ * reshuffling it.
+ */
+export async function proposeTaxonomyAction(): Promise<ProposeTaxonomyState> {
+  const gate = await requireTrustManager();
+  if (!gate.ok) return gate;
+
+  const supabase = await createClient();
+  const [{ data: docs }, { data: pages }, { data: cats }] = await Promise.all([
+    supabase
+      .from("trust_documents")
+      .select("id, name, category_id")
+      .eq("kind", "document")
+      .returns<{ id: string; name: string; category_id: string | null }[]>(),
+    supabase
+      .from("trust_document_pages")
+      .select("document_id, text")
+      .eq("page_number", 1)
+      .returns<{ document_id: string; text: string }[]>(),
+    supabase
+      .from("trust_categories")
+      .select("id, name, description")
+      .returns<{ id: string; name: string; description: string | null }[]>(),
+  ]);
+
+  const register = docs ?? [];
+  if (register.length === 0) {
+    return { ok: false, message: "There are no documents to organize yet." };
+  }
+
+  const firstPage = new Map((pages ?? []).map((p) => [p.document_id, p.text]));
+  const existingCategories = (cats ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    description: c.description,
+    documentIds: register.filter((d) => d.category_id === c.id).map((d) => d.id),
+  }));
+
+  const result = await proposeTrustTaxonomy({
+    documents: register.map((d) => ({
+      id: d.id,
+      name: d.name,
+      firstPageText: firstPage.get(d.id) ?? "",
+    })),
+    existingCategories,
+  });
+  if (!result.ok) return { ok: false, message: result.message };
+  return { ok: true, proposal: result.proposal };
+}
+
+export type ApplyTaxonomyInput = {
+  categories: {
+    existingCategoryId: string | null;
+    name: string;
+    description: string | null;
+    documentIds: string[];
+  }[];
+};
+
+/**
+ * Apply a manager-approved organization. The payload is the WHOLE register's
+ * mapping: listed documents get their category, unlisted ones become
+ * uncategorized, and existing categories absent from the payload are removed.
+ * Full-mapping semantics keep apply predictable and re-runnable — pressing
+ * Apply twice with the same review state is a no-op.
+ *
+ * Audit-or-abort, log-first, one summary event. A failure partway through
+ * leaves a partially applied state a manager can see and fix by re-running
+ * the organize flow — every write here is idempotent against re-application.
+ */
+export async function applyTrustTaxonomy(
+  input: ApplyTaxonomyInput,
+): Promise<ActionResult> {
+  const gate = await requireTrustManager();
+  if (!gate.ok) return gate;
+
+  const supabase = await createClient();
+  const [{ data: docs }, { data: cats }] = await Promise.all([
+    supabase
+      .from("trust_documents")
+      .select("id")
+      .eq("kind", "document")
+      .returns<{ id: string }[]>(),
+    supabase
+      .from("trust_categories")
+      .select("id")
+      .returns<{ id: string }[]>(),
+  ]);
+  const registerIds = new Set((docs ?? []).map((d) => d.id));
+  const existingIds = new Set((cats ?? []).map((c) => c.id));
+
+  // Validate the shape a review screen should never produce anyway; RLS would
+  // stop nothing here since a manager is allowed all of these writes.
+  const seenDocs = new Set<string>();
+  const seenNames = new Set<string>();
+  const categories: ApplyTaxonomyInput["categories"] = [];
+  for (const c of input.categories ?? []) {
+    const name = (c.name ?? "").trim().slice(0, 60);
+    if (!name) return { ok: false, message: "Every category needs a name." };
+    if (seenNames.has(name.toLowerCase())) {
+      return { ok: false, message: `Two categories are both named "${name}".` };
+    }
+    seenNames.add(name.toLowerCase());
+    const documentIds: string[] = [];
+    for (const id of c.documentIds ?? []) {
+      if (!registerIds.has(id)) continue;
+      if (seenDocs.has(id)) {
+        return { ok: false, message: "A document is listed in two categories." };
+      }
+      seenDocs.add(id);
+      documentIds.push(id);
+    }
+    if (documentIds.length === 0) {
+      return {
+        ok: false,
+        message: `"${name}" has no documents. Remove it, or move a document in.`,
+      };
+    }
+    categories.push({
+      existingCategoryId:
+        c.existingCategoryId && existingIds.has(c.existingCategoryId)
+          ? c.existingCategoryId
+          : null,
+      name,
+      description: c.description?.trim() ? c.description.trim().slice(0, 200) : null,
+      documentIds,
+    });
+  }
+
+  const keptCategoryIds = new Set(
+    categories.map((c) => c.existingCategoryId).filter((id): id is string => !!id),
+  );
+  const removedCategoryIds = [...existingIds].filter((id) => !keptCategoryIds.has(id));
+  const uncategorized = [...registerIds].filter((id) => !seenDocs.has(id));
+
+  const audited = await recordTrustEvent({
+    event: "taxonomy_applied",
+    actorId: gate.userId,
+    detail: {
+      categories: categories.length,
+      newCategories: categories.filter((c) => !c.existingCategoryId).length,
+      removedCategories: removedCategoryIds.length,
+      assigned: seenDocs.size,
+      uncategorized: uncategorized.length,
+    },
+  });
+  if (!audited) {
+    return {
+      ok: false,
+      message:
+        "We couldn't record this change, so the organization wasn't applied. Please try again.",
+    };
+  }
+
+  for (let i = 0; i < categories.length; i++) {
+    const c = categories[i]!;
+    let categoryId = c.existingCategoryId;
+    if (categoryId) {
+      const { error } = await supabase
+        .from("trust_categories")
+        .update({ name: c.name, description: c.description, position: i })
+        .eq("id", categoryId);
+      if (error) {
+        console.error("[trust] taxonomy: category update failed", error);
+        return { ok: false, message: "We couldn't apply the organization. Please try again." };
+      }
+    } else {
+      const { data: row, error } = await supabase
+        .from("trust_categories")
+        .insert({
+          name: c.name,
+          description: c.description,
+          position: i,
+          created_by: gate.userId,
+        })
+        .select("id")
+        .single<{ id: string }>();
+      if (error || !row) {
+        console.error("[trust] taxonomy: category insert failed", error);
+        return { ok: false, message: "We couldn't apply the organization. Please try again." };
+      }
+      categoryId = row.id;
+    }
+
+    const { error: assignError } = await supabase
+      .from("trust_documents")
+      .update({ category_id: categoryId })
+      .in("id", c.documentIds);
+    if (assignError) {
+      console.error("[trust] taxonomy: assignment failed", assignError);
+      return { ok: false, message: "We couldn't apply the organization. Please try again." };
+    }
+  }
+
+  if (uncategorized.length > 0) {
+    const { error } = await supabase
+      .from("trust_documents")
+      .update({ category_id: null })
+      .in("id", uncategorized);
+    if (error) {
+      console.error("[trust] taxonomy: clearing failed", error);
+      return { ok: false, message: "We couldn't apply the organization. Please try again." };
+    }
+  }
+
+  if (removedCategoryIds.length > 0) {
+    // Documents pointing at these were re-pointed or cleared above; the FK is
+    // SET NULL regardless, so this can't strand an assignment.
+    const { error } = await supabase
+      .from("trust_categories")
+      .delete()
+      .in("id", removedCategoryIds);
+    if (error) {
+      console.error("[trust] taxonomy: category removal failed", error);
+      return { ok: false, message: "We couldn't apply the organization. Please try again." };
+    }
+  }
+
+  revalidatePath(ADVISORY_DOCUMENTS_PATH);
+  revalidatePath(`${ADVISORY_DOCUMENTS_PATH}/organize`);
+  return { ok: true };
 }
