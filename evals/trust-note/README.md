@@ -24,6 +24,42 @@ synthesized: the photos must be handwritten and photographed by a person.
    Re-run with more of his pages before trusting the real notebook if the
    first corpus was mostly someone else's writing.
 
+## The wild corpus: strangers' handwriting (optional, recommended)
+
+The Birchwater pages are written by family members, which risks writer bias
+in the other direction: an eval that only ever sees the household's hands.
+The harness also scores an optional **`wild/` subdirectory** of the corpus —
+handwriting by people nobody here knows, from openly licensed sources that
+pair images with vetted transcriptions:
+
+- **GNHK — GoodNotes Handwriting Kollection** ([goodnotes.com/gnhk](https://goodnotes.com/gnhk),
+  [github.com/GoodNotes/GNHK-dataset](https://github.com/GoodNotes/GNHK-dataset),
+  **CC-BY-4.0**): camera-captured modern English handwriting from many
+  writers worldwide — notes, lists, the exact shape of a notebook photo.
+  Download the set, pick 3–5 varied pages, and build each ground-truth `.txt`
+  from the dataset's own annotations.
+- **Library of Congress — By the People** ([crowd.loc.gov](https://crowd.loc.gov),
+  **public domain**, transcriptions included): digitized letters and papers
+  with completed, reviewed transcriptions downloadable per image. Historical
+  cursive — deliberately harder than Dad's hand, so treat it as a stress
+  extension, not a representative sample.
+
+Setup: for each chosen page save `wild/<id>.jpg` (or `.png`/`.webp`) plus
+`wild/<id>.txt` holding its transcription, in the same corpus directory. The
+harness picks them up automatically and skips the section cleanly when the
+directory is absent.
+
+Wild pages score: transcription accuracy (reported), **fabrication (gates —
+same zero rule)**, and **forced mappings (gates)** — wild content is by
+construction unrelated to the fixture documents, so any proposed link at all
+is a forced mapping. Expected-point recall isn't scored (the pages weren't
+written to contain trust facts), and extracted points are fine as long as
+they're grounded.
+
+Both halves matter and neither replaces the other: the wild corpus removes
+writer bias; the pages in Dad's hand keep the eval representative of the one
+notebook this feature will actually read.
+
 ## Running it
 
 ```bash

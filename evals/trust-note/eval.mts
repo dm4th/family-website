@@ -23,7 +23,7 @@
 // Usage (see README for the corpus protocol — the photos must exist first):
 //   TRUST_NOTE_CORPUS=/path/to/photos npx tsx --env-file=.env.local evals/trust-note/eval.mts
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -181,6 +181,103 @@ async function main() {
         }
       }
     }
+  }
+
+  // ── Wild corpus (optional, recommended): strangers' handwriting ─────────
+  //
+  // The Birchwater pages test trust-specific behavior but are written by
+  // family members, which is a writer-bias risk in the other direction. The
+  // wild corpus counters it: pages by writers nobody here knows, drawn from
+  // openly licensed sources (see README), each an image plus a sibling
+  // `<id>.txt` holding its vetted ground-truth transcription. Wild content is
+  // by construction unrelated to the fixture documents, so ANY mapping from a
+  // wild page is forced; key points are allowed (some wild notes contain
+  // finance-ish content) but must be grounded. Accuracy is reported.
+  const wildDir = join(CORPUS_DIR, "wild");
+  let wildPages = 0;
+  if (existsSync(wildDir)) {
+    const images = readdirSync(wildDir).filter((f) => /\.(jpe?g|png|webp)$/i.test(f));
+    for (const file of images) {
+      const id = file.replace(/\.[^.]+$/, "");
+      const truthPath = join(wildDir, `${id}.txt`);
+      if (!existsSync(truthPath)) {
+        console.log(`\n── wild/${id} ── SKIPPED (no ${id}.txt ground truth beside it)`);
+        continue;
+      }
+      wildPages += 1;
+      const groundTruth = readFileSync(truthPath, "utf8");
+      const contentType = /\.png$/i.test(file)
+        ? "image/png"
+        : /\.webp$/i.test(file)
+          ? "image/webp"
+          : "image/jpeg";
+
+      console.log(`\n── wild/${id} ── stranger's handwriting`);
+      const result = await readTrustScan({
+        bytes: new Uint8Array(readFileSync(join(wildDir, file))),
+        contentType,
+      });
+      if (!result.ok) {
+        console.log(`  HARD FAIL  read failed: ${result.message}`);
+        fabricated += 1;
+        continue;
+      }
+      const transcription = result.read.pages.map((p) => p.transcription).join("\n");
+      const truthWords = words(groundTruth);
+      const gotWords = new Set(words(transcription));
+      const found = truthWords.filter((w) => gotWords.has(w)).length;
+      const unclearCount = (transcription.match(/\[unclear\]/g) ?? []).length;
+      console.log(
+        `  accuracy   ${found}/${truthWords.length} ground-truth words · ${unclearCount} [unclear] marks · ${result.read.keyPoints.length} key points`,
+      );
+      for (const k of result.read.keyPoints) {
+        const score = groundedness(`${k.text} ${k.sourceQuote ?? ""}`, groundTruth);
+        if (score < 0.7) {
+          fabricated += 1;
+          console.log(
+            `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score * 100).toFixed(0)}%)`,
+          );
+        }
+      }
+      if (result.read.keyPoints.length > 0) {
+        const candidates = selectMappingCandidates(
+          result.read.keyPoints.map((k) => ({ text: k.text, sourceQuote: k.sourceQuote })),
+          FIXTURE_DOC_PAGES.map((p) => ({
+            documentId: p.documentId,
+            documentName: p.documentName,
+            page: p.page,
+            text: p.text,
+          })),
+        );
+        if (candidates.length > 0) {
+          const mapping = await proposeScanMappings({
+            keyPoints: result.read.keyPoints.map((k) => ({
+              text: k.text,
+              sourceQuote: k.sourceQuote,
+            })),
+            candidates,
+          });
+          if (mapping.ok) {
+            const mappedDocs = [
+              ...new Set(
+                mapping.mappings.filter((m) => m.documentId).map((m) => m.documentId),
+              ),
+            ];
+            if (mappedDocs.length > 0) {
+              forcedMappings += 1;
+              console.log(
+                `  FORCED     mapped to ${mappedDocs.join(", ")} from unrelated wild content`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+  if (wildPages === 0) {
+    console.log(
+      `\n(no wild corpus at ${wildDir} — optional but recommended; see README for openly licensed sources)`,
+    );
   }
 
   console.log(`\n── recall ──`);
