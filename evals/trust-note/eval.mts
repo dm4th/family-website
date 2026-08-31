@@ -23,7 +23,7 @@
 // Usage (see README for the corpus protocol — the photos must exist first):
 //   TRUST_NOTE_CORPUS=/path/to/photos npx tsx --env-file=.env.local evals/trust-note/eval.mts
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -32,25 +32,9 @@ import {
   selectMappingCandidates,
 } from "@/lib/trust/notebook";
 import { FIXTURE_DOC_PAGES, NOTE_PAGES } from "./corpus";
+import { scoreKeyPoint, tokens } from "./scoring";
 
 const CORPUS_DIR = process.env.TRUST_NOTE_CORPUS ?? "/tmp/trust-note-corpus";
-
-function words(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9.,%$]+/)
-    .filter((w) => w.length >= 4);
-}
-
-/** Share of a candidate string's substantive words present in the reference. */
-function groundedness(candidate: string, reference: string): number {
-  const ref = new Set(words(reference));
-  const cand = words(candidate);
-  if (cand.length === 0) return 1;
-  let hit = 0;
-  for (const w of cand) if (ref.has(w)) hit += 1;
-  return hit / cand.length;
-}
 
 function findImage(id: string): { path: string; contentType: string } | null {
   for (const [ext, type] of [
@@ -94,22 +78,26 @@ async function main() {
     const transcription = read.pages.map((p) => p.transcription).join("\n");
 
     // ACCURACY (reported)
-    const truthWords = words(page.groundTruth);
-    const gotWords = new Set(words(transcription));
+    const truthWords = tokens(page.groundTruth);
+    const gotWords = new Set(tokens(transcription));
     const found = truthWords.filter((w) => gotWords.has(w)).length;
     const unclearCount = (transcription.match(/\[unclear\]/g) ?? []).length;
     console.log(
       `  accuracy   ${found}/${truthWords.length} ground-truth words in transcription · ${unclearCount} [unclear] marks · ${read.keyPoints.length} key points`,
     );
 
-    // FABRICATION (gates)
+    // FABRICATION (gates) — quote-first with a numbers entity check; see
+    // scoring.ts for the PR #55 recalibration.
     for (const k of read.keyPoints) {
-      const basis = `${k.text} ${k.sourceQuote ?? ""}`;
-      const score = groundedness(basis, page.groundTruth);
-      if (score < 0.7) {
+      const score = scoreKeyPoint(k, page.groundTruth);
+      if (score.fabricated) {
         fabricated += 1;
         console.log(
-          `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score * 100).toFixed(0)}%)`,
+          `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score.grounded * 100).toFixed(0)}%${
+            score.missingNumbers.length > 0
+              ? `, unsupported numbers: ${score.missingNumbers.join(", ")}`
+              : ""
+          })`,
         );
       }
     }
@@ -183,11 +171,129 @@ async function main() {
     }
   }
 
+  // ── Wild corpus (optional, recommended): strangers' handwriting ─────────
+  //
+  // The Birchwater pages test trust-specific behavior but are written by
+  // family members, which is a writer-bias risk in the other direction. The
+  // wild corpus counters it: pages by writers nobody here knows, drawn from
+  // openly licensed sources (see README), each an image plus a sibling
+  // `<id>.txt` holding its vetted ground-truth transcription. Wild content is
+  // by construction unrelated to the fixture documents, so ANY mapping from a
+  // wild page is forced; key points are allowed (some wild notes contain
+  // finance-ish content) but must be grounded. Accuracy is reported.
+  const wildDir = join(CORPUS_DIR, "wild");
+  let wildPages = 0;
+  let stressFlags = 0;
+  if (existsSync(wildDir)) {
+    const images = readdirSync(wildDir).filter((f) => /\.(jpe?g|png|webp)$/i.test(f));
+    for (const file of images) {
+      const id = file.replace(/\.[^.]+$/, "");
+      const truthPath = join(wildDir, `${id}.txt`);
+      if (!existsSync(truthPath)) {
+        console.log(`\n── wild/${id} ── SKIPPED (no ${id}.txt ground truth beside it)`);
+        continue;
+      }
+      // Two wild tiers (second wild run, PR #55): a `(wild-)stress-*` page is
+      // declared out-of-domain-hard (150-year-old cursive from the archival
+      // sources) — its fabrication flags are REPORTED, never gated, because
+      // some confident misreads are unavoidable there at current model
+      // honesty and a permanently unpassable gate invites quietly deleting
+      // hard pages. Plain wild pages (modern hands) gate as usual. Forced
+      // mappings gate on BOTH tiers — mapping restraint doesn't get harder
+      // with old ink.
+      const isStress = /^(wild-)?stress-/.test(id);
+      wildPages += 1;
+      const groundTruth = readFileSync(truthPath, "utf8");
+      const contentType = /\.png$/i.test(file)
+        ? "image/png"
+        : /\.webp$/i.test(file)
+          ? "image/webp"
+          : "image/jpeg";
+
+      console.log(
+        `\n── wild/${id} ── stranger's handwriting${isStress ? " (stress tier: fabrication reported, not gated)" : ""}`,
+      );
+      const result = await readTrustScan({
+        bytes: new Uint8Array(readFileSync(join(wildDir, file))),
+        contentType,
+      });
+      if (!result.ok) {
+        console.log(`  HARD FAIL  read failed: ${result.message}`);
+        fabricated += 1;
+        continue;
+      }
+      const transcription = result.read.pages.map((p) => p.transcription).join("\n");
+      const truthWords = tokens(groundTruth);
+      const gotWords = new Set(tokens(transcription));
+      const found = truthWords.filter((w) => gotWords.has(w)).length;
+      const unclearCount = (transcription.match(/\[unclear\]/g) ?? []).length;
+      console.log(
+        `  accuracy   ${found}/${truthWords.length} ground-truth words · ${unclearCount} [unclear] marks · ${result.read.keyPoints.length} key points`,
+      );
+      for (const k of result.read.keyPoints) {
+        const score = scoreKeyPoint(k, groundTruth);
+        if (score.fabricated) {
+          if (isStress) stressFlags += 1;
+          else fabricated += 1;
+          console.log(
+            `  ${isStress ? "stress-flag" : "FABRICATED "} "${k.text.slice(0, 80)}" (groundedness ${(score.grounded * 100).toFixed(0)}%${
+              score.missingNumbers.length > 0
+                ? `, unsupported numbers: ${score.missingNumbers.join(", ")}`
+                : ""
+            })`,
+          );
+        }
+      }
+      if (result.read.keyPoints.length > 0) {
+        const candidates = selectMappingCandidates(
+          result.read.keyPoints.map((k) => ({ text: k.text, sourceQuote: k.sourceQuote })),
+          FIXTURE_DOC_PAGES.map((p) => ({
+            documentId: p.documentId,
+            documentName: p.documentName,
+            page: p.page,
+            text: p.text,
+          })),
+        );
+        if (candidates.length > 0) {
+          const mapping = await proposeScanMappings({
+            keyPoints: result.read.keyPoints.map((k) => ({
+              text: k.text,
+              sourceQuote: k.sourceQuote,
+            })),
+            candidates,
+          });
+          if (mapping.ok) {
+            const mappedDocs = [
+              ...new Set(
+                mapping.mappings.filter((m) => m.documentId).map((m) => m.documentId),
+              ),
+            ];
+            if (mappedDocs.length > 0) {
+              forcedMappings += 1;
+              console.log(
+                `  FORCED     mapped to ${mappedDocs.join(", ")} from unrelated wild content`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+  if (wildPages === 0) {
+    console.log(
+      `\n(no wild corpus at ${wildDir} — optional but recommended; see README for openly licensed sources)`,
+    );
+  }
+
   console.log(`\n── recall ──`);
   for (const line of recallLines) console.log(`  ${line}`);
 
   console.log(
-    `\n══ TOTAL: ${fabricated} fabricated, ${restraintViolations} restraint violations, ${forcedMappings} forced mappings, ${missingImages} missing images ══`,
+    `\n══ TOTAL: ${fabricated} fabricated, ${restraintViolations} restraint violations, ${forcedMappings} forced mappings, ${missingImages} missing images${
+      stressFlags > 0
+        ? ` · ${stressFlags} stress-tier flags (reported, not gated — read them, they are usually real misreads)`
+        : ""
+    } ══`,
   );
   const pass =
     fabricated === 0 &&

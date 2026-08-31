@@ -24,6 +24,81 @@ synthesized: the photos must be handwritten and photographed by a person.
    Re-run with more of his pages before trusting the real notebook if the
    first corpus was mostly someone else's writing.
 
+## The wild corpus: strangers' handwriting (optional, recommended)
+
+The Birchwater pages are written by family members, which risks writer bias
+in the other direction: an eval that only ever sees the household's hands.
+The harness also scores an optional **`wild/` subdirectory** of the corpus —
+handwriting by people nobody here knows, from openly licensed sources that
+pair images with vetted transcriptions:
+
+- **GNHK — GoodNotes Handwriting Kollection** ([goodnotes.com/gnhk](https://goodnotes.com/gnhk),
+  [github.com/GoodNotes/GNHK-dataset](https://github.com/GoodNotes/GNHK-dataset),
+  **CC-BY-4.0**): camera-captured modern English handwriting from many
+  writers worldwide — notes, lists, the exact shape of a notebook photo.
+  Download the set (it sits behind a request form, so this is a human step),
+  pick 3–5 varied pages, and build each ground-truth `.txt` from the
+  dataset's own annotations. Until someone does, modern-hand wild coverage
+  is missing and the family-photographed pages carry that weight alone.
+- **Library of Congress — By the People** ([crowd.loc.gov](https://crowd.loc.gov),
+  **public domain**, transcriptions included): digitized letters and papers
+  with completed, reviewed transcriptions downloadable per image. Historical
+  cursive — deliberately harder than Dad's hand, so treat it as a stress
+  extension, not a representative sample.
+
+**Prefer financial content when choosing wild pages.** Handwritten amounts,
+dates, and account references are exactly where a fabricated reading does
+the most damage — and financial-but-unrelated content is also the hardest
+test of the forced-mapping gate, because its vocabulary (amounts, accounts,
+trustee-ish words) overlaps the fixture documents while referring to none of
+them. Good hunting grounds:
+
+- **Smithsonian Transcription Center** ([transcription.si.edu](https://transcription.si.edu)):
+  completed, volunteer-reviewed transcriptions of handwritten **business
+  ledgers and sales registers** (e.g. the Edward Howard clockmaker ledgers,
+  the Oldman sales registers 1902-1916) — image + vetted transcription
+  pairs, dense with amounts and dates.
+- **Wikimedia Commons — [Invoices, bills and receipts](https://commons.wikimedia.org/wiki/Category:Invoices,_bills_and_receipts)**
+  (and its Receipts/Invoices subcategories): public-domain handwritten
+  receipts and bills — the intake eval's 1860 lighthouse repair bill came
+  from exactly this well. Some file pages carry transcriptions; where one is
+  missing, type the `.txt` from a careful reading (scorer effort, not writer
+  bias).
+- Within **By the People**, favor campaigns with account books and expense
+  records over pure correspondence for the same reason.
+
+Setup: for each chosen page save `wild/<id>.jpg` (or `.png`/`.webp`) plus
+`wild/<id>.txt` holding its transcription, in the same corpus directory. The
+harness picks them up automatically and skips the section cleanly when the
+directory is absent.
+
+**Two wild tiers** (decided after the first real wild runs, PR #55):
+
+- **Plain `wild-*` pages gate** on fabrication, same zero rule as the family
+  corpus. Use these for modern handwriting — GNHK pages, or pages
+  handwritten by non-family friends — the domain the feature actually reads.
+- **`stress-*` (or `wild-stress-*`) pages report fabrication flags but do
+  not gate.** Use this tier for the 150-plus-year-old archival cursive: some
+  confident misreads there are unavoidable at current model honesty, and a
+  permanently unpassable gate would invite quietly deleting hard pages to
+  get to green. Naming a page `stress-*` is a **declared decision** — record
+  it in the results file, and READ the stress flags every run: they are
+  usually real misreads (wrong years, wrong names), which is exactly the
+  behavior the review screen's original-beside-every-point design exists to
+  catch. Forced mappings gate on both tiers; old ink is no excuse for a
+  forced link.
+
+Wild pages score: transcription accuracy (reported), **fabrication (gates —
+same zero rule)**, and **forced mappings (gates)** — wild content is by
+construction unrelated to the fixture documents, so any proposed link at all
+is a forced mapping. Expected-point recall isn't scored (the pages weren't
+written to contain trust facts), and extracted points are fine as long as
+they're grounded.
+
+Both halves matter and neither replaces the other: the wild corpus removes
+writer bias; the pages in Dad's hand keep the eval representative of the one
+notebook this feature will actually read.
+
 ## Running it
 
 ```bash
@@ -39,7 +114,7 @@ dollars at the Sonnet 5 default.
 
 | Check | Gates? | Why |
 |---|---|---|
-| **Fabricated points** — a key point whose words aren't in the ground truth (scored against ground truth, so OCR hallucinations that feed points count too) | **Yes — zero tolerated** | A plausible invented "fact" about a trust is the failure shape that survives a human skim. This is the metric every intake eval existed to hold at zero. |
+| **Fabricated points** — scored quote-first against the ground truth (the verbatim `sourceQuote` when present, the point text otherwise), plus an entity check: **every number in the point text must appear in the truth**. Recalibrated after the first wild-corpus run (PR #55): edge punctuation normalized, short numbers always scored. `scoring-check.mts` pins the behavior without spending a token. | **Yes — zero tolerated** | A plausible invented "fact" about a trust is the failure shape that survives a human skim, and invented numbers are its sharpest form. This is the metric every intake eval existed to hold at zero. |
 | **Restraint** — the no-trust-content page (`note-04`) must yield zero points | **Yes** | The reader must know when there is nothing to say. |
 | **Forced mappings** — a link to any document outside a page's planted + allowed set (calibrated per the PR #54 review: `note-02` names the restatement outright, `note-06` may defensibly touch it, and `note-07` exists so the gate has content that matches nothing) | **Yes** | A manager will be asked to approve every link; a confident wrong link is worse than none — but a gate that punishes correct reading would invite weakening the real feature to satisfy it. |
 | Transcription accuracy + `[unclear]` usage | Reported | Judge by eye: a low score with honest `[unclear]` marks is workable (the review screen shows the original); a high score achieved by guessing is not — cross-check misread words against the fabrication lines. |
