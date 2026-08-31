@@ -8,13 +8,13 @@ synthesized: the photos must be handwritten and photographed by a person.
 
 ## The protocol (the one step only the family can do)
 
-1. Open [corpus.ts](corpus.ts). For each of the six entries, **handwrite the
-   `groundTruth` text on paper, verbatim** — real pen, real paper, natural
-   speed. The texts are entirely invented (the fictional Birchwater Family
-   Trust); nothing real is ever written down. Honor the per-page probes:
-   print for `note-01`, cursive for `note-02`, hurried writing for
+1. Open [corpus.ts](corpus.ts). For each of the seven entries, **handwrite
+   the `groundTruth` text on paper, verbatim** — real pen, real paper,
+   natural speed. The texts are entirely invented (the fictional Birchwater
+   Family Trust); nothing real is ever written down. Honor the per-page
+   probes: print for `note-01`, cursive for `note-02`, hurried writing for
    `note-05`, an actual crossed-out word in `note-03`, a margin note in
-   `note-06`.
+   `note-06`, ordinary handwriting for `note-07`.
 2. **Photograph each page the way Dad actually would** — handheld phone
    photo, ordinary room light. No flatbed-perfect scans; the pipeline must
    work on realistic input.
@@ -31,9 +31,9 @@ TRUST_NOTE_CORPUS=/path/to/photos npx tsx --env-file=.env.local evals/trust-note
 ```
 
 Needs `ANTHROPIC_API_KEY` in `.env.local`. Calls the shipped
-`readTrustScan` / `proposeScanMappings` wrappers; touches no database. Six
-read calls + up to five mapping calls per run; low single-digit dollars at
-the Sonnet 5 default.
+`readTrustScan` / `proposeScanMappings` wrappers; touches no database.
+Seven read calls + up to six mapping calls per run; low single-digit
+dollars at the Sonnet 5 default.
 
 ## What gates and what doesn't
 
@@ -41,7 +41,7 @@ the Sonnet 5 default.
 |---|---|---|
 | **Fabricated points** — a key point whose words aren't in the ground truth (scored against ground truth, so OCR hallucinations that feed points count too) | **Yes — zero tolerated** | A plausible invented "fact" about a trust is the failure shape that survives a human skim. This is the metric every intake eval existed to hold at zero. |
 | **Restraint** — the no-trust-content page (`note-04`) must yield zero points | **Yes** | The reader must know when there is nothing to say. |
-| **Forced mappings** — points from pages with no document reference must not link to a document | **Yes** | A manager will be asked to approve every link; a confident wrong link is worse than none. |
+| **Forced mappings** — a link to any document outside a page's planted + allowed set (calibrated per the PR #54 review: `note-02` names the restatement outright, `note-06` may defensibly touch it, and `note-07` exists so the gate has content that matches nothing) | **Yes** | A manager will be asked to approve every link; a confident wrong link is worse than none — but a gate that punishes correct reading would invite weakening the real feature to satisfy it. |
 | Transcription accuracy + `[unclear]` usage | Reported | Judge by eye: a low score with honest `[unclear]` marks is workable (the review screen shows the original); a high score achieved by guessing is not — cross-check misread words against the fabrication lines. |
 | Expected-point recall + planted-reference mapping | Reported | A miss costs the manager reading the transcription themselves; systematic misses mean the prompt needs work. |
 

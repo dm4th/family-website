@@ -76,6 +76,9 @@ const ALLOWED_SCAN_MIMES = new Set([
   "application/pdf",
 ]);
 
+/** Stay clearly under the API's 32MB request cap after ~1.33x base64 inflation. */
+const MAX_READ_BYTES = 20 * 1024 * 1024;
+
 const MAX_KEY_POINT_CHARS = 400;
 const MAX_QUOTE_CHARS = 400;
 const MAX_NOTE_CHARS = 200;
@@ -301,6 +304,17 @@ export async function readTrustScan(opts: {
     return {
       ok: false,
       message: "We can only read photos (JPG, PNG) and scanned PDFs.",
+    };
+  }
+  // The vault accepts scanned PDFs up to 50MB, but the API caps requests at
+  // 32MB and base64 inflates ~1.33x — so a big scan would fail generically
+  // ("try again") in a way no retry fixes. Say the real thing early instead
+  // (PR #54 review).
+  if (opts.bytes.byteLength > MAX_READ_BYTES) {
+    return {
+      ok: false,
+      message:
+        "That file is too large to read in one go. Photograph the pages one at a time, or scan fewer pages per file.",
     };
   }
 

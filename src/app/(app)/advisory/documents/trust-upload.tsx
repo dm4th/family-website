@@ -107,6 +107,19 @@ export function TrustUpload() {
           blob = prepared.display;
           contentType = prepared.contentType;
           outputName = prepared.outputName;
+          // A HEIC this browser couldn't decode passes through unconverted,
+          // and the notebook reader can't read HEIC — storing it would hand
+          // Dad a dead end at review time. Fail it now, with the fix in the
+          // message (PR #54 review).
+          if (/hei[cf]/.test(contentType)) {
+            outcomes.push({
+              name: file.name,
+              status: "failed",
+              message:
+                "This photo is in a format we can't read later. Please re-take it, or export it as a JPG and try again.",
+            });
+            continue;
+          }
         }
 
         const storagePath = generateTrustPath(kind, outputName);

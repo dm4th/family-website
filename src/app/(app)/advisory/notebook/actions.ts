@@ -111,6 +111,18 @@ export async function extractTrustScan(
         message: "We couldn't save the transcription. Please try again.",
       };
     }
+    // A re-read that returned fewer pages must not leave stale higher-numbered
+    // transcription pages behind (PR #54 review). Best-effort: leftovers only
+    // mislead the review screen, never the corpus rule.
+    const maxPage = Math.max(...read.pages.map((p) => p.page));
+    const { error: staleError } = await supabase
+      .from("trust_document_pages")
+      .delete()
+      .eq("document_id", doc.id)
+      .gt("page_number", maxPage);
+    if (staleError) {
+      console.error("[trust] could not clear stale pages", staleError);
+    }
   }
 
   // Judged points stand; pending ones are this read's to replace.
@@ -119,10 +131,16 @@ export async function extractTrustScan(
     .select("id, text, status")
     .eq("scan_document_id", doc.id)
     .returns<{ id: string; text: string; status: string }[]>();
+  // Normalized past punctuation/whitespace so minor OCR variance between
+  // reads doesn't resurrect a judged point. Not airtight — a rephrasing can
+  // still slip through, and the manager simply denies it again — so this is
+  // "won't re-propose a matching point", not a hard guarantee.
+  const normalize = (t: string) =>
+    t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   const judged = new Set(
     (existing ?? [])
       .filter((a) => a.status !== "pending")
-      .map((a) => a.text.trim().toLowerCase()),
+      .map((a) => normalize(a.text)),
   );
   const { error: clearError } = await supabase
     .from("trust_annotations")
@@ -135,7 +153,7 @@ export async function extractTrustScan(
   }
 
   const freshPoints = read.keyPoints.filter(
-    (k) => !judged.has(k.text.trim().toLowerCase()),
+    (k) => !judged.has(normalize(k.text)),
   );
 
   // Mapping candidates come from the DIGITAL documents only — matching a note
@@ -235,6 +253,10 @@ export async function extractTrustScan(
  * Approve one point, with whatever edits the manager made in review. The
  * approved text and mapping are what the adviser corpus will eventually
  * trust, so this is the gate: audit-or-abort, log-first.
+ *
+ * Deliberate: a DENIED point can be approved (and vice versa in deny). The
+ * review screen renders judged rows read-only, but the action layer keeps
+ * verdict flips open as manager recourse — every flip is audited.
  */
 export async function approveTrustAnnotation(input: {
   id: string;

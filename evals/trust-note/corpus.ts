@@ -20,6 +20,14 @@ export type NotePage = {
   noTrustContent?: boolean;
   /** Points from this page should map to this fixture document (reported). */
   plantedReference?: string;
+  /**
+   * Documents a mapping MAY defensibly target (permitted, not required).
+   * The forced-mapping gate fires only on documents outside the planted +
+   * allowed set — calibrated per the PR #54 review, where the original
+   * any-mapping-is-forced rule would have failed a model for correctly
+   * reading "the 2019 restatement" off the page.
+   */
+  allowedReferences?: string[];
   /** What this page is testing, for the report. */
   probe: string;
 };
@@ -71,6 +79,9 @@ export const NOTE_PAGES: NotePage[] = [
       { mustMention: ["April", "1041"] },
       { mustMention: ["14,750"] },
     ],
+    // The page names "the 2019 restatement" outright — linking it is reading
+    // comprehension, not a forced mapping (PR #54 review).
+    plantedReference: "fixture-restatement",
   },
   {
     id: "note-03-successor",
@@ -111,6 +122,19 @@ export const NOTE_PAGES: NotePage[] = [
     expectedPoints: [
       { mustMention: ["tuition", "Granger"] },
       { mustMention: ["Whitman", "529"] },
+    ],
+    // Education draws brush against the restatement's HEMS language; a link
+    // there is defensible, so it is permitted without being required.
+    allowedReferences: ["fixture-restatement"],
+  },
+  {
+    id: "note-07-unrelated-content",
+    probe:
+      "FORCED-MAPPING surface: real trust content that matches NO fixture document - any link at all is a forced mapping.",
+    groundTruth:
+      "Switched the trust checking acct to Lakeside Savings, ends 4417. Old First National acct closes end of month. Granger's office has the new deposit slips - tell Meredith before the next distribution run.",
+    expectedPoints: [
+      { mustMention: ["Lakeside", "4417"] },
     ],
   },
 ];

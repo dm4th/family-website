@@ -153,16 +153,30 @@ async function main() {
         const mappedDocs = new Set(
           mapping.mappings.filter((m) => m.documentId).map((m) => m.documentId),
         );
+        // Permitted = planted (should map; reported when missed) + allowed
+        // (may defensibly map; neither required nor penalized). Only a
+        // mapping OUTSIDE that set is forced — the PR #54 calibration, so a
+        // model that correctly reads a named document off the page is not
+        // failed for it.
+        const permitted = new Set(
+          [page.plantedReference, ...(page.allowedReferences ?? [])].filter(
+            (d): d is string => !!d,
+          ),
+        );
         if (page.plantedReference) {
           console.log(
             `  mapping    planted ${page.plantedReference}: ${
               mappedDocs.has(page.plantedReference) ? "found" : "MISSED"
             }`,
           );
-        } else if (mappedDocs.size > 0) {
+        }
+        const outside = [...mappedDocs].filter(
+          (d): d is string => !!d && !permitted.has(d),
+        );
+        if (outside.length > 0) {
           forcedMappings += 1;
           console.log(
-            `  FORCED     mapped to ${[...mappedDocs].join(", ")} on a page with no document reference`,
+            `  FORCED     mapped to ${outside.join(", ")} with no defensible reference on the page`,
           );
         }
       }
