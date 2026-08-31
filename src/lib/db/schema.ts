@@ -1029,7 +1029,10 @@ export type TrustEventKind =
   | "document_deleted"
   | "manager_added"
   | "manager_removed"
-  | "taxonomy_applied";
+  | "taxonomy_applied"
+  | "scan_read"
+  | "annotation_approved"
+  | "annotation_denied";
 
 // Append-only at the SQL level: the table has insert + select policies and
 // deliberately NO update or delete policy for any role.
@@ -1060,3 +1063,56 @@ export const trustDocumentEvents = pgTable(
 
 export type TrustDocumentEvent = typeof trustDocumentEvents.$inferSelect;
 export type NewTrustDocumentEvent = typeof trustDocumentEvents.$inferInsert;
+
+// ----------------------------------------------------------------------------
+// trust_annotations — notebook key points awaiting / holding manager verdicts
+// (PRD 40 slice 3). Manager-only at RLS; the PRD 07 corpus rule is documents'
+// pages + APPROVED annotations, never raw scan OCR.
+// ----------------------------------------------------------------------------
+export type TrustAnnotationStatus = "pending" | "approved" | "denied";
+export type TrustAnnotationConfidence = "high" | "medium" | "low";
+
+export const trustAnnotations = pgTable(
+  "trust_annotations",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    scanDocumentId: uuid("scan_document_id")
+      .notNull()
+      .references(() => trustDocuments.id, { onDelete: "cascade" }),
+    scanPage: integer("scan_page").notNull().default(1),
+    text: text("text").notNull(),
+    sourceQuote: text("source_quote"),
+    confidence: text("confidence").$type<TrustAnnotationConfidence>(),
+    mappedDocumentId: uuid("mapped_document_id").references(
+      () => trustDocuments.id,
+      { onDelete: "set null" },
+    ),
+    mappedPage: integer("mapped_page"),
+    mappingNote: text("mapping_note"),
+    status: text("status")
+      .$type<TrustAnnotationStatus>()
+      .notNull()
+      .default("pending"),
+    createdBy: uuid("created_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    reviewedBy: uuid("reviewed_by").references(() => profiles.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trust_annotations_scan_idx").on(
+      table.scanDocumentId,
+      table.status,
+      table.createdAt,
+    ),
+    index("trust_annotations_status_idx").on(table.status, table.createdAt),
+  ],
+);
+
+export type TrustAnnotation = typeof trustAnnotations.$inferSelect;
+export type NewTrustAnnotation = typeof trustAnnotations.$inferInsert;
