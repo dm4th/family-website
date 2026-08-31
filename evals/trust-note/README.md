@@ -44,6 +44,27 @@ pair images with vetted transcriptions:
   cursive — deliberately harder than Dad's hand, so treat it as a stress
   extension, not a representative sample.
 
+**Prefer financial content when choosing wild pages.** Handwritten amounts,
+dates, and account references are exactly where a fabricated reading does
+the most damage — and financial-but-unrelated content is also the hardest
+test of the forced-mapping gate, because its vocabulary (amounts, accounts,
+trustee-ish words) overlaps the fixture documents while referring to none of
+them. Good hunting grounds:
+
+- **Smithsonian Transcription Center** ([transcription.si.edu](https://transcription.si.edu)):
+  completed, volunteer-reviewed transcriptions of handwritten **business
+  ledgers and sales registers** (e.g. the Edward Howard clockmaker ledgers,
+  the Oldman sales registers 1902-1916) — image + vetted transcription
+  pairs, dense with amounts and dates.
+- **Wikimedia Commons — [Invoices, bills and receipts](https://commons.wikimedia.org/wiki/Category:Invoices,_bills_and_receipts)**
+  (and its Receipts/Invoices subcategories): public-domain handwritten
+  receipts and bills — the intake eval's 1860 lighthouse repair bill came
+  from exactly this well. Some file pages carry transcriptions; where one is
+  missing, type the `.txt` from a careful reading (scorer effort, not writer
+  bias).
+- Within **By the People**, favor campaigns with account books and expense
+  records over pure correspondence for the same reason.
+
 Setup: for each chosen page save `wild/<id>.jpg` (or `.png`/`.webp`) plus
 `wild/<id>.txt` holding its transcription, in the same corpus directory. The
 harness picks them up automatically and skips the section cleanly when the
