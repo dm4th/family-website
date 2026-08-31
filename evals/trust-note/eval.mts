@@ -183,6 +183,7 @@ async function main() {
   // finance-ish content) but must be grounded. Accuracy is reported.
   const wildDir = join(CORPUS_DIR, "wild");
   let wildPages = 0;
+  let stressFlags = 0;
   if (existsSync(wildDir)) {
     const images = readdirSync(wildDir).filter((f) => /\.(jpe?g|png|webp)$/i.test(f));
     for (const file of images) {
@@ -192,6 +193,15 @@ async function main() {
         console.log(`\n── wild/${id} ── SKIPPED (no ${id}.txt ground truth beside it)`);
         continue;
       }
+      // Two wild tiers (second wild run, PR #55): a `(wild-)stress-*` page is
+      // declared out-of-domain-hard (150-year-old cursive from the archival
+      // sources) — its fabrication flags are REPORTED, never gated, because
+      // some confident misreads are unavoidable there at current model
+      // honesty and a permanently unpassable gate invites quietly deleting
+      // hard pages. Plain wild pages (modern hands) gate as usual. Forced
+      // mappings gate on BOTH tiers — mapping restraint doesn't get harder
+      // with old ink.
+      const isStress = /^(wild-)?stress-/.test(id);
       wildPages += 1;
       const groundTruth = readFileSync(truthPath, "utf8");
       const contentType = /\.png$/i.test(file)
@@ -200,7 +210,9 @@ async function main() {
           ? "image/webp"
           : "image/jpeg";
 
-      console.log(`\n── wild/${id} ── stranger's handwriting`);
+      console.log(
+        `\n── wild/${id} ── stranger's handwriting${isStress ? " (stress tier: fabrication reported, not gated)" : ""}`,
+      );
       const result = await readTrustScan({
         bytes: new Uint8Array(readFileSync(join(wildDir, file))),
         contentType,
@@ -221,9 +233,10 @@ async function main() {
       for (const k of result.read.keyPoints) {
         const score = scoreKeyPoint(k, groundTruth);
         if (score.fabricated) {
-          fabricated += 1;
+          if (isStress) stressFlags += 1;
+          else fabricated += 1;
           console.log(
-            `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score.grounded * 100).toFixed(0)}%${
+            `  ${isStress ? "stress-flag" : "FABRICATED "} "${k.text.slice(0, 80)}" (groundedness ${(score.grounded * 100).toFixed(0)}%${
               score.missingNumbers.length > 0
                 ? `, unsupported numbers: ${score.missingNumbers.join(", ")}`
                 : ""
@@ -276,7 +289,11 @@ async function main() {
   for (const line of recallLines) console.log(`  ${line}`);
 
   console.log(
-    `\n══ TOTAL: ${fabricated} fabricated, ${restraintViolations} restraint violations, ${forcedMappings} forced mappings, ${missingImages} missing images ══`,
+    `\n══ TOTAL: ${fabricated} fabricated, ${restraintViolations} restraint violations, ${forcedMappings} forced mappings, ${missingImages} missing images${
+      stressFlags > 0
+        ? ` · ${stressFlags} stress-tier flags (reported, not gated — read them, they are usually real misreads)`
+        : ""
+    } ══`,
   );
   const pass =
     fabricated === 0 &&

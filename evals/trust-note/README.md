@@ -72,6 +72,22 @@ Setup: for each chosen page save `wild/<id>.jpg` (or `.png`/`.webp`) plus
 harness picks them up automatically and skips the section cleanly when the
 directory is absent.
 
+**Two wild tiers** (decided after the first real wild runs, PR #55):
+
+- **Plain `wild-*` pages gate** on fabrication, same zero rule as the family
+  corpus. Use these for modern handwriting — GNHK pages, or pages
+  handwritten by non-family friends — the domain the feature actually reads.
+- **`stress-*` (or `wild-stress-*`) pages report fabrication flags but do
+  not gate.** Use this tier for the 150-plus-year-old archival cursive: some
+  confident misreads there are unavoidable at current model honesty, and a
+  permanently unpassable gate would invite quietly deleting hard pages to
+  get to green. Naming a page `stress-*` is a **declared decision** — record
+  it in the results file, and READ the stress flags every run: they are
+  usually real misreads (wrong years, wrong names), which is exactly the
+  behavior the review screen's original-beside-every-point design exists to
+  catch. Forced mappings gate on both tiers; old ink is no excuse for a
+  forced link.
+
 Wild pages score: transcription accuracy (reported), **fabrication (gates —
 same zero rule)**, and **forced mappings (gates)** — wild content is by
 construction unrelated to the fixture documents, so any proposed link at all

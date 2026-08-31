@@ -6,7 +6,7 @@
 //
 // Usage: npx tsx evals/trust-note/scoring-check.mts
 
-import { groundedness, scoreKeyPoint, tokens } from "./scoring";
+import { digitSupported, groundedness, scoreKeyPoint, tokens } from "./scoring";
 
 let failures = 0;
 
@@ -36,6 +36,35 @@ check(
 check(
   "trailing comma on a number: 'the 1041, then' matches 'file the 1041'",
   groundedness("file the 1041", "Granger says file the 1041, then call.") === 1,
+);
+
+console.log("── number formats (second wild run) ──");
+check(
+  "spaced pounds-shillings-pence: 439.18.6 supported by '£439. 18. 6'",
+  digitSupported("439.18.6", "the sum of £439. 18. 6 at ninety days"),
+);
+check(
+  "prefixed reference: 115 supported by 'No. M115'",
+  digitSupported("115", "registered as No. M115 in the book"),
+);
+check(
+  "wrong number still unsupported: 149 vs $1.44 / 36 qts",
+  !digitSupported("149", "36 qts @ 4c = $1.44 received payment"),
+);
+check(
+  "wrong year still unsupported: 1826 vs 1816",
+  !digitSupported("1826", "dated Birmingham 1st November 1816"),
+);
+check(
+  "wrong day still unsupported: 11 vs June 1, 1857",
+  !digitSupported("11", "June 1, 1857. 36 qts @ 4c = $1.44"),
+);
+check(
+  "scoreKeyPoint accepts a reshaped supported number",
+  !scoreKeyPoint(
+    { text: "A bill of exchange for 439.18.6 at ninety days.", sourceQuote: "£439. 18. 6" },
+    "Pay to the order of P. Irving the sum of £439. 18. 6 at ninety days sight.",
+  ).fabricated,
 );
 
 console.log("── the Sayers reproduction (was 0% groundedness, a false FABRICATED) ──");
