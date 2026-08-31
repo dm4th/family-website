@@ -32,25 +32,9 @@ import {
   selectMappingCandidates,
 } from "@/lib/trust/notebook";
 import { FIXTURE_DOC_PAGES, NOTE_PAGES } from "./corpus";
+import { scoreKeyPoint, tokens } from "./scoring";
 
 const CORPUS_DIR = process.env.TRUST_NOTE_CORPUS ?? "/tmp/trust-note-corpus";
-
-function words(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9.,%$]+/)
-    .filter((w) => w.length >= 4);
-}
-
-/** Share of a candidate string's substantive words present in the reference. */
-function groundedness(candidate: string, reference: string): number {
-  const ref = new Set(words(reference));
-  const cand = words(candidate);
-  if (cand.length === 0) return 1;
-  let hit = 0;
-  for (const w of cand) if (ref.has(w)) hit += 1;
-  return hit / cand.length;
-}
 
 function findImage(id: string): { path: string; contentType: string } | null {
   for (const [ext, type] of [
@@ -94,22 +78,26 @@ async function main() {
     const transcription = read.pages.map((p) => p.transcription).join("\n");
 
     // ACCURACY (reported)
-    const truthWords = words(page.groundTruth);
-    const gotWords = new Set(words(transcription));
+    const truthWords = tokens(page.groundTruth);
+    const gotWords = new Set(tokens(transcription));
     const found = truthWords.filter((w) => gotWords.has(w)).length;
     const unclearCount = (transcription.match(/\[unclear\]/g) ?? []).length;
     console.log(
       `  accuracy   ${found}/${truthWords.length} ground-truth words in transcription · ${unclearCount} [unclear] marks · ${read.keyPoints.length} key points`,
     );
 
-    // FABRICATION (gates)
+    // FABRICATION (gates) — quote-first with a numbers entity check; see
+    // scoring.ts for the PR #55 recalibration.
     for (const k of read.keyPoints) {
-      const basis = `${k.text} ${k.sourceQuote ?? ""}`;
-      const score = groundedness(basis, page.groundTruth);
-      if (score < 0.7) {
+      const score = scoreKeyPoint(k, page.groundTruth);
+      if (score.fabricated) {
         fabricated += 1;
         console.log(
-          `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score * 100).toFixed(0)}%)`,
+          `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score.grounded * 100).toFixed(0)}%${
+            score.missingNumbers.length > 0
+              ? `, unsupported numbers: ${score.missingNumbers.join(", ")}`
+              : ""
+          })`,
         );
       }
     }
@@ -223,19 +211,23 @@ async function main() {
         continue;
       }
       const transcription = result.read.pages.map((p) => p.transcription).join("\n");
-      const truthWords = words(groundTruth);
-      const gotWords = new Set(words(transcription));
+      const truthWords = tokens(groundTruth);
+      const gotWords = new Set(tokens(transcription));
       const found = truthWords.filter((w) => gotWords.has(w)).length;
       const unclearCount = (transcription.match(/\[unclear\]/g) ?? []).length;
       console.log(
         `  accuracy   ${found}/${truthWords.length} ground-truth words · ${unclearCount} [unclear] marks · ${result.read.keyPoints.length} key points`,
       );
       for (const k of result.read.keyPoints) {
-        const score = groundedness(`${k.text} ${k.sourceQuote ?? ""}`, groundTruth);
-        if (score < 0.7) {
+        const score = scoreKeyPoint(k, groundTruth);
+        if (score.fabricated) {
           fabricated += 1;
           console.log(
-            `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score * 100).toFixed(0)}%)`,
+            `  FABRICATED "${k.text.slice(0, 80)}" (groundedness ${(score.grounded * 100).toFixed(0)}%${
+              score.missingNumbers.length > 0
+                ? `, unsupported numbers: ${score.missingNumbers.join(", ")}`
+                : ""
+            })`,
           );
         }
       }

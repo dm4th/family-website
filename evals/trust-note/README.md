@@ -36,8 +36,10 @@ pair images with vetted transcriptions:
   [github.com/GoodNotes/GNHK-dataset](https://github.com/GoodNotes/GNHK-dataset),
   **CC-BY-4.0**): camera-captured modern English handwriting from many
   writers worldwide — notes, lists, the exact shape of a notebook photo.
-  Download the set, pick 3–5 varied pages, and build each ground-truth `.txt`
-  from the dataset's own annotations.
+  Download the set (it sits behind a request form, so this is a human step),
+  pick 3–5 varied pages, and build each ground-truth `.txt` from the
+  dataset's own annotations. Until someone does, modern-hand wild coverage
+  is missing and the family-photographed pages carry that weight alone.
 - **Library of Congress — By the People** ([crowd.loc.gov](https://crowd.loc.gov),
   **public domain**, transcriptions included): digitized letters and papers
   with completed, reviewed transcriptions downloadable per image. Historical
@@ -96,7 +98,7 @@ dollars at the Sonnet 5 default.
 
 | Check | Gates? | Why |
 |---|---|---|
-| **Fabricated points** — a key point whose words aren't in the ground truth (scored against ground truth, so OCR hallucinations that feed points count too) | **Yes — zero tolerated** | A plausible invented "fact" about a trust is the failure shape that survives a human skim. This is the metric every intake eval existed to hold at zero. |
+| **Fabricated points** — scored quote-first against the ground truth (the verbatim `sourceQuote` when present, the point text otherwise), plus an entity check: **every number in the point text must appear in the truth**. Recalibrated after the first wild-corpus run (PR #55): edge punctuation normalized, short numbers always scored. `scoring-check.mts` pins the behavior without spending a token. | **Yes — zero tolerated** | A plausible invented "fact" about a trust is the failure shape that survives a human skim, and invented numbers are its sharpest form. This is the metric every intake eval existed to hold at zero. |
 | **Restraint** — the no-trust-content page (`note-04`) must yield zero points | **Yes** | The reader must know when there is nothing to say. |
 | **Forced mappings** — a link to any document outside a page's planted + allowed set (calibrated per the PR #54 review: `note-02` names the restatement outright, `note-06` may defensibly touch it, and `note-07` exists so the gate has content that matches nothing) | **Yes** | A manager will be asked to approve every link; a confident wrong link is worse than none — but a gate that punishes correct reading would invite weakening the real feature to satisfy it. |
 | Transcription accuracy + `[unclear]` usage | Reported | Judge by eye: a low score with honest `[unclear]` marks is workable (the review screen shows the original); a high score achieved by guessing is not — cross-check misread words against the fabrication lines. |
