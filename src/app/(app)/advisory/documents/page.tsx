@@ -21,6 +21,7 @@ import type { TrustDocumentKind, TrustEventKind } from "@/lib/db/schema";
 import {
   DeleteDocumentButton,
   OpenDocumentButton,
+  OpenDocumentName,
   ShareControls,
   type TrustPerson,
 } from "./document-controls";
@@ -303,9 +304,7 @@ export default async function TrustDocumentsPage() {
                         <li key={doc.id} className="flex flex-col gap-3 py-4">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div className="flex min-w-0 flex-col gap-0.5">
-                              <span className="truncate text-base text-foreground">
-                                {doc.name}
-                              </span>
+                              <OpenDocumentName documentId={doc.id} name={doc.name} />
                               <span className="text-xs text-foreground-subtle">
                                 Added {format(new Date(doc.created_at), "MMMM d, yyyy")}
                                 {doc.uploaded_by
@@ -338,6 +337,13 @@ export default async function TrustDocumentsPage() {
                     </ul>
                   </section>
                 ))
+              )}
+              {originals.length > 0 && (
+                <p className="text-sm text-foreground-subtle">
+                  Click a document&rsquo;s name, or Open, to view the original
+                  through a private link. Plain-language answers about what
+                  the documents say are the next piece to arrive.
+                </p>
               )}
             </PanelBody>
           </BriefingPanel>
@@ -379,9 +385,7 @@ export default async function TrustDocumentsPage() {
                         className="flex flex-wrap items-center justify-between gap-3 py-4"
                       >
                         <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="truncate text-base text-foreground">
-                            {doc.name}
-                          </span>
+                          <OpenDocumentName documentId={doc.id} name={doc.name} />
                           <span className="text-xs text-foreground-subtle">
                             Added {format(new Date(doc.created_at), "MMMM d, yyyy")}
                             {" · "}

@@ -16,34 +16,70 @@ import {
 export type TrustPerson = { id: string; name: string };
 
 /**
- * Open one document in a new tab. The server action writes the `viewed` audit
- * row before minting a five-minute signed URL — an open that can't be logged
- * doesn't happen, and this button surfaces that honestly.
+ * Open one document: audited signed URL from the server action, then show it.
+ *
+ * The tab is opened SYNCHRONOUSLY inside the click gesture and pointed at the
+ * document once the URL arrives — `window.open` after an await is silently
+ * killed by popup blockers (Safari above all), which is exactly the
+ * "I click Open and nothing happens" Dad reported on desktop. When even the
+ * synchronous open is blocked, fall back to navigating this tab: the document
+ * always opens, and the back button returns to the register.
  */
-export function OpenDocumentButton({ documentId }: { documentId: string }) {
+function useOpenDocument(documentId: string) {
   const [pending, startTransition] = useTransition();
 
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={pending}
-      onClick={() =>
-        startTransition(async () => {
-          const result = await openTrustDocument(documentId);
-          if (result.ok) {
-            window.open(result.url, "_blank", "noopener,noreferrer");
-          } else {
-            toast.error("Couldn't open the document", {
-              description: result.message,
-            });
-          }
-        })
+  function open() {
+    if (pending) return;
+    const tab = window.open("", "_blank");
+    startTransition(async () => {
+      const result = await openTrustDocument(documentId);
+      if (!result.ok) {
+        tab?.close();
+        toast.error("Couldn't open the document", { description: result.message });
+        return;
       }
-    >
+      if (tab) {
+        tab.location.href = result.url;
+      } else {
+        window.location.href = result.url;
+      }
+    });
+  }
+
+  return { pending, open };
+}
+
+export function OpenDocumentButton({ documentId }: { documentId: string }) {
+  const { pending, open } = useOpenDocument(documentId);
+  return (
+    <Button type="button" variant="outline" size="sm" disabled={pending} onClick={open}>
       {pending ? "Opening…" : "Open"}
     </Button>
+  );
+}
+
+/**
+ * The document's name as the open affordance. Older users click the name, not
+ * a button off to the side (PRD 29 posture: the obvious thing should work),
+ * so the name does the same audited open as the button.
+ */
+export function OpenDocumentName({
+  documentId,
+  name,
+}: {
+  documentId: string;
+  name: string;
+}) {
+  const { pending, open } = useOpenDocument(documentId);
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={open}
+      className="min-w-0 truncate text-left text-base text-foreground underline-offset-4 hover:text-accent-advisory hover:underline disabled:opacity-60"
+    >
+      {pending ? "Opening…" : name}
+    </button>
   );
 }
 
