@@ -43,6 +43,17 @@ os.makedirs(STATE_DIR, exist_ok=True)
 os.makedirs(WORK, exist_ok=True)
 
 
+# Secrets and personal data that must never reach the public repo. Checked mechanically on the rendered
+# bug file + PR text before filing, and on every line a builder adds.
+PII_RX = re.compile(
+    r"(gh[opsu]_[A-Za-z0-9]{20,}|github_pat_|sk-ant-|sb_secret_|sb_publishable_|re_[A-Za-z0-9]{20,}"
+    r"|eyJ[A-Za-z0-9_-]{20,}\.eyJ|-----BEGIN [A-Z ]*PRIVATE KEY|postgres(ql)?://[^\s:]+:[^\s@]+@|AKIA[0-9A-Z]{16}"
+    r"|[\w.+-]+@[\w-]+(\.[\w-]+)+"                       # any email address, any TLD
+    r"|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b|\+\d[\d\s-]{8,}\d"  # phone numbers
+    r"|\b\d{8,}\b)",                                       # long digit runs (account / policy numbers)
+    re.I)
+
+
 def log(msg):
     print(f"{dt.datetime.now():%F %T} {msg}", flush=True)
 
@@ -239,7 +250,8 @@ _Filled in after merge._
 
 
 def add_index_row(readme, bid, fname, t):
-    row = f"| [{bid}]({fname}) | {t['severity']} | 🔴 open | {t.get('area') or 'Other'} | {t['title']} |"
+    cell = lambda v: str(v).replace("|", "/").replace("\n", " ")
+    row = f"| [{bid}]({fname}) | {cell(t['severity'])} | 🔴 open | {cell(t.get('area') or 'Other')} | {cell(t['title'])} |"
     txt = open(readme).read()
     if "| _none yet_ | | | | |" in txt:
         txt = txt.replace("| _none yet_ | | | | |", row, 1)
@@ -260,8 +272,17 @@ def file_bug(m, sender, t, state):
     if DRY:
         log(f"[dry] would file {bid} '{t['title']}' as a draft PR on {branch}")
         return
+    rendered = render_bug(bid, t, today)
+    if hit := PII_RX.search(rendered + "\n" + t["title"] + "\n" + slug):
+        email_owner(f"[Family site] Bug report held back: possible personal data",
+                    f"Triage of a report from {m['from']} still contained something that looks like a secret or "
+                    f"personal data ({hit.group(0)[:4]}…), so it was NOT filed in the public repo.\n\n"
+                    f"Triage output:\n{json.dumps(t, indent=2)}\n\nFile it by hand after editing, or tell me to.")
+        label_mail(m, "triaged", "held-pii")
+        log(f"{bid}: held back, PII pattern matched")
+        return
     run(["git", "checkout", "-q", "-b", branch], cwd=clone)
-    open(os.path.join(clone, "bugs", fname), "w").write(render_bug(bid, t, today))
+    open(os.path.join(clone, "bugs", fname), "w").write(rendered)
     add_index_row(os.path.join(clone, "bugs/README.md"), bid, fname, t)
     run(["git", "add", "bugs"], cwd=clone)
     run(["git", "commit", "-q", "-m", f"{bid}: file bug report ({t['title']})\n\nFiled from an emailed report.\n\n{TRAILER}"],
@@ -369,7 +390,10 @@ def triage():
             label_mail(m, "triaged", "followup", known)
             state["seen"].append(m["message_id"]); save_state(state)
             continue
-        t = claude_json(os.path.join(HERE, "triage-prompt.md"), f"<email>\nSubject: {m.get('subject', '')}\n\n{text[:12000]}\n</email>")
+        cache = state.setdefault("triage_cache", {})
+        t = cache.get(m["message_id"]) or claude_json(
+            os.path.join(HERE, "triage-prompt.md"), f"<email>\nSubject: {m.get('subject', '')}\n\n{text[:12000]}\n</email>")
+        cache[m["message_id"]] = t
         if t.get("kind") == "bug":
             if not main_has_bugs:
                 log(f"bug from {sender} deferred: bugs/ isn't on main yet")
@@ -395,8 +419,8 @@ def triage():
 
 # ---------- build stage ----------
 SENSITIVE = ["~/.config", "~/.ssh", "~/.supabase", "~/.claude", "~/.claude.json", "~/Library/Keychains",
-             "~/Library/Application Support/com.vercel.cli", "~/maintenance", "~/.local/state",
-             f"{DEPS_REPO}/.env.local", f"{DEPS_REPO}/.vercel", os.path.join(WORK, "triage")]
+             "~/Library/Application Support/com.vercel.cli", "~/maintenance", "~/.local/state", "~/code",
+             os.path.join(WORK, "triage"), os.path.join(WORK, "push"), os.path.join(WORK, "runner")]
 
 
 def _expand(p):
@@ -405,7 +429,7 @@ def _expand(p):
 
 def _rule(tool, p):
     p = _expand(p)
-    return f"{tool}(/{p})" if p.endswith((".json", ".local")) else f"{tool}(/{p}/**)"
+    return f"{tool}(/{p})" if p.endswith(".json") else f"{tool}(/{p}/**)"
 
 
 FIX_SETTINGS = json.dumps({
@@ -414,26 +438,29 @@ FIX_SETTINGS = json.dumps({
                 "filesystem": {"denyRead": [_expand(p) for p in SENSITIVE]}},
     "permissions": {
         "defaultMode": "dontAsk",
-        "allow": ["Read(./**)", "Edit(./**)", f"Read(/{DEPS_REPO}/node_modules/**)"],
+        "allow": ["Read(./**)", "Edit(./**)"],
         "deny": [r for p in SENSITIVE for r in (_rule("Read", p), _rule("Edit", p))]
-                + ["Bash(git push:*)", "Bash(git remote:*)", "Bash(git config:*)", "Bash(curl:*)", "Bash(gh:*)",
-                   "Bash(supabase:*)", "Bash(vercel:*)", "Bash(security:*)"],
+                + ["Edit(./.git/**)", "Bash(git push:*)", "Bash(git remote:*)", "Bash(git config:*)", "Bash(curl:*)",
+                   "Bash(gh:*)", "Bash(supabase:*)", "Bash(vercel:*)", "Bash(security:*)"],
     },
 })
+# Paths a fix may touch. Anything else (package.json, lockfile, vercel.json, config, ops/, .github) needs a human.
 ALLOWED_PATHS = re.compile(r"^(src/|bugs/|supabase/migrations/|supabase/tests/|prds/|evals/|docs/|public/)")
-SECRET_RX = re.compile(r"(gh[opsu]_[A-Za-z0-9]{20,}|github_pat_|sk-ant-|sb_secret_|sb_publishable_|re_[A-Za-z0-9]{20,}"
-                       r"|eyJ[A-Za-z0-9_-]{20,}\.eyJ|-----BEGIN [A-Z ]*PRIVATE KEY|postgres(ql)?://[^\s:]+:[^\s@]+@"
-                       r"|AKIA[0-9A-Z]{16}|@[a-z0-9.-]+\.(com|net|org|ai|app|to)\b)", re.I)
+BRANCH_RX = re.compile(r"^fix/(B\d{3,})-[a-z0-9-]+$")
+# Hardened git for anything touching agent output: no hooks, no fsmonitor, no external diff/textconv.
+SAFE_GIT = ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=", "-c", "diff.external=",
+            "-c", "protocol.file.allow=always"]
 
 
-def guard_diff(wt):
+def guard_diff(repo, base, head):
+    """Problems with head vs base in the (trusted) pristine repo. [] = safe to push."""
     problems = []
-    for f in run(["git", "diff", "--name-only", "origin/main...HEAD"], cwd=wt).split():
+    for f in run(SAFE_GIT + ["diff", "--no-ext-diff", "--no-textconv", "--name-only", f"{base}...{head}"], cwd=repo).split():
         if not ALLOWED_PATHS.match(f):
             problems.append(f"touches a file outside the allowed paths: {f}")
-    for l in run(["git", "diff", "origin/main...HEAD"], cwd=wt).splitlines():
-        if l.startswith("+") and not l.startswith("+++") and (m := SECRET_RX.search(l)):
-            problems.append(f"added line looks like a secret or email address: {m.group(0)[:12]}…")
+    for l in run(SAFE_GIT + ["diff", "--no-ext-diff", "--no-textconv", f"{base}...{head}"], cwd=repo).splitlines():
+        if l.startswith("+") and not l.startswith("+++") and (m := PII_RX.search(l)):
+            problems.append(f"added line looks like a secret or personal data: {m.group(0)[:12]}…")
     return problems
 
 
@@ -442,59 +469,91 @@ def pr_comment(n, text):
         run(["gh", "pr", "comment", str(n), "--repo", GH_REPO, "--body", text], check=False)
 
 
+def hand_to_human(n, bid, why, detail=""):
+    run(["gh", "pr", "edit", str(n), "--repo", GH_REPO, "--remove-label", "in-progress", "--add-label", "needs-human"], check=False)
+    pr_comment(n, f"The local builder stopped: **{why}**. Left as a draft for Dan.")
+    email_owner(f"[Family site] {bid} needs you: {why}"[:200], f"https://github.com/{GH_REPO}/pull/{n}\n\n{why}\n\n{detail}")
+    log(f"build {bid}: needs human: {why}")
+
+
 def build():
     _l = lock("build")
     prs = gh_json("pr", "list", "--repo", GH_REPO, "--state", "open", "--label", "bug", "--limit", "50",
                   "--json", "number,title,headRefName,isDraft,labels,createdAt") or []
-    queue = sorted((p for p in prs if p["isDraft"] and not ({l["name"] for l in p["labels"]} & {"in-progress", "needs-human"})),
+    queue = sorted((p for p in prs if p["isDraft"] and BRANCH_RX.match(p["headRefName"])
+                    and not ({l["name"] for l in p["labels"]} & {"in-progress", "needs-human"})),
                    key=lambda p: p["createdAt"])
     if not queue:
         log("build: queue empty")
         return
     pr = queue[0]
     n, branch = pr["number"], pr["headRefName"]
-    bid = branch.split("/", 1)[1].split("-", 1)[0]
+    bid = BRANCH_RX.match(branch).group(1)
     log(f"build: claiming #{n} {pr['title']}")
     if DRY:
         return
     run(["gh", "pr", "edit", str(n), "--repo", GH_REPO, "--add-label", "in-progress"])
-
     wt = os.path.join(WORK, bid)
+    logf = os.path.join(STATE_DIR, f"{bid}-build.log")
+    try:
+        _build_claimed(n, branch, bid, pr["title"], wt, logf)
+    except Exception as e:
+        hand_to_human(n, bid, f"builder error: {str(e)[:150]}", f"Log: {logf}\nWork dir: {wt}")
+
+
+def _build_claimed(n, branch, bid, title, wt, logf):
+    # 1. Agent workspace: a fresh clone plus a copy-on-write copy of node_modules (APFS clonefile, so it's
+    #    near-instant and the agent can't write through to the real one).
     run(["rm", "-rf", wt])
     run(["git", "clone", "-q", "--branch", branch, GH_URL, wt])
-    os.symlink(os.path.join(DEPS_REPO, "node_modules"), os.path.join(wt, "node_modules"))
-    bug_file = next(f for f in os.listdir(os.path.join(wt, "bugs")) if f.startswith(bid + "-"))
+    run(["cp", "-c", "-R", os.path.join(DEPS_REPO, "node_modules"), os.path.join(wt, "node_modules")], timeout=900)
+    bug_file = next((f for f in os.listdir(os.path.join(wt, "bugs")) if f.startswith(bid + "-")), None)
+    if not bug_file:
+        raise RuntimeError(f"no bugs/{bid}-*.md on {branch}")
     prompt = open(os.path.join(HERE, "fix-prompt.md")).read().replace("{BUG_FILE}", f"bugs/{bug_file}")
-    logf = os.path.join(STATE_DIR, f"{bid}-build.log")
-    r = subprocess.run(["claude", "-p", prompt, "--tools", "Read,Edit,Write,Glob,Grep,Bash", "--settings", FIX_SETTINGS,
-                        "--permission-mode", "dontAsk", "--strict-mcp-config", "--max-budget-usd", "15"],
-                       cwd=wt, capture_output=True, text=True, timeout=3600)
-    open(logf, "w").write(r.stdout + "\n--- stderr ---\n" + r.stderr)
-    last = (r.stdout.strip().splitlines() or [""])[-1].strip()
-    fixed = last == "RESULT: FIXED"
-    reason = last.split("NEEDS_HUMAN:", 1)[1].strip() if "NEEDS_HUMAN:" in last else (last or "fix agent gave no result")
 
-    problems = guard_diff(wt)
+    # 2. The agent, sandboxed.
+    try:
+        r = subprocess.run(["claude", "-p", prompt, "--tools", "Read,Edit,Write,Glob,Grep,Bash", "--settings", FIX_SETTINGS,
+                            "--permission-mode", "dontAsk", "--strict-mcp-config", "--max-budget-usd", "15"],
+                           cwd=wt, capture_output=True, text=True, timeout=3600)
+        out, err = r.stdout, r.stderr
+    except subprocess.TimeoutExpired as e:
+        out, err = (e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or ""), "TIMEOUT after 3600s"
+    open(logf, "w").write(out + "\n--- stderr ---\n" + err)
+    last = (out.strip().splitlines() or [""])[-1].strip()
+    fixed = last == "RESULT: FIXED"
+    reason = last.split("NEEDS_HUMAN:", 1)[1].strip() if "NEEDS_HUMAN:" in last else (last[:150] or "fix agent gave no result")
+
+    # 3. The agent's clone is UNTRUSTED from here on (it could have edited .git/: hooks, remotes, refs).
+    #    Never run git in it unsandboxed. Pull its HEAD into a pristine clone we control, guard there,
+    #    and push from there.
+    push = os.path.join(WORK, "push")
+    fresh_clone(push)
+    run(SAFE_GIT + ["fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], cwd=push)
+    run(SAFE_GIT + ["fetch", "-q", "--no-tags", "--upload-pack",
+                    "git -c core.hooksPath=/dev/null -c core.fsmonitor= upload-pack",
+                    f"file://{wt}", "+HEAD:refs/heads/candidate"], cwd=push)
+    anc = subprocess.run(SAFE_GIT + ["merge-base", "--is-ancestor", f"origin/{branch}", "candidate"], cwd=push)
+    if anc.returncode != 0:
+        raise RuntimeError("agent's HEAD doesn't build on the PR branch (history rewritten?)")
+    problems = guard_diff(push, "origin/main", "candidate")
     if problems:
-        run(["gh", "pr", "edit", str(n), "--repo", GH_REPO, "--remove-label", "in-progress", "--add-label", "needs-human"], check=False)
-        pr_comment(n, "The local builder's changes were **not pushed**, because the safety check flagged:\n- "
-                   + "\n- ".join(problems) + "\n\nThe branch is kept on the Mac mini for Dan to inspect.")
-        email_owner(f"[Family site] {bid} fix NOT pushed (safety check)", "\n".join(problems) + f"\n\nKept at {wt}\nLog: {logf}")
-        log(f"build {bid}: guard blocked push: {problems}")
+        hand_to_human(n, bid, "safety check blocked the push", "\n".join(problems) + f"\n\nAgent output kept at {wt}\nLog: {logf}")
         return
-    run(["git", "push", "-q", "origin", branch], cwd=wt)
+    run(SAFE_GIT + ["push", "-q", "--no-verify", "origin", f"candidate:refs/heads/{branch}"], cwd=push)
+    run(["rm", "-rf", wt])
+
     if fixed:
         run(["gh", "pr", "ready", str(n), "--repo", GH_REPO])
         run(["gh", "pr", "edit", str(n), "--repo", GH_REPO, "--remove-label", "in-progress"], check=False)
         pr_comment(n, "The local builder reports this **fixed** and the PR is ready for review. The bug file has the root "
-                      "cause, the fix, and the steps to verify on prod after merge.")
+                      "cause, the fix, and the steps to verify on prod after merge. (Vercel previews are off for `fix/B*` "
+                      "branches, so check it locally.)")
+        email_owner(f"[Family site] {bid} fix ready for review: {title}", f"https://github.com/{GH_REPO}/pull/{n}\nLog: {logf}")
+        log(f"build {bid}: #{n} ready")
     else:
-        run(["gh", "pr", "edit", str(n), "--repo", GH_REPO, "--remove-label", "in-progress", "--add-label", "needs-human"], check=False)
-        pr_comment(n, f"The local builder stopped: **{reason}**. What it checked is recorded in the bug file. Left as a draft.")
-    email_owner(f"[Family site] {bid} {'fix ready for review' if fixed else 'needs you'}: {pr['title']}",
-                f"https://github.com/{GH_REPO}/pull/{n}\nBuilder result: {last}\nLog: {logf}")
-    run(["rm", "-rf", wt])
-    log(f"build {bid}: #{n} {'ready' if fixed else 'needs human'}")
+        hand_to_human(n, bid, reason, f"What was checked is in the bug file on the branch.\nLog: {logf}")
 
 
 if __name__ == "__main__":
