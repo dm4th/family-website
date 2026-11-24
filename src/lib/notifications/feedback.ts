@@ -28,8 +28,8 @@ import type { FeedbackCategory } from "@/lib/db/schema";
  * Extra recipients: `FEEDBACK_EXTRA_RECIPIENTS` (server-only, comma-separated)
  * adds fixed addresses, e.g. Claude's intake inbox, which triages problem
  * reports into `bugs/`. These come from env rather than `profiles`, so guest
- * submissions reach them too. Reply-To is the submitter's own address, so any
- * recipient can answer them directly.
+ * submissions reach them too. Reply-To is the submitter's session email (see
+ * `loadSubmitter`), so any recipient can answer them directly.
  */
 
 type Client = SupabaseClient;
@@ -80,19 +80,30 @@ function mergeRecipients(...lists: string[][]): string[] {
   return [...byEmail.values()];
 }
 
-/** The submitter's display name (generic fallback) and email, if readable. */
+/**
+ * The submitter's display name (generic fallback) and email.
+ *
+ * The email comes from the verified auth session, NOT `profiles.email`. Users
+ * can edit their own profile row (only `role`/`deactivated_at` are guarded),
+ * so a profile email could be set to another family member's address. The
+ * intake inbox trusts Reply-To as the reporter's identity, so it must be the
+ * session's own address. Null if the session doesn't match the submitter.
+ */
 async function loadSubmitter(
   supabase: Client,
   profileId: string,
 ): Promise<{ name: string; email: string | null }> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("full_name, email")
-    .eq("id", profileId)
-    .maybeSingle();
+  const [{ data }, { data: auth }] = await Promise.all([
+    supabase.from("profiles").select("full_name").eq("id", profileId).maybeSingle(),
+    supabase.auth.getUser(),
+  ]);
+  const sessionUser = auth?.user;
   return {
     name: (data?.full_name as string | null)?.trim() || "A family member",
-    email: (data?.email as string | null)?.trim() || null,
+    email:
+      sessionUser && sessionUser.id === profileId
+        ? sessionUser.email?.trim() || null
+        : null,
   };
 }
 
