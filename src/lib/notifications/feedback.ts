@@ -117,8 +117,13 @@ export async function notifyFeedbackSubmitted(
       loadAdminEmails(supabase, input.submittedBy),
       loadSubmitter(supabase, input.submittedBy),
     ]);
-    const recipients = mergeRecipients(admins, extraFeedbackRecipients());
-    if (recipients.length === 0) return;
+    // Admins share one message; each extra recipient gets its own copy, so an
+    // outside inbox (e.g. Claude's intake) never sees the admins' addresses.
+    const adminKeys = new Set(admins.map((a) => a.toLowerCase()));
+    const extras = mergeRecipients(extraFeedbackRecipients()).filter(
+      (address) => !adminKeys.has(address.toLowerCase()),
+    );
+    if (admins.length === 0 && extras.length === 0) return;
     const submitterName = submitter.name;
 
     const origin = await getSiteOrigin();
@@ -130,13 +135,18 @@ export async function notifyFeedbackSubmitted(
       triageUrl: `${origin}/admin/feedback`,
     };
     const email = feedbackSubmittedEmail(ctx);
-    await sendEmail({
-      to: recipients,
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
-      replyTo: submitter.email ?? undefined,
-    });
+    const send = (to: string[]) =>
+      sendEmail({
+        to,
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+        replyTo: submitter.email ?? undefined,
+      });
+    await Promise.all([
+      admins.length > 0 ? send(admins) : null,
+      ...extras.map((address) => send([address])),
+    ]);
   } catch (err) {
     console.error("[notify] feedback-submitted failed:", err);
   }
