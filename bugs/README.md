@@ -41,7 +41,7 @@ Reports filed by the intake ([ops/intake/](../ops/intake/README.md)) arrive as *
 
 | Bug | Severity | Status | Area | Summary |
 |---|---|---|---|---|
-| _none yet_ | | | | |
+| [B001](B001-footer-year-is-wrong.md) | S4 | 🔴 open | Navigation | Footer Displays Incorrect Year |
 
 ## Closed bugs
 
