@@ -29,6 +29,8 @@ Features get PRDs in [`prds/`](../prds/00-master-plan.md). Bugs get one of these
 
 ## Working a bug
 
+Reports filed by the intake ([ops/intake/](../ops/intake/README.md)) arrive as **draft PRs labelled `bug`**. Claim one with the `in-progress` label before starting, do the work on its existing `fix/B###` branch, then mark it ready. For a bug you find yourself, create the file and branch by hand.
+
 1. **Reproduce it first**, locally or on a preview, and record the exact steps in the file. If it can't be reproduced, set the status to `🔍 investigating`, write down what you tried, and stop.
 2. **Find the root cause** before writing the fix, and record it under **Root cause**. Name the specific commit or PRD that introduced it if you can.
 3. **Branch as `fix/B###-slug`**, one bug per branch. Keep the fix to the smallest change that solves it, and add a regression check (test, eval case or verification step) wherever the code allows.
