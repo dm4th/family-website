@@ -151,11 +151,13 @@ def first_name(frm):
 
 
 def refresh_allowlist():
-    """Active admins + members from prod (read-only query). Falls back to the cached list."""
+    """Auth emails of active admins + members in prod (read-only query). Falls back to the cached list."""
     try:
         out = run(["supabase", "db", "query", f"--remote={SUPABASE_REF}", "--read-only", "-o", "json",
-                   "select lower(email) as email from public.profiles "
-                   "where deactivated_at is null and role in ('admin','member')"], cwd=HOME, timeout=120)
+                   # auth.users.email, not profiles.email: users can edit their own profile row, and the
+                   # site's Send Feedback Reply-To is the session (auth) email, so the two must match.
+                   "select lower(u.email) as email from public.profiles p join auth.users u on u.id = p.id "
+                   "where p.deactivated_at is null and p.role in ('admin','member')"], cwd=HOME, timeout=120)
         start = min(i for i in (out.find("["), out.find("{")) if i >= 0)
         data = json.loads(out[start:])
         rows = data["rows"] if isinstance(data, dict) else data

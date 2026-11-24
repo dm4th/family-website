@@ -15,7 +15,7 @@ This turns emailed bug reports into [`bugs/`](../../bugs/README.md) files and fi
 ## Stages
 
 **`intake.py triage`** reads `claude.mathieson@agentmail.to`.
-- **Trust:** only mail from an **active family member** (an admin or member in prod `profiles`, never a guest) that **passes DMARC** is acted on. The rest is labelled `ignored`. The site's own Send Feedback alerts (from `notifications@mathiesonfamily.app`, with the submitter in Reply-To, set up via `FEEDBACK_EXTRA_RECIPIENTS`) count as coming from the submitter.
+- **Trust:** only mail from an **active family member** (an admin or member in prod `profiles`, matched on their **auth** email rather than the editable `profiles.email`, never a guest) that **passes DMARC** is acted on. The rest is labelled `ignored`. The site's own Send Feedback alerts (from `notifications@mathiesonfamily.app`, with the submitter in Reply-To, set up via `FEEDBACK_EXTRA_RECIPIENTS`) count as coming from the submitter.
 - **Triage** is done by Claude with **no tools** ([`triage-prompt.md`](triage-prompt.md)). Its only output is JSON. Email text is never followed as instructions, and personal data is scrubbed because this repo is public. A **mechanical check** (`PII_RX`: emails, phone numbers, long digit runs, token shapes) then runs on the rendered file and PR text **before anything is pushed**. If it matches, the report goes to Dan instead of being filed.
 - **Bugs** become a draft PR adding `bugs/B###-slug.md` plus an index row, labelled `bug`. Nothing gets built at this stage.
 - **Feature ideas** are forwarded to Dan, and the sender is told he has them. They're never built from an email: Dan decides, and a PRD follows if he says yes. **Other mail** is forwarded to Dan.
