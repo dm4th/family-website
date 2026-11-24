@@ -17,6 +17,8 @@ If you're a contributor (human or agent) picking up work on a specific feature:
 5. **Consult the skills at `.agents/skills/`** for Supabase patterns (the `supabase` and `supabase-postgres-best-practices` skills are more current than training data).
 6. **Branch + ship + update the PRD's Implementation section** when you're done. Flip the status in the table below.
 
+**Fixing a bug instead of building a feature?** Bugs are tracked separately in [`bugs/`](../bugs/README.md), with their own template, severity scale and index. They don't go in this queue.
+
 The first-slice build was a single long session, deliberately. From here, every feature should be its own session/branch — easier to review, parallelize, and recover from.
 
 ## Active queue (what's pickable right now)
