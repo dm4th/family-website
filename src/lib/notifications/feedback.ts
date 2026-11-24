@@ -24,6 +24,12 @@ import type { FeedbackCategory } from "@/lib/db/schema";
  * designated escape hatch, if guest submissions must always email, is a
  * `SECURITY DEFINER admin_notification_emails()` function (same pattern the
  * booking notifier documents).
+ *
+ * Extra recipients: `FEEDBACK_EXTRA_RECIPIENTS` (server-only, comma-separated)
+ * adds fixed addresses, e.g. Claude's intake inbox, which triages problem
+ * reports into `bugs/`. These come from env rather than `profiles`, so guest
+ * submissions reach them too. Reply-To is the submitter's own address, so any
+ * recipient can answer them directly.
  */
 
 type Client = SupabaseClient;
@@ -54,17 +60,40 @@ async function loadAdminEmails(
   return [...byEmail.values()];
 }
 
-/** One profile's display name (falls back to a generic label). */
-async function loadSubmitterName(
+/** Fixed extra recipients from `FEEDBACK_EXTRA_RECIPIENTS` (comma-separated). */
+export function extraFeedbackRecipients(
+  raw: string | undefined = process.env.FEEDBACK_EXTRA_RECIPIENTS,
+): string[] {
+  return (raw ?? "")
+    .split(",")
+    .map((address) => address.trim())
+    .filter((address) => address.includes("@"));
+}
+
+/** Merge address lists, deduped case-insensitively, keeping first spelling. */
+function mergeRecipients(...lists: string[][]): string[] {
+  const byEmail = new Map<string, string>();
+  for (const address of lists.flat()) {
+    const key = address.toLowerCase();
+    if (!byEmail.has(key)) byEmail.set(key, address);
+  }
+  return [...byEmail.values()];
+}
+
+/** The submitter's display name (generic fallback) and email, if readable. */
+async function loadSubmitter(
   supabase: Client,
   profileId: string,
-): Promise<string> {
+): Promise<{ name: string; email: string | null }> {
   const { data } = await supabase
     .from("profiles")
-    .select("full_name")
+    .select("full_name, email")
     .eq("id", profileId)
     .maybeSingle();
-  return (data?.full_name as string | null)?.trim() || "A family member";
+  return {
+    name: (data?.full_name as string | null)?.trim() || "A family member",
+    email: (data?.email as string | null)?.trim() || null,
+  };
 }
 
 /** New feedback landed → alert the admins so nothing is lost. */
@@ -73,11 +102,13 @@ export async function notifyFeedbackSubmitted(
   input: FeedbackNotificationInput,
 ): Promise<void> {
   try {
-    const [admins, submitterName] = await Promise.all([
+    const [admins, submitter] = await Promise.all([
       loadAdminEmails(supabase, input.submittedBy),
-      loadSubmitterName(supabase, input.submittedBy),
+      loadSubmitter(supabase, input.submittedBy),
     ]);
-    if (admins.length === 0) return;
+    const recipients = mergeRecipients(admins, extraFeedbackRecipients());
+    if (recipients.length === 0) return;
+    const submitterName = submitter.name;
 
     const origin = await getSiteOrigin();
     const ctx: FeedbackEmailContext = {
@@ -89,10 +120,11 @@ export async function notifyFeedbackSubmitted(
     };
     const email = feedbackSubmittedEmail(ctx);
     await sendEmail({
-      to: admins,
+      to: recipients,
       subject: email.subject,
       html: email.html,
       text: email.text,
+      replyTo: submitter.email ?? undefined,
     });
   } catch (err) {
     console.error("[notify] feedback-submitted failed:", err);
