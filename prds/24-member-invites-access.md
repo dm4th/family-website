@@ -1,7 +1,7 @@
 # 24 — Member Invites & Invite-Only Access
 
 **Phase**: 5 · **Depends on**: 04 (invitations table + admin invite flow), 15 (guest access + `property_guests` + `grant_property_id`), 14 (Resend magic-link delivery, live)
-**Status**: ✅ shipped (both slices, 2026-07-01). Re-verified against prod 2026-11-23: invite-only `handle_new_user()` + enabled `on_auth_user_created` trigger, all four slice-2 `invitations` policies live, and every one of the 14 profiles has an accepted invitation (nobody got in while signup was open). Only the property-page "Invite a Guest" shortcut remains, as an optional follow-up.
+**Status**: ✅ shipped (both slices, 2026-07-01). Re-verified against prod 2026-11-23: invite-only `handle_new_user()` + enabled `on_auth_user_created` trigger, the three slice-2 `invitations` policies (read own or admin, member insert own, revoke own or admin) live alongside PRD 04's existing admin-delete policy, and every one of the 14 profiles has an accepted invitation (nobody got in while signup was open). Only the property-page "Invite a Guest" shortcut remains, as an optional follow-up.
 
 ---
 
