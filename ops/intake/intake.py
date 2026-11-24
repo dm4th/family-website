@@ -50,7 +50,8 @@ PII_RX = re.compile(
     r"|eyJ[A-Za-z0-9_-]{20,}\.eyJ|-----BEGIN [A-Z ]*PRIVATE KEY|postgres(ql)?://[^\s:]+:[^\s@]+@|AKIA[0-9A-Z]{16}"
     r"|[\w.+-]+@[\w-]+(\.[\w-]+)+"                       # any email address, any TLD
     r"|\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b|\+\d[\d\s-]{8,}\d"  # phone numbers
-    r"|\b\d{8,}\b)",                                       # long digit runs (account / policy numbers)
+    r"|\b(?!20\d{12}\b)\d{8,}\b)",                        # long digit runs (account / policy numbers),
+                                                           # but not YYYYMMDDHHMMSS migration timestamps
     re.I)
 
 
@@ -416,6 +417,12 @@ def triage():
                         f"{t.get('summary_for_owner')}\n\nFrom: {m['from']}\n\n{text[:6000]}")
             label_mail(m, "triaged", "other")
             state["seen"].append(m["message_id"]); save_state(state)
+    # Only still-unread mail (e.g. a bug deferred above) needs its cached triage; drop the rest.
+    unread = {m["message_id"] for m in msgs}
+    cache = state.setdefault("triage_cache", {})
+    for k in [k for k in cache if k not in unread or k in state["seen"]]:
+        del cache[k]
+    save_state(state)
     log("triage run complete")
 
 
