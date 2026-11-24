@@ -449,7 +449,10 @@ FIX_SETTINGS = json.dumps({
         "defaultMode": "dontAsk",
         "allow": ["Read(./**)", "Edit(./**)"],
         "deny": [r for p in SENSITIVE for r in (_rule("Read", p), _rule("Edit", p))]
-                + ["Edit(./.git/**)", "Bash(git push:*)", "Bash(git remote:*)", "Bash(git config:*)", "Bash(curl:*)",
+                # No Edit(./.git/**) deny: it becomes a sandbox write-deny that blocks `git commit` itself. The
+                # agent's .git is treated as untrusted anyway (step 3 fetches its HEAD into the pristine push
+                # clone), and the sandbox still refuses writes to .git/hooks and .git/config on its own.
+                + ["Bash(git push:*)", "Bash(git remote:*)", "Bash(git config:*)", "Bash(curl:*)",
                    "Bash(gh:*)", "Bash(supabase:*)", "Bash(vercel:*)", "Bash(security:*)"],
     },
 })
