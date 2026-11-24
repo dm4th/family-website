@@ -16,6 +16,10 @@ If you're picking up a single feature (the first-slice foundation is done; futur
 
 Smaller is better. The first-slice build was deliberately monolithic; from here every feature should be its own session/branch so it can be reviewed, parallelized, and reverted in isolation.
 
+## Bugs (separate from PRDs)
+
+Defects in shipped behavior go in [bugs/](bugs/README.md), not `prds/`. Each one is a `bugs/B###-slug.md` file copied from [bugs/TEMPLATE.md](bugs/TEMPLATE.md), with a severity from S1 to S4, and is listed in the index table in `bugs/README.md`. Reproduce the bug and record its root cause before fixing it, on a `fix/B###-slug` branch with one bug per branch. Verify the fix on prod, then flip the status to ✅ in both the bug file and the index. If you hit a bug outside your current scope, file it rather than fixing it on the side. The repo is public, so keep emails and personal data out of bug files.
+
 ## Stack
 - Next.js 16 (App Router, Turbopack) + React 19 + TypeScript + Tailwind v4
 - shadcn/ui (radix-nova preset) — primitives in `src/components/ui/`; **family-office shell primitives** in `src/components/shell/` (SalonPanel, LedgerPanel, BriefingPanel, PageIntro, Eyebrow, SectionRule, StatLine, ActivityDigest)
