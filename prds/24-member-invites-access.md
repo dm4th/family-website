@@ -1,7 +1,7 @@
 # 24 — Member Invites & Invite-Only Access
 
 **Phase**: 5 · **Depends on**: 04 (invitations table + admin invite flow), 15 (guest access + `property_guests` + `grant_property_id`), 14 (Resend magic-link delivery, live)
-**Status**: 🟢 ready — scoping + model agreed 2026-07-01. **Security-critical: this is the top priority, ahead of 21/22/23.** Its own session/branch.
+**Status**: ✅ shipped (both slices, 2026-07-01). Re-verified against prod 2026-11-23: invite-only `handle_new_user()` + enabled `on_auth_user_created` trigger, the three slice-2 `invitations` policies (read own or admin, member insert own, revoke own or admin) live alongside PRD 04's existing admin-delete policy, and every one of the 14 profiles has an accepted invitation (nobody got in while signup was open). Only the property-page "Invite a Guest" shortcut remains, as an optional follow-up.
 
 ---
 
@@ -106,7 +106,7 @@ src/app/(app)/properties/[slug]/…               # "Invite a Guest" control (gu
   - `supabase/migrations/20260701000002_invite_only.sql` — `handle_new_user()` now `raise`s when no valid pending invitation matches (rolls back the `auth.users` insert). Existing users unaffected (insert-only trigger). Verified live: Dan's existing account still signs in; a never-invited email is blocked.
   - The rejection surfaces at **two** points, so both are handled: the magic-link path fails at **request** time in `sendMagicLink` (`(auth)/login/actions.ts` — detects the generic "Database error saving new user" and shows a friendly "not invited yet" message inline, so no email is even sent to a stranger); the Google OAuth path fails at `/auth/callback` (redirects to the `/no-invite` page). `/no-invite` added to the middleware public-path allowlist.
   - **Known, accepted gap (not this PRD):** deactivation doesn't lock *members* out — a deactivated member still has `role='member'`, so `not is_guest()` policies still admit them (deactivation only pulls guest grants). Low-stakes today (only test accounts). A middleware deactivation gate is the fix if it ever matters.
-- **Slice 2 — Member invite UI + ungate**: built 2026-07-01 (migration `20260701000003_member_invites.sql`).
+- **Slice 2 — Member invite UI + ungate**: ✅ **shipped 2026-07-01** (`c18cec2`, migration `20260701000003_member_invites.sql` applied to prod; policies confirmed live 2026-11-23).
   - **RLS**: `invitations` read = own-or-admin; insert = any non-guest as themselves, `role='admin'` admin-only; update (revoke) = inviter-or-admin, with the admin-role guard repeated in the CHECK so a member can't UPDATE their own invite up to admin. Delete stays admin-only.
   - **Actions** (`admin/actions.ts`): new `requireMember()`; `createInvitation` / `sendInviteMagicLink` / `revokeInvitation` ungated from `requireAdmin` to `requireMember`; `createInvitation` app-guards `role='admin'` behind `is_admin()`.
   - **UI**: `InvitationsSection` parametrized (`isAdmin` hides the admin role option; `listTitle`); new member `/invite` page (guests bounced) showing the invite form + the member's own pending invites + revoke; "Invite Someone" added to the user menu (non-guests). `/admin` keeps the full-roster view (`isAdmin`).
