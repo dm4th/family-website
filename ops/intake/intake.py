@@ -406,7 +406,7 @@ def triage():
         elif t.get("kind") == "feature":
             email_owner(f"[Family site] Feature idea from {first_name(m['from'])}: {t.get('title')}",
                         f"{t.get('summary_for_owner')}\n\nFrom: {m['from']}\nSubject: {m.get('subject')}\n\n--- original ---\n"
-                        f"{text[:6000]}\n\nTell me if you want a PRD written for it.")
+                        f"{text[:6000]}\n\nTo go ahead, approve it in a Claude Code session and I'll write the PRD. Nothing is built from email.")
             reply(m["message_id"], f"Hi {first_name(m['from'])},\n\nThanks for the idea! New features go through Dan first, "
                   f"so I've passed this along to him.\n\n{SIGN}", sender)
             label_mail(m, "triaged", "feature")
@@ -449,7 +449,10 @@ FIX_SETTINGS = json.dumps({
         "defaultMode": "dontAsk",
         "allow": ["Read(./**)", "Edit(./**)"],
         "deny": [r for p in SENSITIVE for r in (_rule("Read", p), _rule("Edit", p))]
-                + ["Edit(./.git/**)", "Bash(git push:*)", "Bash(git remote:*)", "Bash(git config:*)", "Bash(curl:*)",
+                # No Edit(./.git/**) deny: it becomes a sandbox write-deny that blocks `git commit` itself. The
+                # agent's .git is treated as untrusted anyway (step 3 fetches its HEAD into the pristine push
+                # clone), and the sandbox still refuses writes to .git/hooks and .git/config on its own.
+                + ["Bash(git push:*)", "Bash(git remote:*)", "Bash(git config:*)", "Bash(curl:*)",
                    "Bash(gh:*)", "Bash(supabase:*)", "Bash(vercel:*)", "Bash(security:*)"],
     },
 })
