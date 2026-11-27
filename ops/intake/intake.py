@@ -385,6 +385,13 @@ def triage():
             label_mail(m, "ignored")
             state["seen"].append(m["message_id"]); save_state(state)
             continue
+        if sender == sender_addr(owner()) and (m.get("subject") or "").lower().startswith("re: [family site]"):
+            # Dan answering one of the intake's own notifications: forwarding it back to him is a loop.
+            # Label it for a session to read (features are approved in Claude Code, not by email).
+            log(f"owner reply to a notification, not forwarded: {m.get('subject')!r}")
+            label_mail(m, "triaged", "owner-reply")
+            state["seen"].append(m["message_id"]); save_state(state)
+            continue
         full = full or am("GET", mid(m["message_id"]))
         text = full.get("extracted_text") or full.get("text") or full.get("preview") or ""
         known = next((b for b, tk in state["tickets"].items() if tk["thread_id"] == m["thread_id"]), None)
